@@ -61,7 +61,9 @@ describe("mock commute / places / reverse", () => {
     expect(unk[0].label).toBe("我家小区");
     expect(await map.searchPlaces("我家小区", "苏州")).toEqual(unk);
     const sh = await map.searchPlaces("", "上海");
-    expect(sh[0].label).toBe("上海地标1");
+    expect(sh[0].label).toBe("徐家汇");
+    const hz = await map.searchPlaces("", "杭州");
+    expect(hz[0].label).toBe("杭州地标1");
   });
 
   it("逆地理返回最近地标 + 附近", async () => {

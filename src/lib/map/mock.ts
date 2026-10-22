@@ -28,7 +28,41 @@ export const SUZHOU_LANDMARKS: Place[] = [
   { label: "苏州工业园区站", lat: 31.3365, lng: 120.78 },
 ];
 
+/** 上海（徐汇为中心）的近似真实坐标（GCJ-02），比赛在徐汇，演示成员从这里取 */
+export const SHANGHAI_LANDMARKS: Place[] = [
+  { label: "徐家汇", lat: 31.1952, lng: 121.4372 },
+  { label: "上海交通大学徐汇校区", lat: 31.2005, lng: 121.4335 },
+  { label: "上海体育场", lat: 31.183, lng: 121.437 },
+  { label: "漕河泾开发区", lat: 31.1675, lng: 121.397 },
+  { label: "龙华寺", lat: 31.1757, lng: 121.4497 },
+  { label: "西岸美术馆", lat: 31.166, lng: 121.46 },
+  { label: "上海南站", lat: 31.1545, lng: 121.43 },
+  { label: "打浦桥", lat: 31.206, lng: 121.466 },
+  { label: "田子坊", lat: 31.209, lng: 121.469 },
+  { label: "新天地", lat: 31.219, lng: 121.475 },
+  { label: "静安寺", lat: 31.2235, lng: 121.446 },
+  { label: "长宁来福士", lat: 31.2185, lng: 121.4235 },
+  { label: "中山公园", lat: 31.221, lng: 121.417 },
+  { label: "人民广场", lat: 31.233, lng: 121.475 },
+  { label: "陆家嘴", lat: 31.24, lng: 121.5 },
+  { label: "世纪大道", lat: 31.229, lng: 121.526 },
+  { label: "七宝古镇", lat: 31.156, lng: 121.353 },
+  { label: "虹桥火车站", lat: 31.1945, lng: 121.32 },
+  { label: "五角场", lat: 31.299, lng: 121.514 },
+  { label: "复旦大学邯郸校区", lat: 31.2985, lng: 121.5035 },
+];
+
 const SUZHOU_REF: LatLng = { lat: 31.3, lng: 120.68 };
+
+function isShanghai(city: string | undefined): boolean {
+  return (city ?? "").includes("上海");
+}
+
+/** 按城市取内置地标：苏州 / 上海有真实地标，其他城市围绕 DEMO_CENTER 生成 */
+function landmarksFor(city: string): Place[] {
+  if (isShanghai(city)) return SHANGHAI_LANDMARKS;
+  return isSuzhou(city) ? SUZHOU_LANDMARKS : genericLandmarks(city.trim());
+}
 
 function isSuzhou(city: string | undefined): boolean {
   const c = (city ?? "").trim();
@@ -269,7 +303,7 @@ export function createMockMapProvider(): MapProvider {
   return {
     async searchPlaces(q: string, city: string): Promise<Place[]> {
       const query = (q ?? "").trim();
-      const list = isSuzhou(city) ? SUZHOU_LANDMARKS : genericLandmarks(city.trim());
+      const list = landmarksFor(city);
       if (!query) return list.slice(0, 8).map((p) => ({ ...p }));
       const scored = list
         .map((p, i) => ({ p, i, s: matchScore(p.label, query) }))
@@ -291,7 +325,7 @@ export function createMockMapProvider(): MapProvider {
       const candidates =
         haversineKm(center, SUZHOU_REF) < 60
           ? SUZHOU_LANDMARKS
-          : [...SUZHOU_LANDMARKS, ...genericLandmarks((process.env.DEMO_CITY || "").trim() || "本地")];
+          : [...SHANGHAI_LANDMARKS, ...landmarksFor((process.env.DEMO_CITY || "").trim() || "本地")];
       let best = candidates[0];
       let bestD = Infinity;
       for (const c of candidates) {
