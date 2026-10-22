@@ -67,7 +67,7 @@ export async function writeBlurbs(ju: Ju, plan: Plan, members: Member[]): Promis
 | `POST /api/parse` | `{ prompt }` | `{ title, spec, slots }`（预览，不落库） |
 | `POST /api/ju` | `{ prompt, organizerName, title?, spec? }` | `{ id, adminToken, organizerMemberId: null }` |
 | `GET /api/ju/:id` | – | `JuState` |
-| `POST /api/ju/:id/members` | `{ name, avatar?, location: Place, availableSlotIds, dietRaw, budgetMax?, isOrganizer? }` | `{ memberId }` |
+| `POST /api/ju/:id/members` | `{ name, avatar?, location: Place, availableSlotIds, dietRaw, budgetMax?, isOrganizer?, fillSeconds? }` | `{ memberId }` |
 | `PATCH /api/ju/:id/members/:mid` | 同上的部分字段，或 `{ status: "out" \| "in" }`（退出 / 重新入局） | `{ ok: true }` |
 | `POST /api/ju/:id/plan` 🔒 | – | `JuState`（status → voting，含 plan 和 blurb） |
 | `POST /api/ju/:id/vote` | `{ memberId, poiId }` | `JuState`。在场成员过半投同一家时自动定局 |
@@ -76,6 +76,7 @@ export async function writeBlurbs(ju: Ju, plan: Plan, members: Member[]): Promis
 | `GET /api/ju/:id/ics` | – | `text/calendar` 文件，含提前 2 小时提醒 |
 | `GET /api/geo/search?q=&city=` | – | `Place[]` |
 | `GET /api/geo/reverse?lat=&lng=&from=wgs84` | – | `Place`（浏览器定位传 `from=wgs84`，后端用 `wgs84ToGcj02` 转成高德坐标后再返回） |
+| `GET /api/stats` | – | `Stats`（只统计非演示成员；"真实局" = 至少 2 个真实成员） |
 | `POST /api/dev/seed/:id` 🔒 | `{ count? }` | `JuState`（加入 5–6 个演示成员，Demo 兜底用） |
 
 有成员退出（status out）且已出方案时，后端自动重算 plan。

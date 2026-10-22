@@ -54,6 +54,10 @@ export type Member = {
   status: "in" | "out";
   joinedAt: string;
   isOrganizer: boolean;
+  /** 从打开局页到提交表单用了多少秒（PMF 数据：「10 秒填完」） */
+  fillSeconds?: number;
+  /** /dev/seed 生成的演示成员，不计入任何统计 */
+  isDemo?: boolean;
 };
 
 export type Poi = LatLng & {
@@ -124,6 +128,22 @@ export type Ju = {
 export type JuState = {
   ju: Ju;
   members: Member[];
+};
+
+/** GET /api/stats —— 路演用的真实使用数据，只统计非演示成员 */
+export type Stats = {
+  /** 至少 2 个真实成员的局 */
+  juCount: number;
+  confirmedCount: number;
+  /** 真实成员总数（按人次） */
+  memberCount: number;
+  /** 真实成员 fillSeconds 的中位数 */
+  medianFillSeconds?: number;
+  /** 最近 10 个局：标题、真实人数、状态、创建时间 */
+  recent: { id: string; title: string; members: number; status: JuStatus; createdAt: string }[];
+  /** 按小时的入局人数，用于画曲线 */
+  hourly: { hour: string; joins: number }[];
+  generatedAt: string;
 };
 
 /** 地图能力抽象：高德实现 + 无 key 时的 mock 实现 */
