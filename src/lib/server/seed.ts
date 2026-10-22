@@ -13,7 +13,7 @@ const DEMO_PEOPLE: { name: string; dietRaw: string; budgetMax?: number }[] = [
   { name: "Momo", dietRaw: "", budgetMax: 150 },
   { name: "大鹏", dietRaw: "" },
   { name: "橙子", dietRaw: "不能吃辣" },
-  { name: "老王", dietRaw: "回民，不吃猪肉" },
+  { name: "老王", dietRaw: "不吃内脏" },
   { name: "小鱼", dietRaw: "" },
   { name: "阿May", dietRaw: "海鲜过敏" },
 ];
