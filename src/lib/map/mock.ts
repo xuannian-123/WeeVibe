@@ -30,6 +30,7 @@ export const SUZHOU_LANDMARKS: Place[] = [
 
 /** 上海（徐汇为中心）的近似真实坐标（GCJ-02），比赛在徐汇，演示成员从这里取 */
 export const SHANGHAI_LANDMARKS: Place[] = [
+  { label: "36space（漕宝路36号E座）", lat: 31.167645, lng: 121.43195 },
   { label: "徐家汇", lat: 31.1952, lng: 121.4372 },
   { label: "上海交通大学徐汇校区", lat: 31.2005, lng: 121.4335 },
   { label: "上海体育场", lat: 31.183, lng: 121.437 },
