@@ -6,9 +6,12 @@ export { haversineKm, wgs84ToGcj02, getDemoCenter, estimateCommute } from "./geo
 export { createAmapProvider } from "./amap";
 export { createMockMapProvider, mockMapProvider } from "./mock";
 
+export const MAP_UNAVAILABLE = "地图服务暂时不可用";
+
 /**
- * 高德出错（断网 / 超时 / 配额）时自动降级到 mock，保证现场 Demo 不会卡死。
- * 降级会打一条 console.warn。
+ * 高德出错时的策略：
+ * - searchPlaces / reverseGeocode / commute：降级到 mock（地标 / 直线估算），打 console.warn
+ * - searchAround：绝不降级（虚构店铺不能当真店推荐），重试 1 次后抛出"地图服务暂时不可用"
  */
 export function withFallback(primary: MapProvider, fallback: MapProvider, name = "amap"): MapProvider {
   const wrap =
@@ -24,14 +27,25 @@ export function withFallback(primary: MapProvider, fallback: MapProvider, name =
   return {
     searchPlaces: wrap("searchPlaces") as MapProvider["searchPlaces"],
     reverseGeocode: wrap("reverseGeocode") as MapProvider["reverseGeocode"],
-    searchAround: wrap("searchAround") as MapProvider["searchAround"],
+    searchAround: async (...args: Parameters<MapProvider["searchAround"]>) => {
+      try {
+        return await primary.searchAround(...args);
+      } catch (first) {
+        console.warn(`[map] ${name}.searchAround 失败，重试 1 次：${(first as Error)?.message ?? first}`);
+        try {
+          return await primary.searchAround(...args);
+        } catch (e) {
+          throw new Error(`${MAP_UNAVAILABLE}：${(e as Error)?.message ?? e}`);
+        }
+      }
+    },
     commute: wrap("commute") as MapProvider["commute"],
   };
 }
 
 let cached: { key: string; provider: MapProvider } | undefined;
 
-/** process.env.AMAP_KEY 非空时用高德（失败自动降级 mock），否则用 mock */
+/** process.env.AMAP_KEY 非空时用高德（searchAround 外的失败降级 mock），否则用 mock */
 export function getMapProvider(): MapProvider {
   const key = (process.env.AMAP_KEY ?? "").trim();
   if (!key) return mockMapProvider;

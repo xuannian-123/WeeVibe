@@ -62,6 +62,11 @@ export function generateSlots(spec: JuSpec): Slot[] {
   return slots.slice(0, MAX_SLOTS);
 }
 
+/** 成员一个时间都没勾 = "都行"，视为所有 slot 都有空 */
+export function isAvailable(m: Member, slotId: string): boolean {
+  return !m.availableSlotIds?.length || m.availableSlotIds.includes(slotId);
+}
+
 /**
  * 选能来的人最多的 slot（只算 status=in）。
  * 平票：发起人能来的优先 → 更早的优先。
@@ -76,7 +81,7 @@ export function pickSlot(
 
   let best: { slot: Slot; count: number; org: boolean; idx: number } | undefined;
   slots.forEach((slot, idx) => {
-    const avail = inMembers.filter((m) => m.availableSlotIds.includes(slot.id));
+    const avail = inMembers.filter((m) => isAvailable(m, slot.id));
     const count = avail.length;
     const org = avail.some((m) => m.isOrganizer);
     const better =
@@ -90,6 +95,6 @@ export function pickSlot(
   const slotId = best!.slot.id;
   const attendeeIds: string[] = [];
   const absentIds: string[] = [];
-  for (const m of inMembers) (m.availableSlotIds.includes(slotId) ? attendeeIds : absentIds).push(m.id);
+  for (const m of inMembers) (isAvailable(m, slotId) ? attendeeIds : absentIds).push(m.id);
   return { slotId, attendeeIds, absentIds };
 }

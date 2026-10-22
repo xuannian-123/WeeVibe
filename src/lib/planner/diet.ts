@@ -1,7 +1,7 @@
 import type { DietTag, Member, Poi } from "../types";
 
 /** [关键词, 冲突原因]；长词在前，命中第一个即停 */
-const RULES: Record<Exclude<DietTag, "清真">, [string, string][]> = {
+const RULES: Record<Exclude<DietTag, "清真">, [string | RegExp, string][]> = {
   不吃辣: [
     ["重庆", "重庆口味偏辣"],
     ["麻辣", "麻辣口味"],
@@ -20,7 +20,7 @@ const RULES: Record<Exclude<DietTag, "清真">, [string, string][]> = {
     ["羊", "主打羊肉"],
   ],
   不吃牛肉: [
-    ["潮汕牛", "潮汕牛肉"],
+    [/潮汕.{0,4}牛/, "潮汕牛肉"],
     ["牛排", "牛排店"],
     ["牛肉", "主打牛肉"],
   ],
@@ -59,7 +59,7 @@ export function dietConflictReason(tag: DietTag, poi: Pick<Poi, "name" | "type">
   }
   const rules = RULES[tag];
   if (!rules) return undefined;
-  for (const [kw, reason] of rules) if (text.includes(kw)) return reason;
+  for (const [kw, reason] of rules) if (typeof kw === "string" ? text.includes(kw) : kw.test(text)) return reason;
   return undefined;
 }
 
