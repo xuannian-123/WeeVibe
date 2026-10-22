@@ -6,7 +6,12 @@ import { leadingOption } from "@/lib/client/format";
 
 const W = 760;
 const H = 850;
-const PAD = 96;
+/** 投影内边距：上方留给标题和指北针，下方留给名字和图例 */
+const PAD_X = 100;
+const PAD_T = 150;
+const PAD_B = 135;
+/** 点被推开后允许的范围 */
+const SAFE = { x0: 70, x1: W - 70, y0: 128, y1: H - 112 };
 
 /** 等距圆柱投影 + 等比缩放进画布 */
 function makeProjector(points: LatLng[]) {
@@ -19,12 +24,14 @@ function makeProjector(points: LatLng[]) {
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const span = Math.max((maxX - minX) / (W - PAD * 2), (maxY - minY) / (H - PAD * 2 - 40), 0.012 / (W - PAD * 2));
+  const pw = W - PAD_X * 2;
+  const ph = H - PAD_T - PAD_B;
+  const span = Math.max((maxX - minX) / pw, (maxY - minY) / ph, 0.012 / pw);
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
   return (p: LatLng) => ({
-    x: W / 2 + (p.lng * k - cx) / span,
-    y: H / 2 - 10 + (-p.lat - cy) / span,
+    x: PAD_X + pw / 2 + (p.lng * k - cx) / span,
+    y: PAD_T + ph / 2 + (-p.lat - cy) / span,
   });
 }
 
@@ -54,15 +61,15 @@ function relax(pois: XY[], fixed: XY[], center: XY | null): XY[] {
       };
       anchors.forEach((a, j) => push(a, center && j === anchors.length - 1 ? 100 : 125, 0.5, i + j + 1));
       out.forEach((q, j) => j !== i && push(q, 120, 0.5, i * 3 + j + 1));
-      p.x = Math.min(W - 60, Math.max(60, p.x));
-      p.y = Math.min(H - 90, Math.max(90, p.y));
+      p.x = Math.min(SAFE.x1, Math.max(SAFE.x0, p.x));
+      p.y = Math.min(SAFE.y1, Math.max(SAFE.y0, p.y));
     });
   }
   return out;
 }
 
 /** 成员之间也稍微推开，避免头像叠在一起 */
-function spread(points: XY[], minD = 96): XY[] {
+function spread(points: XY[], minD = 112): XY[] {
   const out = points.map((p) => ({ ...p }));
   for (let iter = 0; iter < 60; iter++) {
     for (let i = 0; i < out.length; i++)
@@ -86,12 +93,77 @@ function spread(points: XY[], minD = 96): XY[] {
         }
       }
     for (const p of out) {
-      p.x = Math.min(W - 50, Math.max(50, p.x));
-      p.y = Math.min(H - 80, Math.max(80, p.y));
+      p.x = Math.min(SAFE.x1, Math.max(SAFE.x0, p.x));
+      p.y = Math.min(SAFE.y1, Math.max(SAFE.y0, p.y));
     }
   }
   return out;
 }
+
+/* ───────── 标签避让 ───────── */
+type Box = { x0: number; y0: number; x1: number; y1: number };
+
+const box = (x: number, y: number, w: number, h: number): Box => ({ x0: x, y0: y, x1: x + w, y1: y + h });
+const around = (p: XY, r: number): Box => ({ x0: p.x - r, y0: p.y - r, x1: p.x + r, y1: p.y + r });
+
+function overlap(a: Box, b: Box) {
+  const w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
+  const h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+/** 线段是否穿过矩形（Liang–Barsky） */
+function segHitsBox(a: XY, b: XY, r: Box) {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const checks: [number, number][] = [
+    [-dx, a.x - r.x0],
+    [dx, r.x1 - a.x],
+    [-dy, a.y - r.y0],
+    [dy, r.y1 - a.y],
+  ];
+  for (const [p, q] of checks) {
+    if (p === 0) {
+      if (q < 0) return false;
+    } else {
+      const t = q / p;
+      if (p < 0) t0 = Math.max(t0, t);
+      else t1 = Math.min(t1, t);
+      if (t0 > t1) return false;
+    }
+  }
+  return true;
+}
+
+/** 粗略估算文字宽度：中文按 1em，其他按 0.6em */
+function textW(s: string, size: number) {
+  let w = 0;
+  for (const ch of s) w += /[\u2e80-\uffff]/.test(ch) ? size : size * 0.6;
+  return w;
+}
+
+/** 在候选方位里挑一个碰撞最少的 */
+function pickSpot(cands: Box[], obstacles: Box[], segs: [XY, XY][]): Box {
+  let best = cands[0];
+  let bestScore = Infinity;
+  cands.forEach((c, i) => {
+    let score = i * 2; // 同分时按候选顺序
+    for (const o of obstacles) score += overlap(c, o) * 3;
+    for (const [a, b] of segs) if (segHitsBox(a, b, c)) score += 160;
+    // 出界
+    score += (Math.max(0, 10 - c.x0) + Math.max(0, c.x1 - (W - 10)) + Math.max(0, 20 - c.y0) + Math.max(0, c.y1 - (H - 10))) * 60;
+    if (score < bestScore) {
+      bestScore = score;
+      best = c;
+    }
+  });
+  return best;
+}
+
+/** 地图上的固定元素：左上标题、右上指北针、左下图例 */
+const STATIC_BOXES: Box[] = [box(0, 0, 330, 84), box(W - 84, 10, 74, 80), box(0, H - 64, 520, 64)];
 
 function trunc(s: string, n: number) {
   return s.length > n ? s.slice(0, n - 1) + "…" : s;
@@ -131,6 +203,59 @@ export function AbstractMap({ state }: { state: JuState }) {
   const targetIdx = plan && target ? plan.options.findIndex((o) => o.poi.id === target.poi.id) : -1;
   const tp = targetIdx >= 0 ? poiPos[targetIdx] : null;
   const commuteOf = (m: Member) => target?.commutes.find((c) => c.memberId === m.id);
+
+  // —— 标签布局：先放第 1 名店名，再逐个放通勤分钟，后放的避开先放的 ——
+  const ownBoxes = new Map<string, Box[]>();
+  for (const m of members) {
+    const p = posOf(m);
+    const nw = textW(trunc(m.name, 6), 17) + 8;
+    ownBoxes.set(m.id, [around(p, 34), box(p.x - nw / 2, p.y + 38, nw, 24)]);
+  }
+  const memberBoxes = [...ownBoxes.values()].flat();
+  const poiBoxes: Box[] = poiPos.map((p, i) => around(p, (plan?.options[i].poi.id === target?.poi.id ? 46 : 36) * 0.75));
+  const centerBox: Box[] = center ? [box(center.x - 34, center.y - 30, 68, 72)] : [];
+  const lineSegs: [XY, XY][] = tp ? members.filter((m) => !absent.has(m.id)).map((m) => [posOf(m), tp] as [XY, XY]) : [];
+
+  let targetLabel: (Box & { text: string }) | null = null;
+  if (tp && target) {
+    const text = trunc(target.poi.name, 12);
+    const w = textW(text, 20) + 22;
+    const h = 32;
+    const g = 30; // 离菱形的距离
+    const cands = [
+      box(tp.x - w / 2, tp.y - g - h, w, h), // 上
+      box(tp.x - w / 2, tp.y + g, w, h), // 下
+      box(tp.x + g, tp.y - h / 2, w, h), // 右
+      box(tp.x - g - w, tp.y - h / 2, w, h), // 左
+    ];
+    const others = poiBoxes.filter((_, i) => i !== targetIdx);
+    targetLabel = { ...pickSpot(cands, [...STATIC_BOXES, ...memberBoxes, ...others, ...centerBox], lineSegs), text };
+  }
+
+  const placed: Box[] = targetLabel ? [targetLabel] : [];
+  const pillOf = new Map<string, Box & { text: string }>();
+  for (const m of members) {
+    const c = commuteOf(m);
+    if (!c || absent.has(m.id)) continue;
+    const p = posOf(m);
+    const text = `${c.minutes}′`;
+    const w = textW(text, 16) + 22;
+    const h = 26;
+    const cands = [
+      box(p.x + 22, p.y - 46, w, h), // 右上
+      box(p.x + 36, p.y - h / 2, w, h), // 右
+      box(p.x + 22, p.y + 20, w, h), // 右下
+      box(p.x - 22 - w, p.y - 46, w, h), // 左上
+      box(p.x - 36 - w, p.y - h / 2, w, h), // 左
+      box(p.x - 22 - w, p.y + 20, w, h), // 左下
+      box(p.x - w / 2, p.y - 66, w, h), // 正上
+    ];
+    const others = members.filter((o) => o.id !== m.id).flatMap((o) => ownBoxes.get(o.id) ?? []);
+    const obstacles = [...STATIC_BOXES, ...others, ...poiBoxes, ...centerBox, ...placed];
+    const spot = pickSpot(cands, obstacles, lineSegs);
+    placed.push(spot);
+    pillOf.set(m.id, { ...spot, text });
+  }
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="block h-full w-full" role="img" aria-label="成员与候选店的抽象地图">
@@ -243,30 +368,43 @@ export function AbstractMap({ state }: { state: JuState }) {
               <text y="8" textAnchor="middle" fill="#f3e7d3" fontSize={isTarget ? 24 : 19} fontWeight="800" style={{ fontFamily: "var(--font-num)" }}>
                 {i + 1}
               </text>
-              {isTarget && (
-                <text
-                  y={center && p.y > center.y ? s / 2 + 34 : -s / 2 - 22}
-                  textAnchor="middle"
-                  fill="#f3e7d3"
-                  fontSize="20"
-                  fontWeight="800"
-                  stroke="#14110f"
-                  strokeWidth="6"
-                  paintOrder="stroke"
-                >
-                  {trunc(o.poi.name, 11)}
-                </text>
-              )}
             </g>
           </g>
         );
       })}
 
+      {/* 第 1 名店名：半透明深色底，压在连线上也能读 */}
+      {targetLabel && (
+        <g className="animate-fade-in" style={{ animationDelay: "450ms" }}>
+          <rect
+            x={targetLabel.x0}
+            y={targetLabel.y0}
+            width={targetLabel.x1 - targetLabel.x0}
+            height={targetLabel.y1 - targetLabel.y0}
+            rx="9"
+            fill="#14110f"
+            fillOpacity="0.86"
+            stroke="#e2412e"
+            strokeOpacity="0.6"
+            strokeWidth="1.5"
+          />
+          <text
+            x={(targetLabel.x0 + targetLabel.x1) / 2}
+            y={targetLabel.y0 + 23}
+            textAnchor="middle"
+            fill="#f3e7d3"
+            fontSize="20"
+            fontWeight="800"
+          >
+            {targetLabel.text}
+          </text>
+        </g>
+      )}
+
       {/* 成员 */}
       {members.map((m) => {
         const p = posOf(m);
         const off = absent.has(m.id);
-        const c = commuteOf(m);
         return (
           <g key={m.id} transform={`translate(${p.x} ${p.y})`} opacity={off ? 0.35 : 1}>
             <g className="svg-origin animate-pop-in">
@@ -286,15 +424,29 @@ export function AbstractMap({ state }: { state: JuState }) {
               >
                 {trunc(m.name, 6)}
               </text>
-              {c && !off && (
-                <g transform="translate(26 -30)">
-                  <rect x="0" y="-15" width={c.minutes >= 100 ? 62 : 52} height="26" rx="13" fill="#e2412e" />
-                  <text x={c.minutes >= 100 ? 31 : 26} y="5" textAnchor="middle" fill="#fff" fontSize="16" fontWeight="700" style={{ fontFamily: "var(--font-num)" }}>
-                    {c.minutes}′
-                  </text>
-                </g>
-              )}
             </g>
+          </g>
+        );
+      })}
+
+      {/* 通勤分钟：放在碰撞最少的方位 */}
+      {members.map((m) => {
+        const b = pillOf.get(m.id);
+        if (!b) return null;
+        return (
+          <g key={`pill-${m.id}`} className="animate-fade-in" style={{ animationDelay: "500ms" }}>
+            <rect x={b.x0} y={b.y0} width={b.x1 - b.x0} height={b.y1 - b.y0} rx="13" fill="#e2412e" stroke="#14110f" strokeWidth="2" />
+            <text
+              x={(b.x0 + b.x1) / 2}
+              y={b.y0 + 19}
+              textAnchor="middle"
+              fill="#fff"
+              fontSize="16"
+              fontWeight="700"
+              style={{ fontFamily: "var(--font-num)" }}
+            >
+              {b.text}
+            </text>
           </g>
         );
       })}
