@@ -164,6 +164,7 @@
 
 /* ───────────── 基础 ───────────── */
 html {
+  overflow-x: hidden;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
 }
@@ -190,6 +191,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+@layer components {
 /* 贴纸卡片 */
 .sticker {
   background: var(--color-card);
@@ -242,6 +244,7 @@ body {
 .dot-grid-night {
   background-image: radial-gradient(rgb(243 231 211 / 0.09) 1.4px, transparent 1.4px);
   background-size: 28px 28px;
+}
 }
 
 @media (prefers-reduced-motion: reduce) {

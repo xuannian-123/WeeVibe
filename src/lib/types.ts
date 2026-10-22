@@ -105,6 +105,8 @@ export type Ju = {
   id: string;
   title: string;
   rawPrompt: string;
+  /** 发起人称呼（发起人还没入局时头部也能显示） */
+  organizerName?: string;
   spec: JuSpec;
   slots: Slot[];
   status: JuStatus;

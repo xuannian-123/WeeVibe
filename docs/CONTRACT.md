@@ -68,7 +68,7 @@ export async function writeBlurbs(ju: Ju, plan: Plan, members: Member[]): Promis
 | `POST /api/ju` | `{ prompt, organizerName, title?, spec? }` | `{ id, adminToken, organizerMemberId: null }` |
 | `GET /api/ju/:id` | – | `JuState` |
 | `POST /api/ju/:id/members` | `{ name, avatar?, location: Place, availableSlotIds, dietRaw, budgetMax?, isOrganizer? }` | `{ memberId }` |
-| `PATCH /api/ju/:id/members/:mid` | 同上的部分字段，或 `{ status: "out" }` | `{ ok: true }` |
+| `PATCH /api/ju/:id/members/:mid` | 同上的部分字段，或 `{ status: "out" \| "in" }`（退出 / 重新入局） | `{ ok: true }` |
 | `POST /api/ju/:id/plan` 🔒 | – | `JuState`（status → voting，含 plan 和 blurb） |
 | `POST /api/ju/:id/vote` | `{ memberId, poiId }` | `JuState`。在场成员过半投同一家时自动定局 |
 | `POST /api/ju/:id/confirm` 🔒 | `{ poiId }` | `JuState`（status → confirmed） |

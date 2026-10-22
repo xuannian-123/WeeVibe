@@ -77,6 +77,7 @@ export async function createJu(input: { prompt: string; title?: string; spec?: J
     id: juId(),
     title,
     rawPrompt: input.prompt,
+    organizerName: input.organizerName,
     spec,
     slots,
     status: "collecting",
