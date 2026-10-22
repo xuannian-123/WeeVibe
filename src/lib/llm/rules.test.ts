@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { Member, Plan } from "../types";
 import { parseCnNumber } from "./cn-number";
-import { charLen, commuteHead, ruleBlurbs, ruleParseDiet, ruleParsePrompt, titleFromSpec } from "./rules";
+import { charLen,
+  BLURB_MAX, commuteHead, ruleBlurbs, ruleParseDiet, ruleParsePrompt, titleFromSpec } from "./rules";
 
 // 2026-10-22 周四 10:00（北京时间）
 const NOW = new Date("2026-10-22T02:00:00Z");
@@ -201,10 +202,10 @@ describe("ruleBlurbs", () => {
     computedAt: "",
   };
 
-  it("每家一句，≤30 字，带具体信息", () => {
+  it("每家一句，不超过 BLURB_MAX 字，带具体信息", () => {
     const out = ruleBlurbs(plan, members);
     expect(out).toHaveLength(3);
-    for (const b of out) expect(charLen(b)).toBeLessThanOrEqual(30);
+    for (const b of out) expect(charLen(b)).toBeLessThanOrEqual(BLURB_MAX);
     expect(out[0]).toContain("离大家都近");
     expect(out[0]).toContain("阿杰");
     expect(out[0]).toContain("15");
