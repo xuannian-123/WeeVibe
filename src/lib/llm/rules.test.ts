@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Member, Plan } from "../types";
 import { parseCnNumber } from "./cn-number";
-import { charLen, ruleBlurbs, ruleParseDiet, ruleParsePrompt, titleFromSpec } from "./rules";
+import { charLen, commuteHead, ruleBlurbs, ruleParseDiet, ruleParsePrompt, titleFromSpec } from "./rules";
 
 // 2026-10-22 周四 10:00（北京时间）
 const NOW = new Date("2026-10-22T02:00:00Z");
@@ -205,9 +205,42 @@ describe("ruleBlurbs", () => {
     const out = ruleBlurbs(plan, members);
     expect(out).toHaveLength(3);
     for (const b of out) expect(charLen(b)).toBeLessThanOrEqual(30);
+    expect(out[0]).toContain("离大家都近");
     expect(out[0]).toContain("阿杰");
     expect(out[0]).toContain("15");
     expect(out[1]).toContain("76");
     expect(out[2]).toContain("4.9");
+  });
+
+  const flat = (max: number): Plan => ({
+    ...plan,
+    // 同价同分，只能从通勤角度说
+    options: [opt("1", max, 100, 4.5), opt("2", max + 1, 100, 4.5), opt("3", max + 2, 100, 4.5)],
+  });
+
+  it("最长通勤 ≤15 才说“近”", () => {
+    expect(commuteHead(15)).toBe("离大家都近");
+    expect(ruleBlurbs(flat(12), members)[0]).toContain("离大家都近");
+  });
+
+  it("16–25 分钟说“不算远”", () => {
+    expect(commuteHead(16)).toBe("大家都不算远");
+    expect(commuteHead(25)).toBe("大家都不算远");
+    const out = ruleBlurbs(flat(18), members);
+    expect(out[0]).toContain("不算远");
+    for (const b of out) expect(b).not.toContain("都近");
+  });
+
+  it(">25 分钟不提“近”，只陈述事实", () => {
+    expect(commuteHead(26)).toBeUndefined();
+    const out = ruleBlurbs(flat(30), members);
+    for (const b of out) {
+      expect(b).not.toMatch(/近|不算远/);
+      expect(charLen(b)).toBeLessThanOrEqual(30);
+    }
+    expect(out[0]).toContain("30分钟");
+    // 原来的 30 分钟反例：即便是通勤最短的一家，也不能说“离大家都近”
+    const mixed = ruleBlurbs({ ...plan, options: [opt("1", 30, 100, 4.5), opt("2", 33, 90, 4.4)] }, members);
+    for (const b of mixed) expect(b).not.toContain("近");
   });
 });

@@ -478,40 +478,42 @@ function farthest(opt: PlanOption, members: Member[]): { name: string; minutes: 
   return { name: m?.name ?? "最远的人", minutes: Math.round(c.minutes) };
 }
 
+/** 按最长通勤分档：≤15 才说“近”，16–25 说“不算远”，>25 不提“近” */
+export function commuteHead(maxMinutes: number): string | undefined {
+  const m = Math.round(maxMinutes);
+  if (m <= 15) return "离大家都近";
+  if (m <= 25) return "大家都不算远";
+  return undefined;
+}
+
 export function ruleBlurbs(plan: Plan, members: Member[]): string[] {
   const opts = plan.options;
   if (opts.length === 0) return [];
-  const minMax = Math.min(...opts.map((o) => o.maxCommute));
   const costs = opts.map((o) => o.poi.costPerPerson).filter((c): c is number => c !== undefined);
-  const minCost = costs.length ? Math.min(...costs) : undefined;
-  const ratings = opts.map((o) => o.poi.rating ?? 0);
-  const maxRating = Math.max(...ratings);
+  const minCost = costs.length > 1 && new Set(costs).size > 1 ? Math.min(...costs) : undefined;
+  const ratings = opts.map((o) => o.poi.rating).filter((r): r is number => !!r);
+  const maxRating = ratings.length > 1 && new Set(ratings).size > 1 ? Math.max(...ratings) : undefined;
 
   return opts.map((o, i) => {
     const far = farthest(o, members);
-    const farPart = far
-      ? far.minutes <= 20
-        ? `最远的${far.name}也就${far.minutes}分钟`
-        : `最远的${far.name}打车${far.minutes}分钟`
-      : `最远${Math.round(o.maxCommute)}分钟`;
+    const minutes = far?.minutes ?? Math.round(o.maxCommute);
+    const who = far ? `最远的${far.name}` : "最远";
+    const farPart = minutes <= 20 ? `${who}也就${minutes}分钟` : `${who}打车${minutes}分钟`;
     const cost = o.poi.costPerPerson;
     const costPart = cost !== undefined ? `人均${Math.round(cost)}` : "";
     const ratingPart = o.poi.rating ? `评分${o.poi.rating.toFixed(1)}` : "";
     const conflictPart = o.conflicts.length ? `注意：${o.conflicts[0].split(/[：:（(]/)[0]}有忌口` : "";
-    const reason = o.reasons.find((r) => !/最远|分钟/.test(r)) ?? "";
 
-    let head: string;
-    if (o.maxCommute === minMax) head = "离大家都近";
-    else if (cost !== undefined && cost === minCost) head = "最省钱的一家";
-    else if (o.poi.rating && o.poi.rating === maxRating) head = "口碑最好";
-    else head = i === 0 ? "综合最稳" : "备选也不错";
-
-    const parts =
-      head === "最省钱的一家"
-        ? [head, costPart, farPart, conflictPart]
-        : head === "口碑最好"
-          ? [head, ratingPart, farPart, conflictPart]
-          : [head, farPart, costPart || ratingPart || reason, conflictPart];
-    return fit(parts);
+    // 角度优先级：最便宜 → 评分最高 → 通勤分档 → 第一名说“综合分最高” → 只陈述事实
+    if (minCost !== undefined && cost === minCost) {
+      return fit(["最省钱的一家", costPart, farPart, conflictPart]);
+    }
+    if (maxRating !== undefined && o.poi.rating === maxRating) {
+      return fit(["口碑最好", ratingPart, farPart, conflictPart]);
+    }
+    const near = commuteHead(o.maxCommute);
+    if (near) return fit([near, farPart, costPart || ratingPart, conflictPart]);
+    if (i === 0) return fit(["综合分最高", costPart || ratingPart, farPart, conflictPart]);
+    return fit([o.poi.name.replace(/[(（].*$/, ""), costPart || ratingPart, farPart, conflictPart]);
   });
 }

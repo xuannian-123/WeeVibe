@@ -121,6 +121,7 @@ export function seedJu(id: string, count = 6): Promise<JuState> {
         status: "in",
         joinedAt: new Date(now + i).toISOString(),
         isOrganizer: false,
+        isDemo: true,
       };
       all.push(m);
       db.upsertMember(m);

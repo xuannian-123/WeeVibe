@@ -29,7 +29,15 @@ const memberFields = {
   isOrganizer: z.boolean().optional(),
 };
 
-export const addMemberBody = z.object(memberFields);
+/** 0–3600 秒之外（或不是数字）直接丢弃，不报错 */
+export const fillSecondsField = z
+  .unknown()
+  .optional()
+  .transform((v) =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 3600 ? Math.round(v * 10) / 10 : undefined,
+  );
+
+export const addMemberBody = z.object({ ...memberFields, fillSeconds: fillSecondsField });
 
 export const patchMemberBody = z
   .object({

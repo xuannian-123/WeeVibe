@@ -1,7 +1,7 @@
 // 全流程冒烟：npx tsx scripts/smoke.ts http://localhost:3001
 // parse → 建局 → 加入 3 人 → seed → plan → (退出重算) → 投票直到自动定局 → ics → settle
 // 任何一步失败以非 0 退出。
-import type { JuSpec, JuState, Place, Slot } from "../src/lib/types";
+import type { JuSpec, JuState, Place, Slot, Stats } from "../src/lib/types";
 
 const BASE = (process.argv[2] || process.env.SMOKE_BASE || "http://localhost:3001").replace(/\/+$/, "");
 const PROMPT = process.argv[3] || "周五晚上8个人吃火锅人均100";
@@ -47,6 +47,8 @@ async function call<T>(
 
 async function main() {
   console.log(`AI 局长 smoke → ${BASE}`);
+  const statsBefore = (await call<Stats>("GET", "/api/stats")).data;
+  assert(Array.isArray(statsBefore.hourly) && statsBefore.hourly.length === 72, "stats.hourly 应覆盖 72 小时");
 
   // 1. parse
   const parsed = (await call<{ title: string; spec: JuSpec; slots: Slot[] }>("POST", "/api/parse", { prompt: PROMPT })).data;
@@ -87,9 +89,10 @@ async function main() {
   assert(typeof rev.lat === "number" && rev.label, "geo/reverse 返回不对");
   const all = (await call<Place[]>("GET", `/api/geo/search?q=`)).data;
   const joiners = [
-    { name: "局长", isOrganizer: true, dietRaw: "", location: search[0] },
-    { name: "小周", dietRaw: "不能吃辣，回民", location: all[1] ?? search[0] },
-    { name: "Lily", dietRaw: "都行", location: all[5] ?? search[0] },
+    // 局长的 fillSeconds 超出 0–3600，应被丢弃
+    { name: "局长", isOrganizer: true, dietRaw: "", location: search[0], fillSeconds: 99999 },
+    { name: "小周", dietRaw: "不能吃辣，回民", location: all[1] ?? search[0], fillSeconds: 8 },
+    { name: "Lily", dietRaw: "都行", location: all[5] ?? search[0], fillSeconds: 12.3 },
   ];
   const ids: string[] = [];
   for (const j of joiners) {
@@ -102,15 +105,23 @@ async function main() {
   assert(state.members.length === 3, `应有 3 人，实际 ${state.members.length}`);
   assert(zhou && zhou.dietTags.includes("不吃辣") && zhou.dietTags.includes("清真"), `忌口解析不对：${zhou?.dietTags}`);
   assert(new Set(state.members.map((m) => m.avatar)).size === 3, "头像应各不相同");
+  const fillOf = (name: string) => state.members.find((m) => m.name === name)?.fillSeconds;
+  assert(fillOf("小周") === 8 && fillOf("Lily") === 12.3, "fillSeconds 没存上");
+  assert(fillOf("局长") === undefined, "超出范围的 fillSeconds 应被丢弃");
+  assert(state.members.every((m) => !m.isDemo), "真实成员不应标记 isDemo");
   log(
     "加入 3 人",
     `geo/search 金鸡湖 → ${search[0].label}；reverse(wgs84) → ${rev.label} (${rev.lat.toFixed(4)},${rev.lng.toFixed(4)})`,
-    ...state.members.map((m) => `${m.avatar} ${m.name} @${m.location.label} 忌口=${JSON.stringify(m.dietTags)}`),
+    ...state.members.map(
+      (m) => `${m.avatar} ${m.name} @${m.location.label} 忌口=${JSON.stringify(m.dietTags)} fill=${m.fillSeconds ?? "-"}`,
+    ),
   );
 
   // 4. seed
   state = (await call<JuState>("POST", `/api/dev/seed/${id}`, {}, admin)).data;
   assert(state.members.length >= 8, `seed 后人数应 ≥ 8，实际 ${state.members.length}`);
+  const demoCount = state.members.filter((m) => m.isDemo).length;
+  assert(demoCount === state.members.length - 3, `seed 成员都应标记 isDemo，实际 ${demoCount}`);
   log("seed 演示成员", `共 ${state.members.length} 人：${state.members.map((m) => `${m.avatar}${m.name}`).join(" ")}`);
 
   // 5. plan
@@ -175,6 +186,28 @@ async function main() {
   const s = state.ju.settlement;
   assert(s && s.total === 888 && s.perPerson > 0, "settle 结果不对");
   log("AA", `总计 ${s.total} 元，${voters.length} 人，每人 ${s.perPerson} 元，转给 ${s.payerName}`);
+
+  // 10. stats：演示成员不能算进 memberCount（别人同时在用这个库时 delta 可能更大，所以只卡上界和本局）
+  const statsAfter = (await call<Stats>("GET", "/api/stats")).data;
+  const delta = statsAfter.memberCount - statsBefore.memberCount;
+  const sumJoins = (st: Stats) => st.hourly.reduce((a, h) => a + h.joins, 0);
+  assert(delta >= 3, `memberCount 应至少 +3（3 个真实成员），实际 +${delta}`);
+  assert(delta < 3 + demoCount, `memberCount +${delta}：演示成员被算进去了`);
+  const mine = statsAfter.recent.find((r) => r.id === id);
+  assert(mine, "本局（3 个真实成员）应出现在 recent 里");
+  assert(mine.members === 3, `recent 里本局应为 3 个真实成员，实际 ${mine.members}`);
+  assert(mine.status === "confirmed", `recent 里本局状态应为 confirmed，实际 ${mine.status}`);
+  assert(statsAfter.juCount >= statsBefore.juCount + 1, "juCount 没有增加");
+  assert(statsAfter.confirmedCount >= statsBefore.confirmedCount + 1, "confirmedCount 没有增加");
+  assert(statsAfter.medianFillSeconds !== undefined, "有真实 fillSeconds 时应给出中位数");
+  assert(statsAfter.hourly.length === 72, "stats.hourly 应覆盖 72 小时");
+  assert(sumJoins(statsAfter) - sumJoins(statsBefore) >= 3, "hourly 入局数没增加");
+  log(
+    "stats",
+    `memberCount ${statsBefore.memberCount} → ${statsAfter.memberCount}（+${delta}，本局 seed 了 ${demoCount} 个演示成员，未计入）`,
+    `juCount=${statsAfter.juCount} confirmed=${statsAfter.confirmedCount} medianFill=${statsAfter.medianFillSeconds}s 本局 recent: ${mine.members} 人 ${mine.status}`,
+    `hourly 最近一小时 ${statsAfter.hourly.at(-1)?.hour} joins=${statsAfter.hourly.at(-1)?.joins}`,
+  );
 
   console.log(`\n✓ 全流程通过（${step} 步）。局页：${BASE}/j/${id}`);
 }

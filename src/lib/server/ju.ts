@@ -173,6 +173,7 @@ export async function addMember(id: string, input: AddMemberInput): Promise<{ me
       status: "in",
       joinedAt: new Date().toISOString(),
       isOrganizer: input.isOrganizer ?? false,
+      ...(input.fillSeconds !== undefined ? { fillSeconds: input.fillSeconds } : {}),
     };
     db.upsertMember(m);
     if (ju.status === "voting") {
