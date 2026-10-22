@@ -75,7 +75,7 @@ export async function writeBlurbs(ju: Ju, plan: Plan, members: Member[]): Promis
 | `POST /api/ju/:id/settle` | `{ total, payerName? }` | `JuState` |
 | `GET /api/ju/:id/ics` | – | `text/calendar` 文件，含提前 2 小时提醒 |
 | `GET /api/geo/search?q=&city=` | – | `Place[]` |
-| `GET /api/geo/reverse?lat=&lng=` | – | `{ label }` |
+| `GET /api/geo/reverse?lat=&lng=&from=wgs84` | – | `Place`（浏览器定位传 `from=wgs84`，后端用 `wgs84ToGcj02` 转成高德坐标后再返回） |
 | `POST /api/dev/seed/:id` 🔒 | `{ count? }` | `JuState`（加入 5–6 个演示成员，Demo 兜底用） |
 
 有成员退出（status out）且已出方案时，后端自动重算 plan。
