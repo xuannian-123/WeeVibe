@@ -70,6 +70,17 @@ export function listMembers(juId: string): Member[] {
   return rows.map((r) => JSON.parse(r.data) as Member);
 }
 
+/** 统计用：全部局 / 全部成员（黑客松量级，全表扫描即可） */
+export function listAllJu(): Ju[] {
+  const rows = store().prepare("SELECT data FROM ju").all() as { data: string }[];
+  return rows.map((r) => JSON.parse(r.data) as Ju);
+}
+
+export function listAllMembers(): Member[] {
+  const rows = store().prepare("SELECT data FROM members").all() as { data: string }[];
+  return rows.map((r) => JSON.parse(r.data) as Member);
+}
+
 export function getMember(id: string): Member | null {
   const row = store().prepare("SELECT data FROM members WHERE id = ?").get(id) as { data: string } | undefined;
   return row ? (JSON.parse(row.data) as Member) : null;

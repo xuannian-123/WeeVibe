@@ -14,8 +14,17 @@ export default function ScreenPage() {
 
   useEffect(() => {
     // 路演时 localhost 手机扫不到：支持 ?origin=http://192.168.x.x:3000 覆盖二维码域名
+    // 默认就是当前域名（生产部署直接可用）
+    let origin = window.location.origin;
     const q = new URLSearchParams(window.location.search).get("origin");
-    const origin = (q || window.location.origin).replace(/\/$/, "");
+    if (q) {
+      try {
+        const u = new URL(q);
+        if (u.protocol === "http:" || u.protocol === "https:") origin = u.origin;
+      } catch {
+        /* 非法参数忽略，继续用当前域名 */
+      }
+    }
     setJoinUrl(`${origin}/j/${id}`);
   }, [id]);
 

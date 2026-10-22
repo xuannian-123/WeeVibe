@@ -1,5 +1,5 @@
 // 前端 API client —— 形状以 docs/CONTRACT.md 与 src/lib/types.ts 为准
-import type { JuSpec, JuState, Place, Slot } from "@/lib/types";
+import type { JuSpec, JuState, Place, Slot, Stats } from "@/lib/types";
 
 export class ApiError extends Error {
   status: number;
@@ -76,6 +76,8 @@ export type JoinBody = {
   dietRaw: string;
   budgetMax?: number;
   isOrganizer?: boolean;
+  /** 从表单首次渲染到提交的秒数（取整） */
+  fillSeconds?: number;
 };
 
 export type PatchBody = Partial<JoinBody> | { status: "out" | "in" };
@@ -119,6 +121,8 @@ export const api = {
 
   geoReverse: (lat: number, lng: number) =>
     request<Place>(`/api/geo/reverse?lat=${lat}&lng=${lng}&from=wgs84`, { timeoutMs: 8000 }),
+
+  stats: () => request<Stats>("/api/stats", { timeoutMs: 8000 }),
 
   icsUrl: (id: string) => `/api/ju/${enc(id)}/ics`,
 };

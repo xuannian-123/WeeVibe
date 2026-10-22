@@ -1,5 +1,5 @@
 // /dev/gallery 用的写死数据，不依赖后端
-import type { Ju, JuState, Member, PlanOption, Slot } from "@/lib/types";
+import type { Ju, JuState, Member, PlanOption, Slot, Stats } from "@/lib/types";
 
 const JU_ID = "demo42";
 
@@ -248,3 +248,59 @@ export const FIXTURES = {
 } as const;
 
 export type FixtureKey = keyof typeof FIXTURES;
+
+/* ───────── /stats 用的假数据 ───────── */
+
+function mkHourly(): Stats["hourly"] {
+  const end = Date.UTC(2026, 9, 22, 6); // 北京时间 14:00
+  const out: Stats["hourly"] = [];
+  for (let i = 71; i >= 0; i--) {
+    const t = new Date(end - i * 3600000);
+    const bj = (t.getUTCHours() + 8) % 24;
+    // 白天和晚饭前后多，凌晨少；越往后越热
+    const daily = bj >= 11 && bj <= 13 ? 3 : bj >= 17 && bj <= 21 ? 5 : bj >= 1 && bj <= 7 ? 0 : 1;
+    const growth = 1 + (71 - i) / 30;
+    const joins = Math.max(0, Math.round(daily * growth + ((i * 7) % 3) - 1));
+    out.push({ hour: t.toISOString().slice(0, 13) + ":00:00.000Z", joins });
+  }
+  return out;
+}
+
+const RECENT_TITLES = [
+  "周五火锅局",
+  "周六羽毛球",
+  "今晚宵夜烧烤",
+  "部门团建桌游",
+  "毕业五周年聚餐",
+  "周日早茶",
+  "剧本杀开黑",
+  "KTV 生日局",
+  "露营烧烤",
+  "下班喝一杯",
+];
+const STATUSES: Stats["recent"][number]["status"][] = ["confirmed", "voting", "collecting", "confirmed", "confirmed"];
+
+export const fixtureStats: Stats = {
+  juCount: 23,
+  confirmedCount: 14,
+  memberCount: 137,
+  medianFillSeconds: 12,
+  recent: RECENT_TITLES.map((title, i) => ({
+    id: `r${i}`,
+    title,
+    members: 3 + ((i * 5) % 7),
+    status: STATUSES[i % STATUSES.length],
+    createdAt: new Date(Date.UTC(2026, 9, 22, 6) - i * 47 * 60000).toISOString(),
+  })),
+  hourly: mkHourly(),
+  generatedAt: new Date(Date.UTC(2026, 9, 22, 6)).toISOString(),
+};
+
+export const fixtureStatsEmpty: Stats = {
+  juCount: 0,
+  confirmedCount: 0,
+  memberCount: 0,
+  recent: [],
+  hourly: [],
+  generatedAt: new Date(Date.UTC(2026, 9, 22, 6)).toISOString(),
+};

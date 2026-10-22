@@ -184,8 +184,11 @@ export function JoinForm({
   const [diets, setDiets] = useState<DietTag[]>([]);
   const [dietFree, setDietFree] = useState("");
   const [busy, setBusy] = useState(false);
+  // 「10 秒填完」计时：从表单首次渲染开始
+  const startedAt = useRef<number | null>(null);
 
   useEffect(() => {
+    startedAt.current ??= Date.now();
     setName(store.getName() ?? "");
     setAvatar(store.getAvatar() ?? AVATARS[Math.floor(Math.random() * AVATARS.length)]);
   }, []);
@@ -206,6 +209,7 @@ export function JoinForm({
         availableSlotIds: slots,
         dietRaw: [...diets, dietFree.trim()].filter(Boolean).join("，"),
         isOrganizer: isAdmin || undefined,
+        fillSeconds: startedAt.current ? Math.max(1, Math.round((Date.now() - startedAt.current) / 1000)) : undefined,
       });
       toast("入局成功 🎉", "ok");
     } catch (e) {
