@@ -454,7 +454,7 @@ export function ruleParseDiet(raw: string): DietTag[] {
 
 // ---------------------------------------------------------------- 推荐语模板
 
-export const BLURB_MAX = 30;
+export const BLURB_MAX = 36;
 
 export function charLen(s: string): number {
   return Array.from(s).length;
