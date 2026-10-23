@@ -1,5 +1,5 @@
 // 测试用工厂函数（只被 *.test.ts 引用）
-import type { DietTag, Ju, JuSpec, Member } from "../types";
+import type { Ju, JuSpec, Member, MemberPrivate, Slot } from "../types";
 
 export function spec(over: Partial<JuSpec> = {}): JuSpec {
   return {
@@ -16,31 +16,49 @@ export function spec(over: Partial<JuSpec> = {}): JuSpec {
   };
 }
 
-let seq = 0;
-export function member(
-  name: string,
-  lat: number,
-  lng: number,
-  over: Partial<Member> & { dietTags?: DietTag[] } = {},
-): Member {
-  seq++;
+export function priv(over: Partial<MemberPrivate> = {}): MemberPrivate {
   return {
-    id: over.id ?? `m${seq}`,
-    juId: "j1",
-    name,
-    avatar: "🙂",
-    location: { lat, lng, label: name },
-    availableSlotIds: [],
-    dietRaw: "",
+    chat: [],
+    availability: {},
     dietTags: [],
-    status: "in",
-    joinedAt: "2026-10-22T10:00:00+08:00",
-    isOrganizer: false,
+    notes: [],
+    swipes: {},
+    autoFilled: [],
+    wants: [],
+    matches: [],
+    billFacts: {},
+    inbox: [],
     ...over,
   };
 }
 
-export function ju(s: JuSpec, slots: Ju["slots"]): Ju {
+let seq = 0;
+/** v3 成员：私密字段放 over.priv */
+export function member(
+  name: string,
+  lat: number,
+  lng: number,
+  over: Partial<Member> & { priv?: Partial<MemberPrivate> } = {},
+): Member {
+  seq++;
+  const { priv: p, ...rest } = over;
+  return {
+    id: rest.id ?? `m${seq}`,
+    juId: "j1",
+    name,
+    avatar: "🙂",
+    location: { lat, lng, label: name },
+    role: "guest",
+    intake: "done",
+    status: "in",
+    joinedAt: "2026-10-22T10:00:00+08:00",
+    isOrganizer: false,
+    ...rest,
+    private: priv(p),
+  };
+}
+
+export function ju(s: JuSpec, slots: Slot[], over: Partial<Ju> = {}): Ju {
   return {
     id: "j1",
     title: "测试局",
@@ -50,5 +68,10 @@ export function ju(s: JuSpec, slots: Ju["slots"]): Ju {
     status: "collecting",
     createdAt: "2026-10-22T10:00:00+08:00",
     votes: {},
+    trace: [],
+    announcements: [],
+    pendingChanges: 0,
+    revisions: [],
+    ...over,
   };
 }

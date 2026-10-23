@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { generateSlots, pickSlot } from "./index";
-import { member, spec } from "./testutil";
+import { generateSlots } from "./index";
+import { spec } from "./testutil";
 
 describe("generateSlots", () => {
   it("单日 30 分钟一档，latest 本身也算，带 +08:00", () => {
@@ -56,61 +56,5 @@ describe("generateSlots", () => {
     process.env.TZ = old;
     expect(a).toEqual(b);
     expect(a[0].start).toBe("2026-10-23T18:00:00+08:00");
-  });
-});
-
-describe("pickSlot", () => {
-  const slots = generateSlots(spec({ earliest: "18:00", latest: "19:00" })); // 18:00 18:30 19:00
-  const [s1, s2, s3] = slots.map((s) => s.id);
-
-  it("选能来人数最多的", () => {
-    const ms = [
-      member("A", 31.27, 120.73, { id: "a", availableSlotIds: [s1, s2] }),
-      member("B", 31.27, 120.73, { id: "b", availableSlotIds: [s2] }),
-      member("C", 31.27, 120.73, { id: "c", availableSlotIds: [s2, s3] }),
-    ];
-    expect(pickSlot(slots, ms)).toEqual({ slotId: s2, attendeeIds: ["a", "b", "c"], absentIds: [] });
-  });
-
-  it("平票优先发起人能来的，再优先更早的", () => {
-    const ms = [
-      member("A", 31.27, 120.73, { id: "a", availableSlotIds: [s1] }),
-      member("Org", 31.27, 120.73, { id: "o", isOrganizer: true, availableSlotIds: [s3] }),
-    ];
-    const r = pickSlot(slots, ms);
-    expect(r.slotId).toBe(s3);
-    expect(r.attendeeIds).toEqual(["o"]);
-    expect(r.absentIds).toEqual(["a"]);
-
-    const ms2 = [
-      member("A", 31.27, 120.73, { id: "a", availableSlotIds: [s3] }),
-      member("B", 31.27, 120.73, { id: "b", availableSlotIds: [s2] }),
-    ];
-    expect(pickSlot(slots, ms2).slotId).toBe(s2);
-  });
-
-  it("只统计 status=in，退出的人不进 absent", () => {
-    const ms = [
-      member("A", 31.27, 120.73, { id: "a", availableSlotIds: [s1] }),
-      member("X", 31.27, 120.73, { id: "x", status: "out", availableSlotIds: [s3] }),
-      member("Y", 31.27, 120.73, { id: "y", status: "out", availableSlotIds: [s3] }),
-    ];
-    expect(pickSlot(slots, ms)).toEqual({ slotId: s1, attendeeIds: ["a"], absentIds: [] });
-  });
-
-  it("一个时间都没勾 = 都行，算进每个 slot", () => {
-    const ms = [
-      member("A", 31.27, 120.73, { id: "a", availableSlotIds: [s3] }),
-      member("随便", 31.27, 120.73, { id: "any", availableSlotIds: [] }),
-      member("B", 31.27, 120.73, { id: "b", availableSlotIds: [s1] }),
-    ];
-    // s1 与 s3 都是 2 人，平票取更早的 s1；"都行"的人在场
-    expect(pickSlot(slots, ms)).toEqual({ slotId: s1, attendeeIds: ["any", "b"], absentIds: ["a"] });
-    const onlyAny = [member("随便", 31.27, 120.73, { id: "any", availableSlotIds: [] })];
-    expect(pickSlot(slots, onlyAny)).toEqual({ slotId: s1, attendeeIds: ["any"], absentIds: [] });
-  });
-
-  it("没有成员返回第一个 slot", () => {
-    expect(pickSlot(slots, [])).toEqual({ slotId: s1, attendeeIds: [], absentIds: [] });
   });
 });

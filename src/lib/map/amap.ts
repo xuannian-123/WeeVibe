@@ -163,6 +163,56 @@ type DistanceResp = AmapBase & {
   results?: { origin_id?: unknown; distance?: unknown; duration?: unknown; code?: unknown }[];
 };
 
+type Stop = { name?: unknown };
+type TransitResp = AmapBase & {
+  route?: {
+    transits?: {
+      duration?: unknown;
+      segments?: {
+        walking?: { distance?: unknown; duration?: unknown } | unknown[];
+        bus?: { buslines?: { name?: unknown; departure_stop?: Stop; arrival_stop?: Stop; via_num?: unknown }[] } | unknown[];
+        railway?: { name?: unknown; departure_stop?: Stop; arrival_stop?: Stop } | unknown[];
+      }[];
+    }[];
+  };
+};
+
+/** 去掉高德线路名里括号中的起讫站，如 "地铁9号线(松江南站--曹路)" -> "地铁9号线" */
+function shortLine(name: string): string {
+  return name.replace(/[（(][^）)]*[）)]/g, "").trim();
+}
+
+/** 解析高德公交规划的第一条方案；没有方案返回 undefined */
+export function parseTransit(data: TransitResp): { minutes: number; steps: string[] } | undefined {
+  const t = data.route?.transits?.[0];
+  const sec = num(t?.duration);
+  if (!t || sec === undefined) return undefined;
+  const steps: string[] = [];
+  for (const seg of t.segments ?? []) {
+    const w = seg.walking && !Array.isArray(seg.walking) ? seg.walking : undefined;
+    const wd = num(w?.distance);
+    if (wd !== undefined && wd >= 50) steps.push(`步行 ${Math.round(wd / 10) * 10} 米`);
+    const bus = seg.bus && !Array.isArray(seg.bus) ? seg.bus : undefined;
+    const line = bus?.buslines?.[0];
+    if (line && str(line.name)) {
+      const via = num(line.via_num);
+      const stops = via !== undefined ? `（${via + 1} 站）` : "";
+      const from = str(line.departure_stop?.name);
+      const to = str(line.arrival_stop?.name);
+      steps.push(`${shortLine(str(line.name))}${from && to ? ` ${from} → ${to}` : ""}${stops}`);
+    }
+    const rail = seg.railway && !Array.isArray(seg.railway) ? seg.railway : undefined;
+    if (rail && str(rail.name)) steps.push(`${str(rail.name)} ${str(rail.departure_stop?.name)} → ${str(rail.arrival_stop?.name)}`.trim());
+  }
+  return { minutes: Math.max(1, Math.round(sec / 60)), steps };
+}
+
+/** 公交规划失败 / 没有方案时的打车估算 */
+export function taxiFallback(origin: LatLng, dest: LatLng): { minutes: number; steps: string[] } {
+  const e = estimateCommute(origin, dest);
+  return { minutes: e.minutes, steps: [`打车约 ${e.minutes} 分钟（约 ${e.distanceKm} 公里）`] };
+}
+
 export function parseAroundPoi(p: AroundPoi): Poi | undefined {
   const loc = parseLocation(p.location);
   const id = str(p.id);
@@ -232,27 +282,32 @@ export function createAmapProvider(key: string): MapProvider {
 
     async searchAround(center: LatLng, keywords: string[], radiusM: number): Promise<Poi[]> {
       const kws = keywords.map((k) => k.trim()).filter(Boolean);
-      const data = await amapGet<AroundResp>(
-        "/v3/place/around",
-        {
-          location: fmtLocation(center),
-          keywords: kws.join("|"),
-          radius: Math.max(1, Math.min(50000, Math.round(radiusM))),
-          extensions: "all",
-          offset: 25,
-          page: 1,
-          sortrule: "weight",
-        },
-        key,
-      );
       const out: Poi[] = [];
       const seen = new Set<string>();
-      for (const raw of data.pois ?? []) {
-        const poi = parseAroundPoi(raw);
-        if (poi && !seen.has(poi.id)) {
-          seen.add(poi.id);
-          out.push(poi);
+      // 第 1 页满 25 条再取第 2 页：按关键词搜会混进非本品类的店，规划时要先按品类过滤，多拿一页才够
+      for (let page = 1; page <= 2; page++) {
+        const data = await amapGet<AroundResp>(
+          "/v3/place/around",
+          {
+            location: fmtLocation(center),
+            keywords: kws.join("|"),
+            radius: Math.max(1, Math.min(50000, Math.round(radiusM))),
+            extensions: "all",
+            offset: 25,
+            page,
+            sortrule: "weight",
+          },
+          key,
+        );
+        const list = data.pois ?? [];
+        for (const raw of list) {
+          const poi = parseAroundPoi(raw);
+          if (poi && !seen.has(poi.id)) {
+            seen.add(poi.id);
+            out.push(poi);
+          }
         }
+        if (list.length < 25) break;
       }
       return out;
     },
@@ -284,6 +339,21 @@ export function createAmapProvider(key: string): MapProvider {
         });
       }
       return result;
+    },
+
+    async transitRoute(origin: LatLng, dest: LatLng, city: string) {
+      try {
+        const c = city?.trim() || undefined;
+        const data = await amapGet<TransitResp>(
+          "/v3/direction/transit/integrated",
+          { origin: fmtLocation(origin), destination: fmtLocation(dest), city: c, cityd: c, strategy: 0, nightflag: 1 },
+          key,
+        );
+        return parseTransit(data) ?? taxiFallback(origin, dest);
+      } catch {
+        // 公交规划失败（跨城 / 太近 / 接口出错）：退回打车估算
+        return taxiFallback(origin, dest);
+      }
     },
   };
 }

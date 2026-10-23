@@ -384,6 +384,58 @@ export function createMockMapProvider(): MapProvider {
     async commute(origins: LatLng[], dest: LatLng) {
       return origins.map((o) => estimateCommute(o, dest));
     },
+
+    async transitRoute(origin: LatLng, dest: LatLng, city: string) {
+      return mockTransit(origin, dest, city);
+    },
+  };
+}
+
+// ---------------- 公交 / 地铁（mock） ----------------
+export const WALK_KMH = 4.5;
+export const METRO_KMH = 30;
+
+/** 离某点最近的地标（用来给 mock 路线起站名） */
+function nearestLandmark(p: LatLng, city: string): Place {
+  const list = landmarksFor(city);
+  let best = list[0];
+  let bestD = Infinity;
+  for (const c of list) {
+    const d = haversineKm(p, c);
+    if (d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best;
+}
+
+/**
+ * mock 公交路线：1.2km 内直接步行；否则 步行到站 + 地铁（按 30km/h，每站约 1.5km）+ 步行到店。
+ * 完全确定性，站名取起终点附近的地标。
+ */
+export function mockTransit(origin: LatLng, dest: LatLng, city: string): { minutes: number; steps: string[] } {
+  const km = haversineKm(origin, dest);
+  if (km <= 1.2) {
+    const walk = Math.max(1, Math.round(((km * 1.25) / WALK_KMH) * 60));
+    return { minutes: walk, steps: [`步行约 ${Math.round(km * 1250)} 米（${walk} 分钟）`] };
+  }
+  const rnd = seededRandom(hashString(`transit|${origin.lat.toFixed(4)},${origin.lng.toFixed(4)}|${dest.lat.toFixed(4)},${dest.lng.toFixed(4)}`));
+  const walkIn = 4 + Math.floor(rnd() * 8);
+  const walkOut = 3 + Math.floor(rnd() * 7);
+  const railKm = km * 1.25;
+  const ride = Math.max(4, Math.round((railKm / METRO_KMH) * 60));
+  const stops = Math.max(1, Math.round(railKm / 1.5));
+  const line = 1 + Math.floor(rnd() * 12);
+  const a = nearestLandmark(origin, city);
+  const b = nearestLandmark(dest, city);
+  return {
+    minutes: walkIn + ride + 3 + walkOut,
+    steps: [
+      `步行 ${walkIn} 分钟到${a.label}附近的地铁站`,
+      `地铁 ${line} 号线（模拟）坐 ${stops} 站到${b.label}附近`,
+      `步行 ${walkOut} 分钟到店`,
+    ],
   };
 }
 

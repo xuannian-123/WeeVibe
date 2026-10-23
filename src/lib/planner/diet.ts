@@ -41,14 +41,18 @@ const RULES: Record<Exclude<DietTag, "清真">, [string | RegExp, string][]> = {
 const HALAL_WORDS = ["清真", "兰州", "新疆", "西北", "回民"];
 
 export type DietCheck = {
-  /** 形如 "小王：不吃辣（川味偏辣）" */
+  /** 形如 "小王：不吃辣（川味偏辣）"（含名字，只能内部用，不能进公开文案） */
   conflicts: string[];
-  /** 需要写进 reasons 的提示，如鸳鸯锅 */
+  /** 公开安全的提示，如鸳鸯锅 */
   notes: string[];
 };
 
 export function isHotpotCategory(category: string | undefined): boolean {
   return (category ?? "").includes("火锅");
+}
+
+export function isHotpot(poi: Pick<Poi, "name" | "type">): boolean {
+  return `${poi.name} ${poi.type}`.includes("火锅");
 }
 
 /** 返回某个忌口对这家店的冲突原因；无冲突返回 undefined */
@@ -64,15 +68,15 @@ export function dietConflictReason(tag: DietTag, poi: Pick<Poi, "name" | "type">
 }
 
 /**
- * 逐个成员、逐个忌口对照店名 + 高德类型。
+ * 逐个成员、逐个忌口（v3 在 member.private.dietTags）对照店名 + 高德类型。
  * 例外：活动本身就是火锅时，"不吃辣"不算冲突，改为提示点鸳鸯锅。
  */
 export function checkDiet(poi: Pick<Poi, "name" | "type">, members: Member[], category: string): DietCheck {
   const conflicts: string[] = [];
   let needYuanyang = false;
-  const hotpot = isHotpotCategory(category);
+  const hotpot = isHotpotCategory(category) || isHotpot(poi);
   for (const m of members) {
-    for (const tag of [...new Set(m.dietTags ?? [])]) {
+    for (const tag of [...new Set(m.private?.dietTags ?? [])]) {
       const reason = dietConflictReason(tag, poi);
       if (!reason) continue;
       if (tag === "不吃辣" && hotpot) {

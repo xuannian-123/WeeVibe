@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { MapProvider } from "../types";
 import { createMockMapProvider, getMapProvider, haversineKm, mockMapProvider, wgs84ToGcj02, withFallback } from "./index";
-import { parseAroundPoi, pickRegeoLabel } from "./amap";
+import { createAmapProvider, parseAroundPoi, parseTransit, pickRegeoLabel, taxiFallback } from "./amap";
 
 const map = createMockMapProvider();
 const CENTER = { lat: 31.27, lng: 120.735 };
@@ -106,6 +106,7 @@ describe("withFallback 降级策略", () => {
       }) as MapProvider["reverseGeocode"],
       searchAround: boom("searchAround") as MapProvider["searchAround"],
       commute: boom("commute") as MapProvider["commute"],
+      transitRoute: boom("transitRoute") as unknown as MapProvider["transitRoute"],
     };
   };
 
@@ -127,6 +128,8 @@ describe("withFallback 降级策略", () => {
     expect((await p.searchPlaces("西交", "苏州"))[0].label).toBe("西交利物浦大学");
     expect(await p.reverseGeocode({ lat: 31.2749, lng: 120.7384 })).toBe("西交利物浦大学附近");
     expect((await p.commute([CENTER], CENTER))[0].minutes).toBe(6);
+    const t = await p.transitRoute(CENTER, { lat: 31.31, lng: 120.7 }, "苏州");
+    expect(t).toEqual(await mockMapProvider.transitRoute(CENTER, { lat: 31.31, lng: 120.7 }, "苏州"));
   });
 });
 
@@ -158,5 +161,56 @@ describe("高德响应解析", () => {
   it("逆地理优先 aoi / poi，其次街道", () => {
     expect(pickRegeoLabel({ regeocode: { aois: [{ name: "西交利物浦大学" }], pois: [{ name: "某店" }] } })).toBe("西交利物浦大学");
     expect(pickRegeoLabel({ regeocode: { aois: [], pois: [] , addressComponent: { streetNumber: { street: "仁爱路", number: "111号" } } } })).toBe("仁爱路111号");
+  });
+});
+
+describe("transitRoute（#11 行程卡）", () => {
+  it("mock：近处步行，远处 步行 + 地铁 + 步行，确定性", async () => {
+    const near = await map.transitRoute(CENTER, { lat: 31.275, lng: 120.735 }, "苏州");
+    expect(near.steps).toHaveLength(1);
+    expect(near.steps[0]).toMatch(/^步行约 \d+ 米/);
+    const far = await map.transitRoute({ lat: 31.1675, lng: 121.397 }, { lat: 31.167645, lng: 121.43195 }, "上海");
+    expect(far.steps).toHaveLength(3);
+    expect(far.steps[1]).toMatch(/地铁 \d+ 号线（模拟）坐 \d+ 站/);
+    expect(far.minutes).toBeGreaterThan(10);
+    expect(await createMockMapProvider().transitRoute({ lat: 31.1675, lng: 121.397 }, { lat: 31.167645, lng: 121.43195 }, "上海")).toEqual(far);
+  });
+
+  it("高德公交规划解析：步行 / 地铁 / 公交", () => {
+    const r = parseTransit({
+      status: "1",
+      route: {
+        transits: [
+          {
+            duration: "1830",
+            segments: [
+              {
+                walking: { distance: "412", duration: "300" },
+                bus: { buslines: [{ name: "地铁9号线(松江南站--曹路)", departure_stop: { name: "漕河泾开发区" }, arrival_stop: { name: "桂林路" }, via_num: "1" }] },
+                railway: [],
+              },
+              { walking: { distance: "620" }, bus: { buslines: [] }, railway: [] },
+            ],
+          },
+        ],
+      },
+    });
+    expect(r).toEqual({ minutes: 31, steps: ["步行 410 米", "地铁9号线 漕河泾开发区 → 桂林路（2 站）", "步行 620 米"] });
+    expect(parseTransit({ status: "1", route: { transits: [] } })).toBeUndefined();
+  });
+
+  it("高德失败时退回打车估算", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new Error("offline");
+    }) as typeof fetch;
+    try {
+      const o = { lat: 31.1675, lng: 121.397 };
+      const d = { lat: 31.167645, lng: 121.43195 };
+      expect(await createAmapProvider("k").transitRoute(o, d, "上海")).toEqual(taxiFallback(o, d));
+      expect(taxiFallback(o, d).steps[0]).toMatch(/^打车约 \d+ 分钟（约 [\d.]+ 公里）$/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

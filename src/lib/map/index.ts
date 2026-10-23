@@ -4,13 +4,13 @@ import { mockMapProvider } from "./mock";
 
 export { haversineKm, wgs84ToGcj02, getDemoCenter, estimateCommute } from "./geo";
 export { createAmapProvider } from "./amap";
-export { createMockMapProvider, mockMapProvider } from "./mock";
+export { createMockMapProvider, mockMapProvider, mockTransit } from "./mock";
 
 export const MAP_UNAVAILABLE = "地图服务暂时不可用";
 
 /**
  * 高德出错时的策略：
- * - searchPlaces / reverseGeocode / commute：降级到 mock（地标 / 直线估算），打 console.warn
+ * - searchPlaces / reverseGeocode / commute / transitRoute：降级到 mock（地标 / 直线估算），打 console.warn
  * - searchAround：绝不降级（虚构店铺不能当真店推荐），重试 1 次后抛出"地图服务暂时不可用"
  */
 export function withFallback(primary: MapProvider, fallback: MapProvider, name = "amap"): MapProvider {
@@ -40,6 +40,7 @@ export function withFallback(primary: MapProvider, fallback: MapProvider, name =
       }
     },
     commute: wrap("commute") as MapProvider["commute"],
+    transitRoute: wrap("transitRoute") as MapProvider["transitRoute"],
   };
 }
 

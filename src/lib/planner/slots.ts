@@ -1,4 +1,4 @@
-import type { JuSpec, Member, Slot } from "../types";
+import type { JuSpec, Slot } from "../types";
 
 export const MAX_SLOTS = 12;
 
@@ -60,41 +60,4 @@ export function generateSlots(spec: JuSpec): Slot[] {
   let slots = build(30);
   if (slots.length > MAX_SLOTS) slots = build(60);
   return slots.slice(0, MAX_SLOTS);
-}
-
-/** 成员一个时间都没勾 = "都行"，视为所有 slot 都有空 */
-export function isAvailable(m: Member, slotId: string): boolean {
-  return !m.availableSlotIds?.length || m.availableSlotIds.includes(slotId);
-}
-
-/**
- * 选能来的人最多的 slot（只算 status=in）。
- * 平票：发起人能来的优先 → 更早的优先。
- */
-export function pickSlot(
-  slots: Slot[],
-  members: Member[],
-): { slotId: string; attendeeIds: string[]; absentIds: string[] } {
-  if (slots.length === 0) throw new Error("没有候选时间，无法选时间");
-  const inMembers = members.filter((m) => m.status === "in");
-  if (inMembers.length === 0) return { slotId: slots[0].id, attendeeIds: [], absentIds: [] };
-
-  let best: { slot: Slot; count: number; org: boolean; idx: number } | undefined;
-  slots.forEach((slot, idx) => {
-    const avail = inMembers.filter((m) => isAvailable(m, slot.id));
-    const count = avail.length;
-    const org = avail.some((m) => m.isOrganizer);
-    const better =
-      !best ||
-      count > best.count ||
-      (count === best.count && org && !best.org) ||
-      (count === best.count && org === best.org && slot.start < best.slot.start);
-    if (better) best = { slot, count, org, idx };
-  });
-
-  const slotId = best!.slot.id;
-  const attendeeIds: string[] = [];
-  const absentIds: string[] = [];
-  for (const m of inMembers) (isAvailable(m, slotId) ? attendeeIds : absentIds).push(m.id);
-  return { slotId, attendeeIds, absentIds };
 }

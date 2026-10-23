@@ -1,181 +1,613 @@
-import type { Commute, Ju, LatLng, MapProvider, Member, Plan, PlanOption, Poi } from "../types";
+// 出方案（#9 #10）：slot × poi × 成员全量计算 → 主角否决 → 帕累托前沿 → 挑 2–3 个标签不同的方案 → 审计哈希。
+// 必须确定性：不用 Math.random、不依赖对象键顺序、now 只从 opts 来。
+import type {
+  Experience,
+  Ju,
+  LatLng,
+  LedgerEntry,
+  MapProvider,
+  Member,
+  MyExperience,
+  Plan,
+  Poi,
+  Proposal,
+  ProposalLabel,
+  Slot,
+  TraceEvent,
+} from "../types";
 import { estimateCommute, haversineKm, round1 } from "../map/geo";
 import { fairCenter } from "./center";
-import { checkDiet } from "./diet";
-import { scoreOption } from "./score";
-import { generateSlots, pickSlot } from "./slots";
+import { categoryMatches, categoryWords } from "./category";
+import { isHotpotCategory } from "./diet";
+import { experienceDetail, queueMinutes, slotTimes, type PlanContext, type PrivateFlags } from "./experience";
+import { fairnessWeights } from "./fairness";
+import { generateSlots } from "./slots";
+import { canonicalJson, chainName, cmpStr, hmToMin, hmacHex, sha256Hex, slotLabel } from "./util";
 
+export const ALGORITHM_VERSION = "juzhang-planner/3.0";
 export const SEARCH_RADIUS_M = 3000;
 export const SEARCH_RADIUS_WIDE_M = 6000;
 export const MIN_RESULTS = 5;
-export const PREFILTER_TOP = 8;
-export const OPTION_COUNT = 3;
+export const SHORTLIST = 8;
+export const MAX_PROPOSALS = 3;
 
-/** 去掉括号里的分店名，用于同名连锁去重 */
-export function chainName(name: string): string {
-  return name.replace(/[（(][^）)]*[）)]/g, "").trim();
+export const LABEL_TEXT: Record<ProposalLabel, string> = {
+  "most-people": "人最全",
+  "most-comfortable": "大家最舒服",
+  cheapest: "最省钱",
+  balanced: "最均衡",
+};
+
+/** 综合分权重：加权最低满意度（公平）为主 */
+export const SCORE_WEIGHTS = { fairMin: 0.45, avg: 0.25, attend: 0.3 } as const;
+/** 被跨局账本照顾的门槛 */
+const CARED_WEIGHT = 1.1;
+
+export type TraceFn = (kind: TraceEvent["kind"], text: string) => void;
+
+/** 一个候选（slot × poi）的全量计算结果；pubs / mines / flags 与 members 一一对应 */
+export type Candidate = {
+  idx: number;
+  slot: Slot;
+  poi: Poi;
+  pubs: Experience[];
+  mines: { utility: number; notes: string[] }[];
+  flags: PrivateFlags[];
+  attend: number;
+  /** 到场者里最低的（含私密）满意度 */
+  minU: number;
+  avgU: number;
+  /** 加权最低满意度 = 100 - max_i w_i·(100 - u_i) */
+  wMin: number;
+  cost: number;
+  score: number;
+  vetoed: boolean;
+};
+
+export function inMembersOf(members: Member[]): Member[] {
+  return members.filter((m) => m.status === "in");
 }
 
-/** 预算 = spec.budgetPerPerson 与各 attendee budgetMax 中最小的正数 */
-export function effectiveBudget(specBudget: number | undefined, attendees: Member[]): number | undefined {
-  const all = [specBudget, ...attendees.map((m) => m.budgetMax)].filter(
-    (x): x is number => typeof x === "number" && Number.isFinite(x) && x > 0,
+export function keywordsOf(ju: Ju): string[] {
+  const kws = (ju.spec.poiKeywords ?? []).map((k) => k.trim()).filter(Boolean);
+  if (kws.length === 0 && ju.spec.category?.trim()) kws.push(ju.spec.category.trim());
+  return kws;
+}
+
+/** 搜店半径：先 3km，品类命中不足再 6km、10km */
+export const SEARCH_RADII_M = [SEARCH_RADIUS_M, SEARCH_RADIUS_WIDE_M, 10000];
+/** 品类命中少于这个数才放宽到相近的店 */
+export const MIN_MATCHED = 3;
+
+/**
+ * 公平中心附近搜店，并按品类过滤（店名或高德 type 命中 poiKeywords / category 及常见写法）。
+ * 命中的店不足 5 家就扩大半径重搜；最大半径仍不足 3 家才放宽（命中的排前面），并给出公开安全的说明 relaxNote。
+ */
+export async function searchPois(
+  ju: Ju,
+  center: LatLng,
+  map: MapProvider,
+): Promise<{ pois: Poi[]; radiusM: number; keywords: string[]; found: number; dropped: number; relaxNote?: string }> {
+  const keywords = keywordsOf(ju);
+  if (keywords.length === 0) throw new Error("没有场地关键词，无法搜店");
+  const words = categoryWords(ju.spec);
+  let best: { all: Poi[]; matched: Poi[]; radiusM: number } | undefined;
+  for (const radiusM of SEARCH_RADII_M) {
+    const raw = await map.searchAround(center, keywords, radiusM, ju.spec.city);
+    const uniq = new Map<string, Poi>();
+    for (const p of raw) if (p?.id && !uniq.has(p.id)) uniq.set(p.id, p);
+    const all = [...uniq.values()];
+    const matched = all.filter((p) => categoryMatches(p, words));
+    if (!best || matched.length > best.matched.length || (matched.length === best.matched.length && all.length > best.all.length))
+      best = { all, matched, radiusM };
+    if (matched.length >= MIN_RESULTS) break;
+  }
+  const { all, matched, radiusM } = best!;
+  const label = keywords.join("/");
+  if (matched.length >= MIN_MATCHED || all.length === matched.length)
+    return { pois: matched, radiusM, keywords, found: all.length, dropped: all.length - matched.length };
+  const rest = all.filter((p) => !matched.includes(p));
+  return {
+    pois: [...matched, ...rest],
+    radiusM,
+    keywords,
+    found: all.length,
+    dropped: 0,
+    relaxNote: `附近 ${radiusM / 1000} km 内只找到 ${matched.length} 家「${label}」，放宽到相近的店一起比较`,
+  };
+}
+
+/** 预筛：同品牌只留离大家最近的一家；按"到各人直线距离的最大值"取前 n 家 */
+export function shortlistPois(pois: Poi[], origins: LatLng[], n = SHORTLIST): Poi[] {
+  const ranked = pois
+    .map((poi) => ({ poi, far: origins.length ? Math.max(...origins.map((o) => haversineKm(o, poi))) : 0 }))
+    .sort((a, b) => a.far - b.far || cmpStr(a.poi.id, b.poi.id));
+  const chains = new Set<string>();
+  const out: Poi[] = [];
+  for (const r of ranked) {
+    const key = chainName(r.poi.name);
+    if (chains.has(key)) continue;
+    chains.add(key);
+    out.push(r.poi);
+    if (out.length >= n) break;
+  }
+  return out;
+}
+
+/** 通勤矩阵 [poi][member]（分钟）；单家失败用直线估算兜底 */
+export async function commuteMatrix(map: MapProvider, origins: LatLng[], pois: Poi[]): Promise<number[][]> {
+  return Promise.all(
+    pois.map(async (poi) => {
+      let rows: { minutes: number }[];
+      try {
+        rows = await map.commute(origins, poi);
+        if (rows.length !== origins.length) throw new Error("通勤结果条数不对");
+      } catch {
+        rows = origins.map((o) => estimateCommute(o, poi));
+      }
+      return rows.map((r, i) => (Number.isFinite(r?.minutes) ? Math.max(0, Math.round(r.minutes)) : estimateCommute(origins[i], poi).minutes));
+    }),
   );
-  return all.length ? Math.min(...all) : undefined;
 }
 
-function cmpStr(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
+function median(xs: number[]): number | undefined {
+  if (xs.length === 0) return undefined;
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-function buildReasons(
+/** 某个候选的全量计算 */
+export function evaluateCandidate(
+  members: Member[],
+  slot: Slot,
   poi: Poi,
-  commutes: Commute[],
-  maxCommute: number,
-  budget: number | undefined,
-  notes: string[],
-): string[] {
-  const reasons: string[] = [`最远的人打车 ${maxCommute} 分钟`];
-  if (commutes.length >= 2) {
-    const minC = Math.min(...commutes.map((c) => c.minutes));
-    const diff = maxCommute - minC;
-    reasons.push(
-      diff <= 2
-        ? `${commutes.length} 个人通勤时间几乎一样`
-        : `${commutes.length} 个人里最远和最近${diff <= 10 ? "只" : ""}差 ${diff} 分钟`,
-    );
+  commutes: number[],
+  weights: number[],
+  ctx: PlanContext,
+  idx: number,
+  fallbackCost: number,
+): Candidate {
+  const pubs: Experience[] = [];
+  const mines: { utility: number; notes: string[] }[] = [];
+  const flags: PrivateFlags[] = [];
+  members.forEach((m, i) => {
+    const d = experienceDetail(m, slot, poi, commutes[i], ctx);
+    pubs.push(d.pub);
+    mines.push(d.mine);
+    flags.push(d.flags);
+  });
+  const here = members.map((_, i) => i).filter((i) => pubs[i].status !== "absent");
+  const attend = here.length;
+  const us = here.map((i) => mines[i].utility);
+  const minU = attend ? Math.min(...us) : 0;
+  const avgU = attend ? Math.round(us.reduce((s, u) => s + u, 0) / attend) : 0;
+  const wMin = attend ? Math.round(100 - Math.max(...here.map((i) => weights[i] * (100 - mines[i].utility)))) : 0;
+  const vetoed = attend === 0 || members.some((m, i) => m.role === "must" && pubs[i].status === "absent");
+  const n = Math.max(1, members.length);
+  const raw =
+    SCORE_WEIGHTS.fairMin * Math.max(0, wMin) + SCORE_WEIGHTS.avg * avgU + SCORE_WEIGHTS.attend * 100 * (attend / n);
+  return {
+    idx,
+    slot,
+    poi,
+    pubs,
+    mines,
+    flags,
+    attend,
+    minU,
+    avgU,
+    wMin,
+    cost: poi.costPerPerson ?? fallbackCost,
+    score: attend ? Math.round(Math.max(0, Math.min(100, raw))) : 0,
+    vetoed,
+  };
+}
+
+/** a 是否帕累托支配 b（到场人数 ↑、加权最低满意度 ↑、人均价 ↓） */
+export function dominates(a: Candidate, b: Candidate): boolean {
+  const ge = a.attend >= b.attend && a.wMin >= b.wMin && a.cost <= b.cost;
+  const gt = a.attend > b.attend || a.wMin > b.wMin || a.cost < b.cost;
+  return ge && gt;
+}
+
+export function paretoFront(cands: Candidate[]): Candidate[] {
+  return cands.filter((c) => !cands.some((o) => o !== c && dominates(o, c)));
+}
+
+// ---------------- 方案挑选 ----------------
+
+type Cmp = (a: Candidate, b: Candidate) => number;
+const CRIT: Record<ProposalLabel, Cmp> = {
+  balanced: (a, b) => b.score - a.score || b.wMin - a.wMin || b.attend - a.attend || a.cost - b.cost || a.idx - b.idx,
+  "most-people": (a, b) => b.attend - a.attend || b.wMin - a.wMin || b.score - a.score || a.idx - b.idx,
+  "most-comfortable": (a, b) => b.wMin - a.wMin || b.avgU - a.avgU || b.score - a.score || a.idx - b.idx,
+  cheapest: (a, b) => a.cost - b.cost || b.wMin - a.wMin || b.score - a.score || a.idx - b.idx,
+};
+
+/** 在某个标签的维度上，c 是否比所有已选方案都更好（"实质"由 meaningfullyDifferent 把关） */
+function strictlyBetter(label: ProposalLabel, c: Candidate, chosen: Candidate[]): boolean {
+  switch (label) {
+    case "most-people":
+      return chosen.every((x) => c.attend > x.attend);
+    case "most-comfortable":
+      return chosen.every((x) => c.wMin > x.wMin);
+    case "cheapest":
+      return chosen.every((x) => c.cost < x.cost);
+    default:
+      return true;
   }
-  const cost = poi.costPerPerson;
-  if (cost !== undefined && budget !== undefined) {
-    reasons.push(cost <= budget ? `人均 ${cost} 元，在 ${budget} 元预算内` : `人均 ${cost} 元，超预算 ${cost - budget} 元`);
-  } else if (cost !== undefined) {
-    reasons.push(`人均 ${cost} 元`);
-  }
-  if (poi.rating !== undefined) reasons.push(`评分 ${poi.rating}`);
-  return [...reasons, ...notes];
 }
 
 /**
- * 出方案：
- * 1. pickSlot 选时间 → attendees 位置求 minimax 公平中心
- * 2. 中心 3km 搜店，不足 5 家扩到 6km
- * 3. 按"到各人直线距离最大值"预筛 8 家，并发查通勤（单家失败用直线估算兜底）
- * 4. 确定性打分 → 同名连锁去重 → 取前 3
+ * 两个方案是否有实质差异（不允许"只差一点的同时段店"）：
+ * 不同日期一定算；同一天要么到场人数不同，要么（换了店的前提下）人均差 ≥ 15、加权最低满意度差 ≥ 8（不同时段 ≥ 5）、开始时间差 ≥ 60 分钟之一。
+ */
+export function meaningfullyDifferent(a: Candidate, b: Candidate): boolean {
+  if (a.slot.id === b.slot.id && (a.poi.id === b.poi.id || chainName(a.poi.name) === chainName(b.poi.name))) return false;
+  const ta = slotTimes(a.slot);
+  const tb = slotTimes(b.slot);
+  if (ta.date !== tb.date) return true;
+  if (a.attend !== b.attend) return true;
+  // 同一天同一家店只换个时间，不算实质差异
+  if (a.poi.id === b.poi.id || chainName(a.poi.name) === chainName(b.poi.name)) return false;
+  if (Math.abs(a.cost - b.cost) >= 15) return true;
+  const sameSlot = a.slot.id === b.slot.id;
+  if (Math.abs(a.wMin - b.wMin) >= (sameSlot ? 8 : 5)) return true;
+  return !sameSlot && Math.abs(ta.start - tb.start) >= 60;
+}
+
+/** 在前沿上挑 2–3 个标签不同的方案；推荐的（综合分最高）排第一 */
+export function pickProposals(front: Candidate[], pool: Candidate[]): { c: Candidate; label: ProposalLabel }[] {
+  if (front.length === 0) return [];
+  const rec = [...front].sort(CRIT.balanced)[0];
+  const chosen: { c: Candidate; label: ProposalLabel }[] = [{ c: rec, label: "balanced" }];
+  for (const label of ["most-people", "cheapest", "most-comfortable"] as ProposalLabel[]) {
+    if (chosen.length >= MAX_PROPOSALS) break;
+    const cs = chosen.map((x) => x.c);
+    const ok = (c: Candidate) => !cs.includes(c) && strictlyBetter(label, c, cs) && cs.every((x) => meaningfullyDifferent(c, x));
+    const pick = [...front].sort(CRIT[label]).find(ok) ?? [...pool].sort(CRIT[label]).find(ok);
+    if (pick) chosen.push({ c: pick, label });
+  }
+  if (chosen.length >= 2) return chosen;
+
+  // 推荐方案在各维度上都不输：从剩下的候选里按综合分补一个有实质差异的（通常是另一个时间），
+  // 它是"备选"，推荐方案改用自己最突出的那个标签
+  const rest = [...pool].sort(CRIT.balanced).filter((c) => c !== rec);
+  const alt = rest.find((c) => meaningfullyDifferent(c, rec));
+  if (!alt) return chosen;
+  chosen[0].label = rec.attend > alt.attend ? "most-people" : rec.wMin >= alt.wMin ? "most-comfortable" : "cheapest";
+  chosen.push({ c: alt, label: "balanced" });
+  return chosen;
+}
+
+// ---------------- 公开文案（只用公开数据 + 聚合计数） ----------------
+
+/** k 个人有某件事：1 人只说"有人"，否则说人数 */
+export function someone(k: number, rest: string): string {
+  return k === 1 ? `有人${rest}` : `${k} 人${rest}`;
+}
+
+export function proposalIdFor(slot: Slot, poi: Poi): string {
+  return `p_${sha256Hex(`${slot.id}|${poi.id}`).slice(0, 10)}`;
+}
+
+function attendIdx(c: Candidate): number[] {
+  return c.pubs.map((_, i) => i).filter((i) => c.pubs[i].status !== "absent");
+}
+
+export function headlineFor(c: Candidate, members: Member[]): string {
+  const n = members.length;
+  const parts: string[] = [c.attend === n ? `${n} 人全到` : `${c.attend} 人到场`];
+  const lates = attendIdx(c)
+    .map((i) => c.pubs[i].lateMin)
+    .filter((x) => x > 0);
+  if (lates.length === 1) parts.push(`1 人晚到 ${lates[0]} 分钟`);
+  else if (lates.length > 1) parts.push(`${lates.length} 人晚到（最多 ${Math.max(...lates)} 分钟）`);
+  if (c.poi.costPerPerson !== undefined) parts.push(`人均 ${c.poi.costPerPerson}`);
+  return parts.join("，");
+}
+
+function textsFor(
+  c: Candidate,
+  members: Member[],
+  weights: number[],
+  ref: Candidate | undefined,
+  ctx: PlanContext,
+): { tradeoffs: string[]; highlights: string[] } {
+  const here = attendIdx(c);
+  const tradeoffs: string[] = [];
+  const highlights: string[] = [];
+  const absentNames = members.filter((_, i) => c.pubs[i].status === "absent").map((m) => m.name);
+  if (absentNames.length) tradeoffs.push(`${absentNames.join("、")}这个时间来不了`);
+  const early = here.filter((i) => c.pubs[i].leaveAt);
+  if (early.length) tradeoffs.push(`${early.length} 人需要提前走`);
+  const maxLate = Math.max(0, ...here.map((i) => c.pubs[i].lateMin));
+  if (maxLate >= 15) tradeoffs.push(`有人要晚到 ${maxLate} 分钟`);
+  const commutes = here.map((i) => c.pubs[i].commuteMin);
+  const maxCommute = commutes.length ? Math.max(...commutes) : 0;
+  if (maxCommute >= 40) tradeoffs.push(`最远的人路上 ${maxCommute} 分钟`);
+  const q = queueMinutes(c.slot, c.poi);
+  if (q > 0) tradeoffs.push(`饭点可能要排队 ${q} 分钟`);
+  // 私密因素只给聚合计数
+  const over = here.filter((i) => c.flags[i].overBudget).length;
+  if (over) tradeoffs.push(someone(over, "觉得偏贵"));
+  const diet = here.filter((i) => c.flags[i].dietConflict).length;
+  if (diet) tradeoffs.push(someone(diet, "的忌口和这家冲突"));
+  const pass = here.filter((i) => c.flags[i].verdict === "pass").length;
+  if (pass) tradeoffs.push(someone(pass, "刷卡时不太想去这家"));
+  if (ref && ref !== c && c.poi.costPerPerson !== undefined && ref.poi.costPerPerson !== undefined) {
+    const d = c.poi.costPerPerson - ref.poi.costPerPerson;
+    if (d >= 5) tradeoffs.push(`比推荐方案每人贵 ${d} 元`);
+  }
+
+  if (c.attend === members.length && members.length > 1) highlights.push("全员到齐");
+  const budgeted = here.filter((i) => (members[i].private?.budgetMax ?? 0) > 0).length;
+  if (c.poi.costPerPerson !== undefined) {
+    if (budgeted > 0 && over === 0) highlights.push(`人均 ${c.poi.costPerPerson}，大家都在预算内`);
+    if (ref && ref !== c && ref.poi.costPerPerson !== undefined && ref.poi.costPerPerson - c.poi.costPerPerson >= 5)
+      highlights.push(`比推荐方案每人省 ${ref.poi.costPerPerson - c.poi.costPerPerson} 元`);
+  }
+  const want = here.filter((i) => c.flags[i].verdict === "love" || c.flags[i].verdict === "like").length;
+  if (want) highlights.push(someone(want, "刷卡点了想去"));
+  if (here.some((i) => c.flags[i].yuanyang) && !diet) highlights.push("有鸳鸯锅，不吃辣的也能吃");
+  if (c.poi.rating !== undefined && c.poi.rating >= 4.6) highlights.push(`评分 ${c.poi.rating}`);
+  if (commutes.length > 1 && maxCommute <= 25) highlights.push(`最远的人也只要 ${maxCommute} 分钟`);
+  const cared = here.filter((i) => weights[i] >= CARED_WEIGHT);
+  const med = median(commutes) ?? 0;
+  if (cared.length && cared.every((i) => c.pubs[i].commuteMin <= med)) highlights.push("这次让之前跑得远的朋友少跑点");
+  if (!highlights.length && ctx.spec.category) highlights.push(`${c.slot && slotLabel(c.slot.start)}开局`);
+  return { tradeoffs, highlights };
+}
+
+export function toProposal(
+  c: Candidate,
+  label: ProposalLabel,
+  members: Member[],
+  weights: number[],
+  ref: Candidate | undefined,
+  ctx: PlanContext,
+  recommended: boolean,
+): Proposal {
+  const { tradeoffs, highlights } = textsFor(c, members, weights, ref, ctx);
+  return {
+    id: proposalIdFor(c.slot, c.poi),
+    label,
+    labelText: LABEL_TEXT[label],
+    slot: c.slot,
+    poi: c.poi,
+    experiences: c.pubs,
+    attendCount: c.attend,
+    minUtility: c.minU,
+    avgUtility: c.avgU,
+    score: c.score,
+    headline: headlineFor(c, members),
+    tradeoffs,
+    highlights,
+    recommended,
+  };
+}
+
+/** 约束的聚合说明：只有 1 人有某约束时只说"有人" */
+export function constraintSummariesFor(members: Member[], ju: Ju, maxCost: number | undefined): string[] {
+  const out: string[] = [];
+  const tight = members.filter((m) => {
+    const b = m.private?.budgetMax;
+    return b !== undefined && b > 0 && (maxCost === undefined || b < maxCost);
+  }).length;
+  if (tight) out.push(`${someone(tight, "预算偏紧")}，已按大家都舒服的价位筛选`);
+  const tags = ["不吃辣", "素食", "清真", "不吃牛肉", "不吃海鲜", "不吃内脏"] as const;
+  const hotpot = isHotpotCategory(ju.spec.category);
+  for (const t of tags) {
+    const k = members.filter((m) => (m.private?.dietTags ?? []).includes(t)).length;
+    if (!k) continue;
+    out.push(t === "不吃辣" && hotpot ? `${someone(k, "不吃辣")}，会点鸳鸯锅` : `${someone(k, t)}，已避开冲突的店`);
+  }
+  const homeBy = members.filter((m) => Object.values(m.private?.availability ?? {}).some((d) => d?.homeBy)).length;
+  if (homeBy) out.push(`${someone(homeBy, "得早点回去")}，方案都算好了离开时间`);
+  const earliest = hmToMin(ju.spec.earliest) ?? 18 * 60;
+  const lateFrom = members.filter((m) =>
+    Object.values(m.private?.availability ?? {}).some((d) => (hmToMin(d?.from) ?? 0) > earliest - 30),
+  ).length;
+  if (lateFrom) out.push(`${someone(lateFrom, "要晚一点才能出发")}，已经算进到达时间`);
+  const notes = members.filter((m) => (m.private?.notes ?? []).length > 0).length;
+  if (notes) out.push(`${someone(notes, "私下提了小要求")}，局长都算进去了`);
+  return out;
+}
+
+export function auditInput(ju: Ju, members: Member[], ledgers: Record<string, LedgerEntry[]>): unknown {
+  return {
+    algorithmVersion: ALGORITHM_VERSION,
+    juId: ju.id,
+    spec: ju.spec,
+    slots: ju.slots,
+    members: members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      role: m.role,
+      isOrganizer: m.isOrganizer,
+      location: m.location ? { lat: m.location.lat, lng: m.location.lng } : null,
+      private: {
+        availability: m.private?.availability ?? {},
+        dietTags: m.private?.dietTags ?? [],
+        budgetMax: m.private?.budgetMax,
+        notes: m.private?.notes ?? [],
+        swipes: m.private?.swipes ?? {},
+      },
+    })),
+    ledgers: Object.fromEntries(members.map((m) => [m.id, ledgers[m.id] ?? []])),
+  };
+}
+
+/** 方案的输出哈希（不含 computedAt，复算时能对上） */
+export function outputHashOf(plan: Omit<Plan, "audit" | "computedAt"> & { audit?: Partial<Plan["audit"]> }): string {
+  const a = plan.audit ?? {};
+  return sha256Hex(
+    canonicalJson({
+      proposals: plan.proposals.map((p) => ({ ...p, blurb: undefined })),
+      recommendation: plan.recommendation,
+      caredFor: plan.caredFor,
+      constraintSummaries: plan.constraintSummaries,
+      center: plan.center,
+      candidates: a.candidates,
+      evaluations: a.evaluations,
+      paretoSize: a.paretoSize,
+      algorithmVersion: a.algorithmVersion,
+    }),
+  );
+}
+
+/** 共用的"候选全量计算"流水线（planJu 和 replanStable 都用） */
+export async function computeCandidates(
+  ju: Ju,
+  members: Member[],
+  map: MapProvider,
+  ledgers: Record<string, LedgerEntry[]>,
+  trace: TraceFn,
+  only?: { slots?: Slot[]; pois?: Poi[] },
+) {
+  const slots = only?.slots ?? (ju.slots?.length ? ju.slots : generateSlots(ju.spec));
+  if (slots.length === 0) throw new Error("没有候选时间，无法出方案");
+  const located = members.filter((m) => m.location && Number.isFinite(m.location.lat) && Number.isFinite(m.location.lng));
+  const center = fairCenter(located.map((m) => m.location!));
+  const origins: LatLng[] = members.map((m) => (m.location ? { lat: m.location.lat, lng: m.location.lng } : center));
+  if (located.length >= 2 && !only?.pois) {
+    const r = Math.max(...located.map((m) => haversineKm(center, m.location!)));
+    trace("compute", `以 ${located.length} 个出发地求公平集合点（最小包围圆），离集合点最远的人直线 ${round1(r)} km`);
+  }
+
+  let pois: Poi[];
+  if (only?.pois) pois = only.pois;
+  else {
+    const found = await searchPois(ju, center, map);
+    if (found.pois.length === 0)
+      throw new Error(`公平集合点 ${SEARCH_RADII_M[SEARCH_RADII_M.length - 1] / 1000} 公里内没找到「${found.keywords.join("/")}」`);
+    pois = shortlistPois(found.pois, located.length ? origins : [center]);
+    trace(
+      "search",
+      `在公平集合点 ${found.radiusM / 1000} km 内搜「${found.keywords.join("/")}」，找到 ${found.found} 家` +
+        (found.dropped ? `，去掉 ${found.dropped} 家不是「${found.keywords.join("/")}」的店` : "") +
+        `，按"最远的人也不太远"预筛出 ${pois.length} 家`,
+    );
+    if (found.relaxNote) trace("warn", found.relaxNote);
+  }
+
+  const matrix = await commuteMatrix(map, origins, pois);
+  const all = matrix.flat();
+  if (all.length) trace("compute", `查了 ${pois.length} 家店 × ${members.length} 人 = ${all.length} 条通勤，最远单程 ${Math.max(...all)} 分钟`);
+
+  const w = fairnessWeights(Object.fromEntries(members.map((m) => [m.id, ledgers[m.id] ?? []])));
+  const weights = members.map((m) => w[m.id] ?? 1);
+  const ctx: PlanContext = { spec: ju.spec };
+  const costs = pois.map((p) => p.costPerPerson).filter((x): x is number => typeof x === "number");
+  const fallbackCost = Math.round(median(costs) ?? ju.spec.budgetPerPerson ?? 100);
+
+  const cands: Candidate[] = [];
+  let idx = 0;
+  for (const slot of slots)
+    pois.forEach((poi, pi) => {
+      cands.push(evaluateCandidate(members, slot, poi, matrix[pi], weights, ctx, idx++, fallbackCost));
+    });
+  return { slots, pois, center, located, cands, weights, ctx, matrix };
+}
+
+/**
+ * 出方案。只用 status=in 的成员；返回的 plan 不含 blurb（由 B1 的 polishPlan 写）。
+ * mine：memberId -> 每个方案下本人的真实体验（含私密因素），只给本人看。
  */
 export async function planJu(
   ju: Ju,
   members: Member[],
   map: MapProvider,
-  opts: { now?: Date } = {},
-): Promise<Plan> {
-  const spec = ju.spec;
-  const slots = ju.slots?.length ? ju.slots : generateSlots(spec);
-  if (slots.length === 0) throw new Error("没有候选时间，无法出方案");
-
-  const pick = pickSlot(slots, members);
-  const byId = new Map(members.map((m) => [m.id, m]));
-  const attendees = pick.attendeeIds.map((id) => byId.get(id)!).filter(Boolean);
-  if (attendees.length === 0) throw new Error("还没有人能在任何候选时间到场，无法出方案");
-
-  const center = fairCenter(attendees.map((m) => m.location));
-  const keywords = (spec.poiKeywords ?? []).map((k) => k.trim()).filter(Boolean);
-  if (keywords.length === 0 && spec.category?.trim()) keywords.push(spec.category.trim());
-  if (keywords.length === 0) throw new Error("没有场地关键词，无法搜店");
-
-  let pois = await map.searchAround(center, keywords, SEARCH_RADIUS_M, spec.city);
-  if (pois.length < MIN_RESULTS) {
-    const wide = await map.searchAround(center, keywords, SEARCH_RADIUS_WIDE_M, spec.city);
-    if (wide.length > pois.length) pois = wide;
-  }
-  const uniq = new Map<string, Poi>();
-  for (const p of pois) if (!uniq.has(p.id)) uniq.set(p.id, p);
-  pois = [...uniq.values()];
-  if (pois.length === 0) throw new Error(`公平集合点 ${SEARCH_RADIUS_WIDE_M / 1000} 公里内没找到「${keywords.join("/")}」`);
-
-  // 预筛：到各 attendee 直线距离的最大值最小的 8 家
-  const origins: LatLng[] = attendees.map((m) => m.location);
-  const shortlist = pois
-    .map((poi) => ({ poi, far: Math.max(...origins.map((o) => haversineKm(o, poi))) }))
-    .sort((a, b) => a.far - b.far || cmpStr(a.poi.id, b.poi.id))
-    .slice(0, PREFILTER_TOP)
-    .map((x) => x.poi);
-
-  const commuteRows = await Promise.all(
-    shortlist.map(async (poi) => {
-      try {
-        const rows = await map.commute(origins, poi);
-        if (rows.length !== origins.length) throw new Error("通勤结果条数不对");
-        return rows;
-      } catch {
-        return origins.map((o) => estimateCommute(o, poi));
-      }
-    }),
-  );
-
-  const budget = effectiveBudget(spec.budgetPerPerson, attendees);
-  const categoryWords = [spec.category, ...keywords].filter((x): x is string => !!x && !!x.trim());
-
-  const scored: PlanOption[] = shortlist.map((poi, i) => {
-    const commutes: Commute[] = attendees.map((m, j) => ({
-      memberId: m.id,
-      minutes: Math.round(commuteRows[i][j].minutes),
-      distanceKm: round1(commuteRows[i][j].distanceKm),
-    }));
-    const maxCommute = Math.max(...commutes.map((c) => c.minutes));
-    const avgCommute = round1(commutes.reduce((s, c) => s + c.minutes, 0) / commutes.length);
-    const diet = checkDiet(poi, attendees, spec.category);
-    const score = scoreOption({
-      poi,
-      center,
-      maxCommute,
-      avgCommute,
-      budget,
-      categoryWords,
-      conflictCount: diet.conflicts.length,
-    });
-    return {
-      poi,
-      score,
-      commutes,
-      maxCommute,
-      avgCommute,
-      conflicts: diet.conflicts,
-      reasons: buildReasons(poi, commutes, maxCommute, budget, diet.notes),
-    };
-  });
-
-  scored.sort(
-    (a, b) =>
-      b.score - a.score ||
-      a.maxCommute - b.maxCommute ||
-      a.avgCommute - b.avgCommute ||
-      cmpStr(a.poi.id, b.poi.id),
-  );
-
-  const options: PlanOption[] = [];
-  const chains = new Set<string>();
-  for (const opt of scored) {
-    const key = chainName(opt.poi.name);
-    if (chains.has(key)) continue;
-    chains.add(key);
-    options.push(opt);
-    if (options.length >= OPTION_COUNT) break;
-  }
-
-  return {
-    slotId: pick.slotId,
-    attendeeIds: pick.attendeeIds,
-    absentIds: pick.absentIds,
-    center,
-    options,
-    computedAt: (opts.now ?? new Date()).toISOString(),
+  opts: {
+    auditSecret: string;
+    onTrace?: TraceFn;
+    ledgers?: Record<string, LedgerEntry[]>;
+    now?: Date;
+  },
+): Promise<{ plan: Plan; mine: Record<string, MyExperience[]> }> {
+  const trace: TraceFn = (k, t) => {
+    try {
+      opts.onTrace?.(k, t);
+    } catch {
+      /* 思考流回调出错不影响出方案 */
+    }
   };
-}
+  const inMembers = inMembersOf(members);
+  if (inMembers.length === 0) throw new Error("局里还没有人，无法出方案");
+  const ledgers = opts.ledgers ?? {};
+  const n = inMembers.length;
 
-/** AA：人均向上取整到 1 元 */
-export function settle(total: number, attendeeCount: number): { total: number; perPerson: number } {
-  const t = Number.isFinite(total) && total > 0 ? Math.round(total * 100) / 100 : 0;
-  const n = Math.max(1, Math.floor(Number.isFinite(attendeeCount) ? attendeeCount : 1));
-  const cents = Math.round(t * 100);
-  return { total: t, perPerson: Math.ceil(cents / n / 100 - 1e-9) };
+  const shared = inMembers.filter(
+    (m) =>
+      Object.keys(m.private?.availability ?? {}).length > 0 ||
+      (m.private?.dietTags ?? []).length > 0 ||
+      m.private?.budgetMax !== undefined ||
+      (m.private?.notes ?? []).length > 0,
+  ).length;
+  const withLoc = inMembers.filter((m) => m.location).length;
+  trace(
+    "listen",
+    `${n} 位朋友在局里，${withLoc} 人给了出发地` + (shared ? `，${shared} 人私下跟局长说了自己的情况` : ""),
+  );
+
+  const { slots, pois, center, cands, weights } = await computeCandidates(ju, inMembers, map, ledgers, trace);
+
+  trace("compute", `计算了 ${slots.length} 个时段 × ${pois.length} 家店 × ${n} 个人 = ${slots.length * pois.length * n} 次体验`);
+
+  let pool = cands.filter((c) => !c.vetoed && c.attend > 0);
+  const hasMust = inMembers.some((m) => m.role === "must");
+  const vetoed = cands.filter((c) => c.vetoed && c.attend > 0).length;
+  if (hasMust && vetoed) trace("filter", `主角来不了的 ${vetoed} 个候选直接否决`);
+  if (pool.length === 0) {
+    pool = cands.filter((c) => c.attend > 0);
+    if (pool.length === 0) throw new Error("还没有人能在任何候选时间到场，无法出方案");
+    trace("warn", "主角在所有候选时间都来不了，先按其他人出方案，建议和主角再确认时间");
+  }
+
+  // 私密约束的聚合影响（不给阈值、不点名）
+  const tightShops = pois.filter((p) => pool.some((c) => c.poi === p && c.flags.some((f) => f.overBudget))).length;
+  if (tightShops) trace("filter", `有人预算偏紧，${tightShops} 家店对部分朋友超预算，综合分相应下降`);
+  if (pool.some((c) => c.flags.some((f) => f.yuanyang))) trace("filter", "有人不吃辣，火锅按鸳鸯锅算");
+  const caredCount = weights.filter((w) => w >= CARED_WEIGHT).length;
+  if (caredCount) trace("compute", `参考跨局账本：${caredCount} 位朋友前几次吃亏较多，这次在公平计算里权重更高`);
+
+  const front = paretoFront(pool);
+  trace("compute", `帕累托前沿（到场人数 × 加权最低满意度 × 人均价）上剩 ${front.length} 个候选`);
+
+  const picked = pickProposals(front, pool);
+  const rec = picked[0].c;
+  const proposals = picked.map((p, i) => toProposal(p.c, p.label, inMembers, weights, rec, { spec: ju.spec }, i === 0));
+  trace("decide", `挑出 ${proposals.length} 个标签不同的方案：${proposals.map((p) => p.labelText).join(" / ")}`);
+
+  const top = proposals[0];
+  const recommendation =
+    `推荐「${top.labelText}」：${slotLabel(top.slot.start)} 在${top.poi.name}，${top.headline}。` +
+    `综合分 ${top.score}，到场的人里最低满意度也有 ${top.minUtility}` +
+    (caredCount && rec.pubs.some((e, i) => weights[i] >= CARED_WEIGHT && e.status !== "absent") ? "，也照顾了之前吃亏多的朋友。" : "。");
+  const caredFor = caredCount ? `这次优先照顾了前几次跑得最远的 ${caredCount} 位朋友` : undefined;
+  const maxCost = Math.max(0, ...pois.map((p) => p.costPerPerson ?? 0)) || undefined;
+  const constraintSummaries = constraintSummariesFor(inMembers, ju, maxCost);
+
+  const candidates = slots.length * pois.length;
+  const audit = {
+    inputHash: hmacHex(opts.auditSecret, canonicalJson(auditInput(ju, inMembers, ledgers))),
+    outputHash: "",
+    candidates,
+    evaluations: candidates * n,
+    paretoSize: front.length,
+    algorithmVersion: ALGORITHM_VERSION,
+  };
+  const body = { proposals, recommendation, caredFor, constraintSummaries, center };
+  audit.outputHash = outputHashOf({ ...body, audit });
+  const plan: Plan = { ...body, audit, computedAt: (opts.now ?? new Date()).toISOString() };
+  if (!caredFor) delete plan.caredFor;
+  trace("decide", `推荐「${top.labelText}」：${slotLabel(top.slot.start)} ${top.poi.name}，${top.attendCount} 人到场`);
+  trace("done", `审计：输出哈希 ${audit.outputHash.slice(0, 8)}…（输入另有 HMAC 存证），同样的输入一定得到同样的结论`);
+
+  const mine: Record<string, MyExperience[]> = {};
+  inMembers.forEach((m, i) => {
+    mine[m.id] = picked.map((p, k) => ({ proposalId: proposals[k].id, utility: p.c.mines[i].utility, notes: p.c.mines[i].notes }));
+  });
+  return { plan, mine };
 }

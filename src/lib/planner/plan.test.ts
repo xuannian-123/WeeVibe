@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { LatLng, MapProvider, Poi } from "../types";
 import { createMockMapProvider, estimateCommute } from "../map";
-import { chainName, checkDiet, dietConflictReason, effectiveBudget, generateSlots, planJu, settle } from "./index";
-import { budgetScore, maxCommuteScore, scoreOption } from "./score";
+import { canonicalJson, chainName, checkDiet, dietConflictReason, generateSlots, planJu, settle } from "./index";
+import { dominates, paretoFront, type Candidate } from "./plan";
+import { hmacHex, sha256Hex } from "./util";
 import { ju, member, spec } from "./testutil";
 
 const poi = (name: string, type: string, over: Partial<Poi> = {}): Poi => ({
@@ -15,14 +16,15 @@ const poi = (name: string, type: string, over: Partial<Poi> = {}): Poi => ({
   ...over,
 });
 
-describe("忌口冲突", () => {
+describe("忌口冲突（v3 忌口在 private 里）", () => {
   const spicy = poi("川味坊老火锅(星湖街店)", "餐饮服务;中餐厅;四川菜(川菜)");
   const bbq = poi("炭火小院烧烤(月亮湾店)", "餐饮服务;中餐厅;特色/地方风味餐厅");
   const xinjiang = poi("新疆红柳烤肉(湖东店)", "餐饮服务;中餐厅;清真菜馆");
 
   it("不吃辣：非火锅局算冲突，火锅局改为鸳鸯锅提示", () => {
-    const m = [member("小王", 31.27, 120.73, { dietTags: ["不吃辣"] })];
-    expect(checkDiet(spicy, m, "聚餐")).toEqual({ conflicts: ["小王：不吃辣（川味偏辣）"], notes: [] });
+    const m = [member("小王", 31.27, 120.73, { priv: { dietTags: ["不吃辣"] } })];
+    const sichuan = poi("川味坊(星湖街店)", "餐饮服务;中餐厅;四川菜(川菜)");
+    expect(checkDiet(sichuan, m, "聚餐")).toEqual({ conflicts: ["小王：不吃辣（川味偏辣）"], notes: [] });
     expect(checkDiet(spicy, m, "火锅")).toEqual({ conflicts: [], notes: ["有人不吃辣，记得点鸳鸯锅"] });
   });
 
@@ -35,56 +37,9 @@ describe("忌口冲突", () => {
     expect(dietConflictReason("不吃内脏", poi("毛肚研究所火锅", "火锅店"))).toBe("有毛肚");
     expect(dietConflictReason("不吃辣", poi("清汤雅舍", "餐饮服务;中餐厅;粤菜(广东菜)"))).toBeUndefined();
   });
-
-  it("每人每个忌口一条，文案格式固定", () => {
-    const ms = [
-      member("小李", 0, 0, { dietTags: ["素食", "清真"] }),
-      member("小张", 0, 0, { dietTags: ["素食"] }),
-    ];
-    expect(checkDiet(bbq, ms, "烧烤").conflicts).toEqual([
-      "小李：素食（以烧烤为主）",
-      "小李：清真（不是清真店）",
-      "小张：素食（以烧烤为主）",
-    ]);
-  });
 });
 
-describe("预算与打分", () => {
-  it("取 spec 预算与个人预算的最小值", () => {
-    expect(effectiveBudget(100, [member("a", 0, 0, { budgetMax: 80 }), member("b", 0, 0)])).toBe(80);
-    expect(effectiveBudget(undefined, [member("a", 0, 0)])).toBeUndefined();
-  });
-
-  it("预算内满分，超出按比例扣，无数据中性", () => {
-    expect(budgetScore(90, 100)).toBe(20);
-    expect(budgetScore(110, 100)).toBeCloseTo(16);
-    expect(budgetScore(125, 100)).toBeCloseTo(10);
-    expect(budgetScore(160, 100)).toBe(0);
-    expect(budgetScore(undefined, 100)).toBe(14);
-    expect(budgetScore(90, undefined)).toBe(14);
-  });
-
-  it("超预算和忌口冲突都会拉低总分", () => {
-    const base = {
-      poi: poi("某火锅", "火锅店", { rating: 4.5, costPerPerson: 95 }),
-      center: { lat: 31.27, lng: 120.735 },
-      maxCommute: 20,
-      avgCommute: 15,
-      budget: 100,
-      categoryWords: ["火锅"],
-      conflictCount: 0,
-    };
-    const ok = scoreOption(base);
-    const over = scoreOption({ ...base, poi: { ...base.poi, costPerPerson: 130 } });
-    const conflict = scoreOption({ ...base, conflictCount: 1 });
-    expect(ok).toBeGreaterThan(over);
-    expect(ok - conflict).toBe(15);
-    expect(maxCommuteScore(10)).toBe(45);
-    expect(maxCommuteScore(60)).toBe(0);
-  });
-});
-
-describe("settle / chainName", () => {
+describe("settle / chainName / canonicalJson", () => {
   it("人均向上取整到 1 元", () => {
     expect(settle(1000, 3)).toEqual({ total: 1000, perPerson: 334 });
     expect(settle(600, 6)).toEqual({ total: 600, perPerson: 100 });
@@ -94,64 +49,123 @@ describe("settle / chainName", () => {
     expect(chainName("老灶台火锅(星湖街店)")).toBe("老灶台火锅");
     expect(chainName("老灶台火锅（金鸡湖店）")).toBe("老灶台火锅");
   });
+  it("键顺序无关、去 undefined、非有限数为 null", () => {
+    expect(canonicalJson({ b: 1, a: { d: [1, undefined, NaN], c: undefined } })).toBe('{"a":{"d":[1,null,null]},"b":1}');
+    expect(canonicalJson({ a: 1, b: 2 })).toBe(canonicalJson({ b: 2, a: 1 }));
+    expect(canonicalJson(new Date("2026-10-22T00:00:00Z"))).toBe('"2026-10-22T00:00:00.000Z"');
+  });
 });
 
-// ------- planJu 端到端（mock 地图） -------
+describe("帕累托前沿", () => {
+  const c = (attend: number, wMin: number, cost: number, idx: number) => ({ attend, wMin, cost, idx }) as Candidate;
+  it("被全面压制的候选不在前沿上", () => {
+    const a = c(6, 70, 100, 0);
+    const b = c(6, 60, 110, 1); // 被 a 支配
+    const d = c(5, 80, 100, 2);
+    const e = c(6, 50, 70, 3);
+    expect(dominates(a, b)).toBe(true);
+    expect(dominates(a, d)).toBe(false);
+    expect(paretoFront([a, b, d, e]).map((x) => x.idx)).toEqual([0, 2, 3]);
+  });
+});
+
+// ------- planJu 端到端（mock 地图，苏州） -------
+const DAY = "2026-10-23";
 function demo() {
   const s = spec({ budgetPerPerson: 100 });
   const slots = generateSlots(s);
-  const [s1800, s1830, s1900] = slots.map((x) => x.id);
   const members = [
-    member("局长", 31.2748, 120.7383, { id: "org", isOrganizer: true, availableSlotIds: [s1830, s1900] }),
-    member("小王", 31.2745, 120.7462, { id: "w", availableSlotIds: [s1830], dietTags: ["不吃辣"] }),
-    member("小李", 31.2627, 120.7293, { id: "l", availableSlotIds: [s1830, s1900], budgetMax: 90 }),
-    member("小张", 31.3075, 120.6935, { id: "z", availableSlotIds: [s1830], dietTags: ["不吃内脏"] }),
-    member("小陈", 31.2865, 120.743, { id: "c", availableSlotIds: [s1830, s1800] }),
-    member("小周", 31.3228, 120.7113, { id: "zh", availableSlotIds: [s1800] }),
-    member("退出", 31.5, 120.5, { id: "out", status: "out", availableSlotIds: [s1830] }),
+    member("局长", 31.2748, 120.7383, { id: "org", isOrganizer: true, priv: { availability: { [DAY]: { from: "17:30", pref: "best" } } } }),
+    member("小王", 31.2745, 120.7462, { id: "w", priv: { availability: { [DAY]: { from: "18:00", pref: "ok" } }, dietTags: ["不吃辣"] } }),
+    member("小李", 31.2627, 120.7293, { id: "l", priv: { availability: { [DAY]: { from: "17:00", pref: "ok" } }, budgetMax: 90 } }),
+    member("小张", 31.3075, 120.6935, {
+      id: "z",
+      priv: { availability: { [DAY]: { from: "17:30", homeBy: "21:30", pref: "ok" } }, dietTags: ["不吃内脏"] },
+    }),
+    member("小陈", 31.2865, 120.743, { id: "c", priv: { availability: { [DAY]: { from: "18:40", pref: "meh" } } } }),
+    member("小周", 31.3228, 120.7113, { id: "zh", priv: { availability: { "2026-10-24": { from: "17:00", pref: "ok" } } } }),
+    member("退出", 31.5, 120.5, { id: "out", status: "out" }),
   ];
-  return { j: ju(s, slots), members, s1830 };
+  return { j: ju(s, slots), members };
 }
+const now = new Date("2026-10-22T12:00:00Z");
+const opts = { auditSecret: "s3cret", now };
 
 describe("planJu（mock 地图）", () => {
-  const now = new Date("2026-10-22T12:00:00Z");
-
   it("端到端跑通，结构正确", async () => {
-    const { j, members, s1830 } = demo();
-    const plan = await planJu(j, members, createMockMapProvider(), { now });
-    expect(plan.slotId).toBe(s1830);
-    expect(plan.attendeeIds).toEqual(["org", "w", "l", "z", "c"]);
-    expect(plan.absentIds).toEqual(["zh"]);
+    const { j, members } = demo();
+    const traces: string[] = [];
+    const { plan, mine } = await planJu(j, members, createMockMapProvider(), { ...opts, onTrace: (k, t) => traces.push(`${k}:${t}`) });
     expect(plan.computedAt).toBe("2026-10-22T12:00:00.000Z");
-    expect(plan.options.length).toBe(3);
-    const chains = plan.options.map((o) => chainName(o.poi.name));
-    expect(new Set(chains).size).toBe(3);
-    for (let i = 0; i < plan.options.length; i++) {
-      const o = plan.options[i];
-      expect(o.score).toBeGreaterThanOrEqual(0);
-      expect(o.score).toBeLessThanOrEqual(100);
-      if (i > 0) expect(o.score).toBeLessThanOrEqual(plan.options[i - 1].score);
-      expect(o.commutes.map((c) => c.memberId)).toEqual(plan.attendeeIds);
-      expect(o.maxCommute).toBe(Math.max(...o.commutes.map((c) => c.minutes)));
-      expect(o.reasons[0]).toBe(`最远的人打车 ${o.maxCommute} 分钟`);
-      expect(o.reasons.join("|")).toMatch(/5 个人/);
-      expect(o).not.toHaveProperty("blurb");
-      // 火锅局：不吃辣不算冲突
-      expect(o.conflicts.some((c) => c.includes("不吃辣"))).toBe(false);
+    expect(plan.proposals.length).toBeGreaterThanOrEqual(2);
+    expect(plan.proposals.length).toBeLessThanOrEqual(3);
+    expect(plan.proposals[0].recommended).toBe(true);
+    expect(plan.proposals.filter((p) => p.recommended)).toHaveLength(1);
+    expect(new Set(plan.proposals.map((p) => p.label)).size).toBe(plan.proposals.length);
+    for (const p of plan.proposals) {
+      expect(p.experiences.map((e) => e.memberId)).toEqual(["org", "w", "l", "z", "c", "zh"]); // 退出的人不在
+      expect(p.experiences.find((e) => e.memberId === "zh")!.status).toBe("absent");
+      expect(p.attendCount).toBe(p.experiences.filter((e) => e.status !== "absent").length);
+      expect(p.score).toBeGreaterThanOrEqual(0);
+      expect(p.score).toBeLessThanOrEqual(100);
+      expect(p).not.toHaveProperty("blurb");
+      expect(p.headline).toMatch(/人/);
+      expect(p.tradeoffs.join("|")).toMatch(/小周.*这个时间来不了/);
     }
+    // 小陈 18:40 才能出发：迟到 = max(0, 18:40 + 通勤 - 开始)
+    for (const p of plan.proposals) {
+      const e = p.experiences.find((x) => x.memberId === "c")!;
+      const start = Number(p.slot.id.slice(11, 13)) * 60 + Number(p.slot.id.slice(14, 16));
+      if (e.status !== "absent") expect(e.lateMin).toBe(Math.max(0, 18 * 60 + 40 + e.commuteMin - start));
+    }
+    expect(Object.keys(mine).sort()).toEqual(["c", "l", "org", "w", "z", "zh"]);
+    expect(mine.org.map((x) => x.proposalId)).toEqual(plan.proposals.map((p) => p.id));
+    expect(plan.audit.candidates).toBe(j.slots.length * 8);
+    expect(plan.audit.evaluations).toBe(plan.audit.candidates * 6);
+    expect(plan.audit.paretoSize).toBeGreaterThanOrEqual(plan.proposals.length);
+    expect(plan.audit.algorithmVersion).toMatch(/^juzhang-planner\//);
+    expect(plan.constraintSummaries.join("|")).toMatch(/有人预算偏紧/);
+    expect(plan.constraintSummaries.join("|")).toMatch(/有人不吃辣，会点鸳鸯锅/);
+    expect(traces.some((t) => /计算了 \d+ 个时段 × 8 家店 × 6 个人 = \d+ 次体验/.test(t))).toBe(true);
+    expect(traces.some((t) => /帕累托前沿.*剩 \d+ 个候选/.test(t))).toBe(true);
+    expect(traces.at(-1)).toMatch(/^done:/);
   });
 
-  it("确定性：跑两次结果完全一样", async () => {
-    const a = await planJu(demo().j, demo().members, createMockMapProvider(), { now });
-    const b = await planJu(demo().j, demo().members, createMockMapProvider(), { now });
-    expect(a).toEqual(b);
+  it("确定性：两次输出 canonicalJson 逐字节相同，outputHash 相同；inputHash = HMAC(输入)", async () => {
+    const a = await planJu(demo().j, demo().members, createMockMapProvider(), opts);
+    const b = await planJu(demo().j, demo().members, createMockMapProvider(), opts);
+    expect(canonicalJson(a)).toBe(canonicalJson(b));
+    expect(a.plan.audit.outputHash).toBe(b.plan.audit.outputHash);
+    expect(a.plan.audit.outputHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(a.plan.audit.inputHash).toMatch(/^[0-9a-f]{64}$/);
+    // 换密钥 → inputHash 变，outputHash 不变
+    const c = await planJu(demo().j, demo().members, createMockMapProvider(), { ...opts, auditSecret: "other" });
+    expect(c.plan.audit.inputHash).not.toBe(a.plan.audit.inputHash);
+    expect(c.plan.audit.outputHash).toBe(a.plan.audit.outputHash);
+    // 不同时刻复算：outputHash 不变（computedAt 不进哈希）
+    const d = await planJu(demo().j, demo().members, createMockMapProvider(), { ...opts, now: new Date("2026-10-23T00:00:00Z") });
+    expect(d.plan.audit.outputHash).toBe(a.plan.audit.outputHash);
+    // 成员对象键顺序打乱也一样
+    const shuffled = demo().members.map((m) => Object.fromEntries(Object.entries(m).reverse()) as typeof m);
+    const e = await planJu(demo().j, shuffled, createMockMapProvider(), opts);
+    expect(e.plan.audit.inputHash).toBe(a.plan.audit.inputHash);
+    expect(canonicalJson(e)).toBe(canonicalJson(a));
+    expect(sha256Hex("x")).not.toBe(hmacHex("k", "x"));
+  });
+
+  it("主角来不了的候选直接否决", async () => {
+    const { j, members } = demo();
+    // 小陈当主角：他 18:40 才能出发，迟到会很多的早场直接否决；他永远在场
+    const ms = members.map((m) => (m.id === "c" ? { ...m, role: "must" as const } : m));
+    const { plan } = await planJu(j, ms, createMockMapProvider(), opts);
+    for (const p of plan.proposals) expect(p.experiences.find((e) => e.memberId === "c")!.status).not.toBe("absent");
   });
 
   it("结果不足 5 家时扩到 6km；单家通勤失败用估算兜底", async () => {
     const { j, members } = demo();
     const radii: number[] = [];
     const far = (c: LatLng, k: number): Poi =>
-      poi(`远方火锅${k}(分店${k})`, "餐饮服务;中餐厅;火锅店", { id: `p${k}`, lat: c.lat + 0.03, lng: c.lng + k * 0.001 });
+      poi(`远方火锅${k}(分店${k})`, "餐饮服务;中餐厅;火锅店", { id: `p${k}`, lat: c.lat + 0.03, lng: c.lng + k * 0.001, costPerPerson: 60 + k * 10 });
     const map: MapProvider = {
       searchPlaces: async () => [],
       reverseGeocode: async () => "",
@@ -163,15 +177,17 @@ describe("planJu（mock 地图）", () => {
         if ((dest as Poi).id === "p2") throw new Error("boom");
         return origins.map((o) => estimateCommute(o, dest));
       },
+      transitRoute: async () => ({ minutes: 10, steps: [] }),
     };
-    const plan = await planJu(j, members, map, { now });
+    const { plan } = await planJu(j, members, map, opts);
     expect(radii).toEqual([3000, 6000]);
-    expect(plan.options).toHaveLength(3);
+    expect(plan.proposals.length).toBeGreaterThanOrEqual(2);
+    expect(plan.audit.candidates).toBe(j.slots.length * 6);
   });
 
-  it("没有人能来时抛出明确错误", async () => {
+  it("没有在局的人时抛出明确错误", async () => {
     const { j } = demo();
-    const ms = [member("A", 31.27, 120.73, { status: "out", availableSlotIds: [] })];
-    await expect(planJu(j, ms, createMockMapProvider())).rejects.toThrow(/没有人/);
+    const ms = [member("A", 31.27, 120.73, { status: "out" })];
+    await expect(planJu(j, ms, createMockMapProvider(), opts)).rejects.toThrow(/没有人/);
   });
 });
