@@ -2,7 +2,7 @@
 
 import { useId, useMemo } from "react";
 import type { JuState, LatLng, Member } from "@/lib/types";
-import { leadingOption } from "@/lib/client/format";
+import { focusProposal } from "./fmt";
 
 const W = 760;
 const H = 850;
@@ -173,36 +173,39 @@ export function AbstractMap({ state }: { state: JuState }) {
   const uid = useId().replace(/:/g, "");
   const { ju } = state;
   const plan = ju.plan;
-  const members = state.members.filter((m) => m.status === "in");
-  const target = plan ? leadingOption(ju) : undefined;
+  const members = state.members.filter((m): m is Member & { location: NonNullable<Member["location"]> } => m.status === "in" && !!m.location);
+  const target = plan ? focusProposal(ju) : undefined;
   const confirmed = ju.status === "confirmed";
 
   const project = useMemo(() => {
     const pts: LatLng[] = members.map((m) => m.location);
     if (plan) {
       pts.push(plan.center);
-      for (const o of plan.options) pts.push(o.poi);
+      for (const o of plan.proposals) pts.push(o.poi);
     }
     return makeProjector(pts);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(members.map((m) => m.location)), plan?.computedAt]);
 
-  const absent = new Set(plan?.absentIds ?? []);
+  const absent = new Set((target?.experiences ?? []).filter((e) => e.status === "absent").map((e) => e.memberId));
   const center = plan ? project(plan.center) : null;
   const memberPos = useMemo(
     () => new Map(spread(members.map((m) => project(m.location))).map((p, i) => [members[i].id, p])),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [project, members.length],
   );
-  const posOf = (m: Member) => memberPos.get(m.id) ?? project(m.location);
+  const posOf = (m: (typeof members)[number]) => memberPos.get(m.id) ?? project(m.location);
   const poiPos = useMemo(
-    () => (plan ? relax(plan.options.map((o) => project(o.poi)), [...memberPos.values()], center) : []),
+    () => (plan ? relax(plan.proposals.map((o) => project(o.poi)), [...memberPos.values()], center) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [project, memberPos, plan?.computedAt],
   );
-  const targetIdx = plan && target ? plan.options.findIndex((o) => o.poi.id === target.poi.id) : -1;
+  const targetIdx = plan && target ? plan.proposals.findIndex((o) => o.id === target.id) : -1;
   const tp = targetIdx >= 0 ? poiPos[targetIdx] : null;
-  const commuteOf = (m: Member) => target?.commutes.find((c) => c.memberId === m.id);
+  const commuteOf = (m: Member) => {
+    const e = target?.experiences.find((x) => x.memberId === m.id);
+    return e ? { minutes: e.commuteMin } : undefined;
+  };
 
   // —— 标签布局：先放第 1 名店名，再逐个放通勤分钟，后放的避开先放的 ——
   const ownBoxes = new Map<string, Box[]>();
@@ -212,7 +215,7 @@ export function AbstractMap({ state }: { state: JuState }) {
     ownBoxes.set(m.id, [around(p, 34), box(p.x - nw / 2, p.y + 38, nw, 24)]);
   }
   const memberBoxes = [...ownBoxes.values()].flat();
-  const poiBoxes: Box[] = poiPos.map((p, i) => around(p, (plan?.options[i].poi.id === target?.poi.id ? 46 : 36) * 0.75));
+  const poiBoxes: Box[] = poiPos.map((p, i) => around(p, (plan?.proposals[i].id === target?.id ? 46 : 36) * 0.75));
   const centerBox: Box[] = center ? [box(center.x - 34, center.y - 30, 68, 72)] : [];
   const lineSegs: [XY, XY][] = tp ? members.filter((m) => !absent.has(m.id)).map((m) => [posOf(m), tp] as [XY, XY]) : [];
 
@@ -344,13 +347,13 @@ export function AbstractMap({ state }: { state: JuState }) {
       )}
 
       {/* 候选店 */}
-      {plan?.options.map((o, i) => {
+      {plan?.proposals.map((o, i) => {
         const p = poiPos[i];
-        const isTarget = target?.poi.id === o.poi.id;
+        const isTarget = target?.id === o.id;
         const dim = confirmed && !isTarget;
         const s = isTarget ? 46 : 36;
         return (
-          <g key={o.poi.id} opacity={dim ? 0.35 : 1} className="animate-fade-in" style={{ animationDelay: `${300 + i * 150}ms` }}>
+          <g key={o.id} opacity={dim ? 0.35 : 1} className="animate-fade-in" style={{ animationDelay: `${300 + i * 150}ms` }}>
             <g transform={`translate(${p.x} ${p.y})`}>
               <g transform="rotate(45)">
                 <rect

@@ -1,28 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { JuState, Member } from "@/lib/types";
-import {
-  activeMembers,
-  dayLabel,
-  groupSlots,
-  leadingOption,
-  mostVoted,
-  shortPlace,
-  slotCounts,
-  slotLabel,
-  slotTime,
-  specChips,
-  voteTally,
-} from "@/lib/client/format";
-import { errMsg } from "@/lib/client/api";
-import type { JuActions } from "@/lib/client/useJu";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JuState, PrivacySelfTest } from "@/lib/types";
+import type { VerifyResult } from "@/components/organizer/api";
 import { SealLogo, RotatingText } from "../ui";
 import { StampSlam } from "../Stamp";
-import { toast } from "../toast";
-import { categoryEmoji } from "../ju/JuHeader";
 import { AbstractMap } from "./AbstractMap";
 import { Odometer, QrSvg } from "./bits";
+import { categoryEmoji, confirmedProposal, dayLabel, focusProposal, slotLabel, trunc } from "./fmt";
+import { AuditPanel, ExperienceMatrix, Panel, PrivacyPanel } from "./PlanPanels";
+import { TraceStream } from "./TraceStream";
 
 const STATUS_TEXT: Record<string, string> = {
   collecting: "扫码入局中",
@@ -31,367 +18,457 @@ const STATUS_TEXT: Record<string, string> = {
   cancelled: "局已散",
 };
 
-function Panel({ title, right, children, className = "" }: { title: string; right?: React.ReactNode; children: React.ReactNode; className?: string }) {
+/** 发起人在大屏上的隐藏按钮（只有本机存了 admin token 才出现）。动作完成后只刷新公开视图 */
+export type ScreenAdmin = {
+  seed: () => Promise<void>;
+  plan: () => Promise<void>;
+  confirm: (proposalId: string) => Promise<void>;
+};
+
+/* ───────── 左上：二维码 + 进度 ───────── */
+function QuorumRing({ have, need }: { have: number; need: number }) {
+  const r = 82;
+  const c = 2 * Math.PI * r;
+  const pct = need > 0 ? Math.min(1, have / need) : 0;
   return (
-    <section className={`rounded-[28px] border-2 border-night-line bg-night-2 p-7 ${className}`}>
-      <div className="mb-5 flex items-baseline justify-between">
-        <h3 className="text-[26px] font-black text-cream">{title}</h3>
-        {right && <span className="text-[18px] text-cream-faint">{right}</span>}
-      </div>
-      {children}
-    </section>
+    <svg viewBox="0 0 200 200" className="size-[180px] shrink-0" role="img" aria-label={`${have}/${need}`}>
+      <circle cx="100" cy="100" r={r} fill="none" stroke="#2a231f" strokeWidth="18" />
+      <circle
+        cx="100"
+        cy="100"
+        r={r}
+        fill="none"
+        stroke="#e2412e"
+        strokeWidth="18"
+        strokeLinecap="round"
+        strokeDasharray={`${c * pct} ${c}`}
+        transform="rotate(-90 100 100)"
+        style={{ transition: "stroke-dasharray .8s cubic-bezier(.2,.9,.25,1.1)", filter: "drop-shadow(0 0 10px rgb(226 65 46 / .6))" }}
+      />
+      <text x="100" y="108" textAnchor="middle" fill="#f3e7d3" fontSize="58" fontWeight="800" style={{ fontFamily: "var(--font-num)" }}>
+        {have}
+        <tspan fill="#a89a88" fontSize="30">
+          /{need}
+        </tspan>
+      </text>
+      <text x="100" y="140" textAnchor="middle" fill="#a89a88" fontSize="16" fontWeight="700">
+        人说了来
+      </text>
+    </svg>
   );
 }
 
-function SlotHeat({ state, compact }: { state: JuState; compact?: boolean }) {
-  const counts = slotCounts(state);
-  const max = Math.max(1, ...Object.values(counts));
-  const best = state.ju.plan?.slotId ?? Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
-  const groups = groupSlots(state.ju.slots);
-  const n = activeMembers(state).length;
-  return (
-    <Panel title="⏰ 时间热力" right={n ? `${n} 人投了时间` : "等人填"}>
-      <div className={compact ? "space-y-3" : "space-y-4"}>
-        {groups.map((g) => (
-          <div key={g.date}>
-            <div className="font-num mb-2 text-[18px] font-bold text-cream-faint">{dayLabel(g.date)}</div>
-            <div className="grid grid-cols-6 gap-2">
-              {g.slots.map((s) => {
-                const c = counts[s.id] ?? 0;
-                const isBest = s.id === best && c > 0;
-                return (
-                  <div
-                    key={s.id}
-                    className={`font-num relative flex flex-col items-center justify-center rounded-xl ${compact ? "h-[56px]" : "h-[70px]"}`}
-                    style={{
-                      background: c ? `rgb(242 181 48 / ${0.12 + 0.88 * (c / max)})` : "#2a231f",
-                      color: c / max > 0.5 ? "#14110f" : "#f3e7d3",
-                      outline: isBest ? "3px solid #e2412e" : undefined,
-                      outlineOffset: 2,
-                      boxShadow: isBest ? "0 0 22px rgb(226 65 46 / .55)" : undefined,
-                      transition: "background .5s",
-                    }}
-                  >
-                    <span className={`${compact ? "text-[21px]" : "text-[26px]"} font-bold leading-none`}>{c}</span>
-                    <span className="mt-1 text-[13px] font-semibold opacity-80">{slotTime(s)}</span>
-                  </div>
-                );
-              })}
-            </div>
+function Progress({ state }: { state: JuState }) {
+  const { ju, counts, members } = state;
+  const q = ju.quorum;
+  if (q?.state === "pending") {
+    const need = counts.quorumNeed ?? q.min;
+    const have = counts.quorumHave ?? 0;
+    return (
+      <div className="flex-1 rounded-[28px] border-2 border-cinnabar/60 bg-night-2 px-6 py-5">
+        <div className="flex items-center gap-4">
+          <QuorumRing have={have} need={need} />
+          <div className="min-w-0">
+            <div className="text-[30px] font-black leading-tight text-cream">还差 {Math.max(0, need - have)} 人</div>
+            <div className="mt-1 text-[18px] leading-snug text-cream-faint">凑够 {need} 人才公开成局</div>
           </div>
-        ))}
+        </div>
+        <p className="mt-3 text-[17px] leading-relaxed text-cream-faint">
+          🤫 谁说了来、谁拒绝了，<b className="text-cream">连发起人都看不到</b>。凑不够就悄悄作废。
+        </p>
       </div>
-    </Panel>
-  );
-}
-
-function DietRadar({ state }: { state: JuState }) {
-  const members = activeMembers(state);
-  const counts = new Map<string, number>();
-  for (const m of members) for (const t of m.dietTags) counts.set(t, (counts.get(t) ?? 0) + 1);
-  const recent = [...members].sort((a, b) => b.joinedAt.localeCompare(a.joinedAt)).slice(0, 4);
+    );
+  }
   return (
-    <Panel title="📡 实时动态" className="flex-1">
-      <div className="mb-5 flex flex-wrap gap-2.5">
-        {counts.size === 0 ? (
-          <span className="text-[18px] text-cream-faint">暂无忌口，百无禁忌 🍻</span>
-        ) : (
-          [...counts.entries()].map(([t, c]) => (
-            <span key={t} className="rounded-full border-2 border-cinnabar px-4 py-1.5 text-[18px] font-bold text-cinnabar">
-              {t} <span className="font-num">×{c}</span>
-            </span>
-          ))
+    <div className="flex-1 rounded-[28px] border-2 border-night-line bg-night-2 px-6 py-5">
+      <div className="flex items-end gap-3">
+        <span className="pb-1 text-[22px] font-bold text-cream-faint">已入局</span>
+        <Odometer value={counts.in} className="text-[104px] font-bold text-mustard" />
+        <span className="pb-2 text-[22px] font-bold text-cream-faint">
+          人{ju.capacity ? <span className="font-num"> / {ju.capacity}</span> : ju.spec.headcount ? <span className="font-num"> / {ju.spec.headcount}</span> : null}
+        </span>
+      </div>
+      <div className="font-num mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[18px] text-cream-faint">
+        <span>
+          <b className="text-cream">{counts.done}</b> 人聊完了
+        </span>
+        {counts.waitlist > 0 && (
+          <span>
+            <b className="text-cream">{counts.waitlist}</b> 人候补
+          </span>
+        )}
+        {counts.matchPairs > 0 && (
+          <span>
+            <b className="text-cinnabar">{counts.matchPairs}</b> 对互选成功 💞
+          </span>
         )}
       </div>
-      <ul className="space-y-3">
-        {recent.map((m) => (
-          <li key={m.id} className="animate-rise flex items-center gap-3 text-[19px] text-cream">
-            <span className="text-[28px]">{m.avatar}</span>
-            <b>{m.name}</b>
-            <span className="truncate text-cream-faint">从 {shortPlace(m.location.label, 12)} 出发</span>
-          </li>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {members.map((m) => (
+          <span
+            key={m.id}
+            title={m.name}
+            className={`animate-pop-in relative flex size-12 items-center justify-center rounded-full border-2 bg-night-3 text-[26px] ${
+              m.intake === "done" ? "border-mustard" : "border-night-line"
+            }`}
+          >
+            {m.avatar}
+            {m.intake !== "done" && <span className="absolute -bottom-1 -right-1 rounded-full bg-night px-1 text-[12px]">💬</span>}
+          </span>
         ))}
-      </ul>
-    </Panel>
+      </div>
+    </div>
   );
 }
 
-function VoteBoard({ state }: { state: JuState }) {
-  const { ju } = state;
-  const plan = ju.plan!;
-  const tally = voteTally(ju);
-  const byId = new Map(state.members.map((m) => [m.id, m]));
-  const total = Math.max(1, plan.attendeeIds.length);
-  const voted = Object.keys(ju.votes ?? {}).length;
+/* ───────── 中下：推荐理由 / 定局卡 / 回顾 ───────── */
+function Recommendation({ state }: { state: JuState }) {
+  const plan = state.ju.plan!;
+  const p = focusProposal(state.ju);
   return (
-    <Panel title="🗳️ 实时投票" right={<span className="font-num">{voted}/{plan.attendeeIds.length} 已投</span>} className="flex-1">
-      <div className="space-y-5">
-        {plan.options.map((o, i) => {
-          const voters = (tally[o.poi.id] ?? []).map((id) => byId.get(id)).filter(Boolean) as Member[];
-          const pct = (voters.length / total) * 100;
-          const lead = mostVoted(ju)?.poi.id === o.poi.id && voters.length > 0;
-          return (
-            <div key={o.poi.id}>
-              <div className="mb-2 flex items-center gap-3">
-                <span
-                  className={`font-num flex size-10 shrink-0 -rotate-6 items-center justify-center rounded-lg text-[20px] font-bold ${
-                    i === 0 ? "bg-cinnabar text-white" : "border-2 border-night-line text-cream"
-                  }`}
-                >
-                  {i + 1}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[23px] font-black text-cream">{o.poi.name}</span>
-                <span className="font-num text-[38px] font-bold leading-none text-mustard">{voters.length}</span>
-              </div>
-              <div className="font-num mb-2 flex gap-4 pl-[52px] text-[16px] text-cream-faint">
-                {o.poi.costPerPerson != null && <span>¥{o.poi.costPerPerson}/人</span>}
-                {o.poi.rating != null && <span>★{o.poi.rating.toFixed(1)}</span>}
-                <span>最远 {o.maxCommute}′</span>
-                {o.conflicts.length > 0 && <span className="text-cinnabar">⚠ {o.conflicts.length} 处忌口</span>}
-              </div>
-              <div className="relative ml-[52px] h-[30px] overflow-hidden rounded-full bg-night-3">
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full"
-                  style={{
-                    width: `${Math.max(pct, voters.length ? 6 : 0)}%`,
-                    background: lead ? "#e2412e" : "#f2b530",
-                    boxShadow: lead ? "0 0 20px rgb(226 65 46 / .6)" : undefined,
-                    transition: "width .7s cubic-bezier(.2,.9,.25,1.1)",
-                  }}
-                />
-                <div className="absolute inset-y-0 left-3 flex items-center gap-0.5 text-[20px]">
-                  {voters.map((m) => (
-                    <span key={m.id} className="animate-pop-in">
-                      {m.avatar}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    <Panel title="⚖️ 局长为什么这么排" className="shrink-0">
+      <p className="text-[21px] font-semibold leading-relaxed text-cream">{plan.recommendation}</p>
+      {p?.blurb && <p className="mt-2 border-l-4 border-mustard pl-3 text-[18px] text-cream-faint">“{p.blurb}”</p>}
+      {plan.caredFor && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl bg-cinnabar/15 px-4 py-2 text-[18px] font-bold text-[#ff8a78]">
+          <span>🤝</span>
+          {plan.caredFor}
+        </div>
+      )}
+      {plan.constraintSummaries.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {plan.constraintSummaries.slice(0, 4).map((t) => (
+            <span key={t} className="rounded-full border border-night-line px-3 py-1 text-[15px] text-cream-faint">
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
     </Panel>
   );
 }
 
 function ConfirmedCard({ state }: { state: JuState }) {
   const { ju } = state;
-  const opt = leadingOption(ju);
-  if (!opt) return null;
+  const p = confirmedProposal(ju);
+  if (!p) return null;
+  const s = ju.settlement;
+  const r = ju.reservation;
   return (
-    <Panel title="✅ 定局" className="relative flex-1 overflow-hidden">
-      <div className="absolute -right-6 -top-4 opacity-90">
-        <StampSlam size={170} play={false} onDark />
+    <section className="relative shrink-0 overflow-hidden rounded-[28px] border-2 border-cinnabar/70 bg-night-2 p-6">
+      <div className="absolute -right-4 -top-6 opacity-90">
+        <StampSlam size={150} play={false} onDark text="定局" />
       </div>
-      <div className="font-num mb-3 text-[40px] font-bold text-mustard">{slotLabel(ju, ju.plan?.slotId)}</div>
-      <div className="mb-2 pr-32 text-[36px] font-black leading-tight text-cream">{opt.poi.name}</div>
-      <div className="mb-5 text-[18px] text-cream-faint">{opt.poi.address}</div>
-      {opt.blurb && <p className="border-l-4 border-mustard pl-4 text-[20px] leading-relaxed text-cream">“{opt.blurb}”</p>}
-    </Panel>
+      <div className="font-num text-[34px] font-bold text-mustard">{slotLabel(p.slot)}</div>
+      <div className="mt-1 pr-36 text-[32px] font-black leading-tight text-cream">{p.poi.name}</div>
+      <div className="mt-1 truncate pr-36 text-[17px] text-cream-faint">{p.poi.address}</div>
+      <div className="mt-4 flex flex-wrap gap-3 text-[18px] font-bold">
+        <span className="rounded-full bg-night-3 px-4 py-1.5 text-cream">👥 {p.attendCount} 人</span>
+        {r && r.status !== "none" && (
+          <span className={`rounded-full px-4 py-1.5 ${r.status === "booked" ? "bg-[#3ecf8e] text-night" : "bg-night-3 text-cream"}`}>
+            {r.status === "booked" ? `✓ 已订位${r.tableSize ? ` · ${r.tableSize} 位` : ""}` : r.status === "called" ? "📞 已打过电话" : "📝 订位话术已备好"}
+          </span>
+        )}
+        {s && (
+          <span className={`font-num rounded-full px-4 py-1.5 ${s.paidCount >= s.payCount ? "bg-[#3ecf8e] text-night" : "bg-mustard text-night"}`}>
+            💸 已转 {s.paidCount}/{s.payCount}
+          </span>
+        )}
+      </div>
+      {ju.revisions.length > 0 && (
+        <p className="mt-3 truncate text-[16px] text-cream-faint">🔄 {ju.revisions.at(-1)!.changes.join("；")}</p>
+      )}
+    </section>
   );
 }
 
-function StampOverlay({ state, onClose }: { state: JuState; onClose: () => void }) {
-  const opt = leadingOption(state.ju);
-  const slot = state.ju.slots.find((s) => s.id === state.ju.plan?.slotId);
-  useEffect(() => {
-    const t = setTimeout(onClose, 7000);
-    return () => clearTimeout(t);
-  }, [onClose]);
+function PhotoWall({ state }: { state: JuState }) {
+  const recap = state.ju.recap!;
+  const photos = recap.photos.slice(0, 6);
+  const slots = photos.length ? photos : ["🍲", "🥂", "📸"];
   return (
-    <button
-      onClick={onClose}
-      aria-label="关闭定局动画"
-      className="animate-fade-in absolute inset-0 z-40 flex flex-col items-center justify-center bg-night/85 backdrop-blur-sm"
-    >
-      <StampSlam size={480} onDark sub={slot ? slot.start.slice(0, 10).replace(/-/g, ".") : undefined} />
+    <div className="flex h-full flex-col p-7">
+      <div className="mb-5 flex items-baseline gap-3">
+        <h3 className="text-[26px] font-black text-cream">📸 局后回顾</h3>
+        <span className="text-[17px] text-cream-faint">{recap.photos.length ? `${recap.photos.length} 张照片` : "等大家传照片"}</span>
+      </div>
+      <div className="relative min-h-0 flex-1">
+        {slots.map((src, i) => {
+          const isEmoji = !photos.length;
+          const pos = [
+            [6, 4, -6],
+            [38, 0, 4],
+            [66, 8, -3],
+            [14, 46, 5],
+            [46, 42, -4],
+            [70, 50, 6],
+          ][i];
+          return (
+            <figure
+              key={i}
+              className="animate-pop-in absolute w-[34%] rounded-md bg-cream p-2.5 pb-8 shadow-[0_10px_30px_rgb(0_0_0/.45)]"
+              style={{ left: `${pos[0]}%`, top: `${pos[1]}%`, transform: `rotate(${pos[2]}deg)`, animationDelay: `${i * 140}ms` }}
+            >
+              {isEmoji ? (
+                <div className="flex aspect-[4/3] items-center justify-center bg-night-3 text-[64px]">{src}</div>
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={src} alt={`照片 ${i + 1}`} className="aspect-[4/3] w-full object-cover" />
+              )}
+            </figure>
+          );
+        })}
+      </div>
+      <blockquote className="mt-4 shrink-0 rounded-2xl border-l-[6px] border-mustard bg-night-3 px-5 py-4 text-[21px] leading-relaxed text-cream">{recap.text}</blockquote>
+    </div>
+  );
+}
+
+/* ───────── 盖章动画 ───────── */
+function StampOverlay({ state, kind, onClose }: { state: JuState; kind: "quorum" | "confirmed"; onClose: () => void }) {
+  const p = confirmedProposal(state.ju);
+  useEffect(() => {
+    const t = setTimeout(onClose, kind === "quorum" ? 5000 : 7000);
+    return () => clearTimeout(t);
+  }, [onClose, kind]);
+  if (kind === "quorum") {
+    return (
+      <button onClick={onClose} aria-label="关闭成局动画" className="animate-fade-in absolute inset-0 z-40 flex flex-col items-center justify-center bg-night/85 backdrop-blur-sm">
+        <StampSlam size={420} onDark text="成局" />
+        <div className="animate-rise mt-10 text-center" style={{ animationDelay: "800ms" }}>
+          <div className="text-[64px] font-black text-cream">人凑够了，局成了！</div>
+          <div className="mt-3 text-[26px] text-cream-faint">之前谁说了来、谁拒绝了 —— 这件事永远只有局长知道</div>
+        </div>
+      </button>
+    );
+  }
+  return (
+    <button onClick={onClose} aria-label="关闭定局动画" className="animate-fade-in absolute inset-0 z-40 flex flex-col items-center justify-center bg-night/85 backdrop-blur-sm">
+      <StampSlam size={460} onDark text="定局" sub={p ? p.slot.start.slice(0, 10).replace(/-/g, ".") : undefined} />
       <div className="animate-rise mt-10 text-center" style={{ animationDelay: "800ms" }}>
-        <div className="font-num text-[44px] font-bold text-mustard">{slotLabel(state.ju, state.ju.plan?.slotId)}</div>
-        <div className="mt-2 text-[64px] font-black text-cream">{opt?.poi.name}</div>
+        <div className="font-num text-[44px] font-bold text-mustard">{slotLabel(p?.slot)}</div>
+        <div className="mt-2 text-[64px] font-black text-cream">{p?.poi.name}</div>
+        <div className="mt-3 text-[24px] text-cream-faint">局长拍的板，任何人都能复算</div>
       </div>
     </button>
   );
 }
 
-const PLAN_LINES = ["局长正在掐指一算…", "寻找对所有人最公平的点…", "翻遍附近的店…", "核对忌口…"];
+const PLAN_LINES = ["局长正在掐指一算…", "在帕累托前沿上挑方案…", "核对每个人的通勤…"];
 
-function AdminBar({ state, actions }: { state: JuState; actions: JuActions }) {
+function AdminBar({ state, admin }: { state: JuState; admin: ScreenAdmin }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
   const run = (key: string, fn: () => Promise<void>) => async () => {
     setBusy(key);
+    setErr(null);
     try {
       await fn();
     } catch (e) {
-      toast(errMsg(e), "error");
+      setErr(e instanceof Error ? e.message : "出错了");
     } finally {
       setBusy(null);
     }
   };
   const st = state.ju.status;
+  const rec = state.ju.plan?.proposals.find((p) => p.recommended) ?? state.ju.plan?.proposals[0];
   const btn =
-    "max-w-[340px] truncate rounded-full border border-night-line px-4 py-2 text-[15px] font-semibold text-cream-faint transition hover:border-cream-faint hover:text-cream disabled:opacity-40";
+    "max-w-[320px] truncate rounded-full border border-night-line px-4 py-2 text-[15px] font-semibold text-cream-faint transition hover:border-cream-faint hover:text-cream disabled:opacity-40";
   return (
-    <div className="flex shrink-0 gap-2 opacity-45 transition-opacity hover:opacity-100 focus-within:opacity-100">
+    <div className="flex shrink-0 items-center gap-2 opacity-40 transition-opacity focus-within:opacity-100 hover:opacity-100">
+      {err && <span className="max-w-[260px] truncate text-[14px] text-cinnabar">{err}</span>}
       {st === "collecting" && (
         <>
-          <button className={btn} disabled={!!busy} onClick={run("seed", () => actions.seed(6))}>
-            {busy === "seed" ? "拉人中…" : "演示：加入 6 位朋友"}
+          <button className={btn} disabled={!!busy} onClick={run("seed", admin.seed)}>
+            {busy === "seed" ? "拉人中…" : "演示：加入朋友"}
           </button>
-          <button className={btn} disabled={!!busy} onClick={run("plan", actions.plan)}>
+          <button className={btn} disabled={!!busy || state.ju.quorum?.state === "pending"} onClick={run("plan", admin.plan)}>
             {busy === "plan" ? <RotatingText lines={PLAN_LINES} /> : "出方案"}
           </button>
         </>
       )}
-      {st === "voting" && (
-        <button
-          className={btn}
-          disabled={!!busy}
-          onClick={run("confirm", async () => {
-            const o = mostVoted(state.ju);
-            if (o) await actions.confirm(o.poi.id);
-          })}
-        >
-          {busy === "confirm" ? "盖章中…" : `拍板：${mostVoted(state.ju)?.poi.name ?? ""}`}
+      {st === "voting" && rec && (
+        <button className={btn} disabled={!!busy} onClick={run("confirm", () => admin.confirm(rec.id))}>
+          {busy === "confirm" ? "盖章中…" : `拍板：${trunc(rec.poi.name, 10)}`}
         </button>
       )}
     </div>
   );
 }
 
+/* ───────── 主体 ───────── */
 export function BigScreen({
   state,
-  isAdmin,
-  actions,
   joinUrl,
+  admin,
+  selfTest,
+  verify,
   playStamp = true,
 }: {
+  /** 必须是公开视图 */
   state: JuState;
-  isAdmin: boolean;
-  actions: JuActions;
   joinUrl: string;
+  admin?: ScreenAdmin;
+  selfTest: PrivacySelfTest | null;
+  verify?: (id: string) => Promise<VerifyResult>;
   playStamp?: boolean;
 }) {
   const { ju } = state;
-  const members = activeMembers(state);
-  const [overlay, setOverlay] = useState(false);
-  const stampShown = useRef(false);
-  const closeOverlay = useCallback(() => setOverlay(false), []);
+  const [overlay, setOverlay] = useState<"quorum" | "confirmed" | null>(null);
+  const prevStatus = useRef(ju.status);
+  const prevQuorum = useRef(ju.quorum?.state);
+  const closeOverlay = useCallback(() => setOverlay(null), []);
 
+  // 只在"眼看着"成局 / 定局时砸章；刷新页面时不重播
   useEffect(() => {
-    if (ju.status === "confirmed" && !stampShown.current && playStamp) {
-      stampShown.current = true;
-      setOverlay(true);
-    }
-  }, [ju.status, playStamp]);
+    if (playStamp && prevStatus.current !== "confirmed" && ju.status === "confirmed") setOverlay("confirmed");
+    else if (playStamp && prevQuorum.current === "pending" && ju.quorum?.state === "met") setOverlay("quorum");
+    prevStatus.current = ju.status;
+    prevQuorum.current = ju.quorum?.state;
+  }, [ju.status, ju.quorum?.state, playStamp]);
 
-  const chips = useMemo(() => specChips(ju).filter((c) => c.icon !== "📍"), [ju]);
+  const s = ju.spec;
+  const chips = [
+    s.dates?.length ? `📅 ${s.dates.map((d) => dayLabel(d)).join("、")}` : null,
+    s.earliest && s.latest ? `⏰ ${s.earliest}–${s.latest}` : null,
+    s.budgetPerPerson ? `💰 人均 ≤${s.budgetPerPerson}` : null,
+  ].filter(Boolean) as string[];
+
+  const collecting = ju.status === "collecting";
+  const hasPlan = !!ju.plan && (ju.status === "voting" || ju.status === "confirmed");
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-night text-cream">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -left-40 -top-40 size-[700px] rounded-full"
-        style={{ background: "radial-gradient(circle, rgb(226 65 46 / .16), transparent 65%)" }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-60 right-20 size-[800px] rounded-full"
-        style={{ background: "radial-gradient(circle, rgb(242 181 48 / .09), transparent 65%)" }}
-      />
+      <div aria-hidden className="pointer-events-none absolute -left-40 -top-40 size-[700px] rounded-full" style={{ background: "radial-gradient(circle, rgb(226 65 46 / .16), transparent 65%)" }} />
+      <div aria-hidden className="pointer-events-none absolute -bottom-60 right-20 size-[800px] rounded-full" style={{ background: "radial-gradient(circle, rgb(242 181 48 / .09), transparent 65%)" }} />
 
       {/* 头部 */}
-      <header className="relative flex h-[150px] items-center gap-7 px-12">
-        <SealLogo size={78} dark />
+      <header className="relative flex h-[140px] items-center gap-6 px-12">
+        <SealLogo size={74} dark />
         <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-4 text-[22px] font-bold text-cream-faint">
+          <div className="mb-1 flex items-center gap-3 text-[21px] font-bold text-cream-faint">
             <span>AI 局长</span>
             <span className="text-night-line">/</span>
             <span>
-              {categoryEmoji(ju.spec.category)} {ju.spec.category}
+              {categoryEmoji(s.category)} {s.category}
             </span>
             {chips.map((c) => (
-              <span key={c.icon} className="font-num rounded-lg bg-night-3 px-3 py-0.5 text-[19px]">
-                {c.icon} {c.text}
+              <span key={c} className="font-num rounded-lg bg-night-3 px-3 py-0.5 text-[18px]">
+                {c}
               </span>
             ))}
           </div>
-          <h1 className="truncate text-[60px] font-black leading-tight tracking-tight">{ju.title}</h1>
+          <h1 className="truncate text-[56px] font-black leading-tight tracking-tight">{ju.title}</h1>
         </div>
-        {isAdmin && <AdminBar state={state} actions={actions} />}
+        {admin && <AdminBar state={state} admin={admin} />}
+        {!collecting && ju.status !== "cancelled" && joinUrl && (
+          <div className="flex shrink-0 items-center gap-3 rounded-2xl bg-cream py-2 pl-2 pr-4">
+            <QrSvg text={joinUrl} className="size-[92px]" />
+            <span className="text-[18px] font-black leading-tight text-night">
+              扫码
+              <br />
+              看方案
+            </span>
+          </div>
+        )}
         <div
-          className={`flex shrink-0 items-center gap-3 rounded-full px-7 py-3 text-[26px] font-black ${
+          className={`flex shrink-0 items-center gap-3 rounded-full px-6 py-3 text-[24px] font-black ${
             ju.status === "confirmed" ? "bg-cinnabar text-white" : ju.status === "voting" ? "bg-mustard text-night" : "border-2 border-night-line"
           }`}
         >
-          {ju.status === "collecting" && <span className="size-3.5 animate-pulse rounded-full bg-cinnabar" />}
-          {STATUS_TEXT[ju.status] ?? ju.status}
+          {collecting && <span className="size-3.5 animate-pulse rounded-full bg-cinnabar" />}
+          {ju.quorum?.state === "pending" && collecting ? "悄悄凑人中" : (STATUS_TEXT[ju.status] ?? ju.status)}
         </div>
       </header>
 
-      {/* 主体 */}
-      <div className="relative grid h-[880px] grid-cols-[440px_760px_560px] gap-8 px-12 pb-12">
-        {/* 左：二维码 + 人数 */}
-        <div className="flex flex-col gap-6">
-          <div className="rounded-[28px] bg-cream p-7 shadow-[0_0_60px_rgb(242_181_48/.18)]">
-            <QrSvg text={joinUrl} className="aspect-square w-full" />
-            <div className="mt-5 flex items-center justify-between">
-              <span className="text-[40px] font-black text-night">扫码入局</span>
-              <span className="rounded-lg bg-cinnabar px-3 py-1 text-[17px] font-bold text-white">10 秒填完</span>
+      {ju.status === "cancelled" ? (
+        <div className="relative flex h-[900px] flex-col items-center justify-center gap-6 text-center">
+          <span className="text-[120px]">🍃</span>
+          <p className="text-[56px] font-black">这次没凑成，局长悄悄散了</p>
+          <p className="text-[28px] text-cream-faint">谁说了来、谁没来，没有人知道。下次再约。</p>
+        </div>
+      ) : collecting ? (
+        <div className="relative grid h-[900px] grid-cols-[420px_minmax(0,1fr)_600px] gap-7 px-12 pb-10">
+          <div className="flex min-h-0 flex-col gap-6">
+            <div className="rounded-[28px] bg-cream p-6 shadow-[0_0_60px_rgb(242_181_48/.18)]">
+              <QrSvg text={joinUrl} className="aspect-square w-full" />
+              <div className="mt-4 flex items-center justify-between">
+                <span className="text-[36px] font-black text-night">扫码入局</span>
+                <span className="rounded-lg bg-cinnabar px-3 py-1 text-[16px] font-bold text-white">私聊局长</span>
+              </div>
             </div>
+            <Progress state={state} />
           </div>
-          <div className="flex-1 rounded-[28px] border-2 border-night-line bg-night-2 px-7 py-6">
-            <div className="flex items-end gap-3">
-              <span className="text-[24px] font-bold text-cream-faint">已入局</span>
-              <Odometer value={members.length} className="text-[120px] font-bold text-mustard" />
-              <span className="pb-2 text-[24px] font-bold text-cream-faint">
-                人{ju.spec.headcount ? <span className="font-num"> / {ju.spec.headcount}</span> : null}
-              </span>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {members.map((m) => (
-                <span key={m.id} className="animate-pop-in flex size-12 items-center justify-center rounded-full border-2 border-night-line bg-night-3 text-[26px]" title={m.name}>
-                  {m.avatar}
-                </span>
-              ))}
-            </div>
+          <MapBox state={state} />
+          <div className="flex min-h-0 flex-col gap-6">
+            <Panel title="🧠 局长在想什么" right="实时" className="flex-1">
+              <TraceStream trace={ju.trace} />
+            </Panel>
+            <PrivacyPanel state={state} test={selfTest} className="shrink-0" />
           </div>
         </div>
-
-        {/* 中：抽象地图 */}
-        <div className="dot-grid-night relative overflow-hidden rounded-[28px] border-2 border-night-line bg-night-2">
-          <AbstractMap state={state} />
-          <div className="absolute left-7 top-6 text-[22px] font-black text-cream">
-            🗺️ 谁从哪来{ju.plan ? " · 去哪最公平" : ""}
+      ) : (
+        <div className="relative grid h-[900px] grid-cols-[440px_minmax(0,1fr)_720px] gap-7 px-12 pb-10">
+          <div className="flex min-h-0 flex-col gap-6">
+            <Panel title="🧠 局长在想什么" className="flex-1">
+              <TraceStream trace={ju.trace} size="md" max={10} />
+            </Panel>
+            <PrivacyPanel state={state} test={selfTest} className="shrink-0" />
           </div>
-          <div className="absolute bottom-5 left-7 flex gap-5 text-[15px] text-cream-faint">
-            <span>
-              <span className="text-mustard">●</span> 成员
-            </span>
-            {ju.plan && (
-              <>
-                <span>
-                  <span className="text-cinnabar">◆</span> 候选店
-                </span>
-                <span>
-                  <span className="text-mustard">◎</span> 公平中心
-                </span>
-              </>
+          <div className="flex min-h-0 flex-col gap-6">
+            {ju.recap ? (
+              <div className="dot-grid-night relative min-h-0 flex-1 overflow-hidden rounded-[28px] border-2 border-night-line bg-night-2">
+                <PhotoWall state={state} />
+              </div>
+            ) : (
+              <MapBox state={state} />
             )}
-            <span className="opacity-70">抽象地图 · 非真实比例</span>
+            {ju.status === "confirmed" ? <ConfirmedCard state={state} /> : hasPlan && <Recommendation state={state} />}
+          </div>
+          <div className="flex min-h-0 flex-col gap-6">
+            {hasPlan && (
+              <Panel title="👥 每个人 × 每个方案" right="公开满意度 · 只由通勤和时段算出" className="flex-1">
+                <ExperienceMatrix state={state} />
+              </Panel>
+            )}
+            {hasPlan && <AuditPanel state={state} verify={verify} className="shrink-0" />}
           </div>
         </div>
+      )}
 
-        {/* 右：时间热力 + 方案 */}
-        <div className="flex min-h-0 flex-col gap-6">
-          <SlotHeat state={state} compact={ju.status !== "collecting"} />
-          {ju.status === "collecting" && <DietRadar state={state} />}
-          {ju.status === "voting" && ju.plan && <VoteBoard state={state} />}
-          {ju.status === "confirmed" && <ConfirmedCard state={state} />}
+      {overlay && <StampOverlay state={state} kind={overlay} onClose={closeOverlay} />}
+    </div>
+  );
+}
+
+function MapBox({ state }: { state: JuState }) {
+  const { ju } = state;
+  const pending = ju.quorum?.state === "pending";
+  return (
+    <div className="dot-grid-night relative min-h-0 flex-1 overflow-hidden rounded-[28px] border-2 border-night-line bg-night-2">
+      <AbstractMap state={state} />
+      <div className="absolute left-7 top-6 text-[22px] font-black text-cream">🗺️ 谁从哪来{ju.plan ? " · 去哪最公平" : ""}</div>
+      {pending && (
+        <div className="absolute inset-x-7 bottom-16 rounded-2xl border border-night-line bg-night/80 px-5 py-3 text-[18px] text-cream-faint">
+          凑够人之前，地图上只有发起人 —— 谁在局里，现在谁也不知道。
         </div>
+      )}
+      <div className="absolute bottom-5 left-7 flex gap-5 text-[15px] text-cream-faint">
+        <span>
+          <span className="text-mustard">●</span> 成员
+        </span>
+        {ju.plan && (
+          <>
+            <span>
+              <span className="text-cinnabar">◆</span> 候选店
+            </span>
+            <span>
+              <span className="text-mustard">◎</span> 公平中心
+            </span>
+          </>
+        )}
+        <span className="opacity-70">抽象地图 · 非真实比例</span>
       </div>
-
-      {overlay && <StampOverlay state={state} onClose={closeOverlay} />}
     </div>
   );
 }

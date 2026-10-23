@@ -1,40 +1,98 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { useJu } from "@/lib/client/useJu";
-import { BigScreen } from "@/components/screen/BigScreen";
+import { store } from "@/lib/client/storage";
+import { BigScreen, type ScreenAdmin } from "@/components/screen/BigScreen";
 import { Stage } from "@/components/screen/bits";
-import { ErrorJu, LoadingJu } from "@/components/ju/PageStates";
+import { usePublicJu } from "@/components/screen/usePublicJu";
+import { useSelfTest } from "@/components/screen/PlanPanels";
+import { TIER_PARAM, organizerApi, tierUrl } from "@/components/organizer/api";
+import { SealLogo } from "@/components/ui";
+
+function Center({ children }: { children: React.ReactNode }) {
+  return <div className="fixed inset-0 flex flex-col items-center justify-center gap-5 bg-night text-cream">{children}</div>;
+}
 
 export default function ScreenPage() {
   const { id } = useParams<{ id: string }>();
-  const { state, loadError, offline, adminToken, actions } = useJu(id);
-  const [joinUrl, setJoinUrl] = useState("");
+  const { state, loadError, offline, refresh } = usePublicJu(id);
+  const { test } = useSelfTest();
+  const [origin, setOrigin] = useState("");
+  const [tier, setTier] = useState<string | null>(null);
+  const [adminToken, setAdminToken] = useState<string | null>(null);
+  const joinUrl = origin ? tierUrl(origin, id, tier ?? undefined) : "";
 
   useEffect(() => {
-    // 路演时 localhost 手机扫不到：支持 ?origin=http://192.168.x.x:3000 覆盖二维码域名
-    // 默认就是当前域名（生产部署直接可用）
-    let origin = window.location.origin;
-    const q = new URLSearchParams(window.location.search).get("origin");
+    // 路演时 localhost 手机扫不到：支持 ?origin=http://192.168.x.x:3003 覆盖二维码域名
+    const sp = new URLSearchParams(window.location.search);
+    let o = window.location.origin;
+    const q = sp.get("origin");
     if (q) {
       try {
         const u = new URL(q);
-        if (u.protocol === "http:" || u.protocol === "https:") origin = u.origin;
+        if (u.protocol === "http:" || u.protocol === "https:") o = u.origin;
       } catch {
-        /* 非法参数忽略，继续用当前域名 */
+        /* 非法参数忽略 */
       }
     }
-    setJoinUrl(`${origin}/j/${id}`);
+    setOrigin(o);
+    setTier(sp.get(TIER_PARAM));
+    const at = store.getAdmin(id);
+    setAdminToken(at);
+    // 发起人本机：二维码带上核心圈的邀请 token（不带的话名额满后扫码的人会进候补）。
+    // 只取这一个 token，发起人视图的其余内容一律不上大屏。
+    if (at && !sp.get(TIER_PARAM)) {
+      organizerApi
+        .getJu(id, at)
+        .then((s) => {
+          const t = s.ju.admin?.tiers.slice().sort((a, b) => a.tier - b.tier)[0]?.token;
+          if (t) setTier(t);
+        })
+        .catch(() => {});
+    }
   }, [id]);
 
+  // 发起人本机打开大屏时才有隐藏按钮；动作返回的发起人视图一律丢弃，只刷新公开视图
+  const admin = useMemo<ScreenAdmin | undefined>(() => {
+    if (!adminToken) return undefined;
+    return {
+      seed: async () => {
+        await organizerApi.devSeed(id, adminToken);
+        await refresh();
+      },
+      plan: async () => {
+        await organizerApi.plan(id, adminToken);
+        await refresh();
+      },
+      confirm: async (pid) => {
+        await organizerApi.confirm(id, adminToken, pid);
+        await refresh();
+      },
+    };
+  }, [adminToken, id, refresh]);
+
   if (!state) {
-    if (loadError) return <ErrorJu msg={loadError.msg} status={loadError.status} onRetry={actions.refresh} />;
-    return <LoadingJu dark />;
+    return (
+      <Center>
+        <SealLogo size={72} dark />
+        {loadError ? (
+          <>
+            <p className="text-[28px] font-black">{loadError.msg}</p>
+            <button onClick={refresh} className="rounded-full border-2 border-night-line px-6 py-2 text-[18px] font-bold text-cream-faint">
+              再试一次
+            </button>
+          </>
+        ) : (
+          <p className="animate-pulse text-[22px] font-bold text-cream-faint">局长正在上台…</p>
+        )}
+      </Center>
+    );
   }
+
   return (
     <Stage>
-      <BigScreen state={state} isAdmin={!!adminToken} actions={actions} joinUrl={joinUrl} />
+      <BigScreen state={state} joinUrl={joinUrl} admin={admin} selfTest={test} />
       {offline && <div className="absolute left-12 top-3 text-[15px] text-cream-faint">网络重连中…</div>}
     </Stage>
   );

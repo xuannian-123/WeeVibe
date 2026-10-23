@@ -173,33 +173,93 @@ export function SealLogo({ size = 40, dark }: { size?: number; dark?: boolean })
   );
 }
 
-/* ───────── 底部弹层（二次确认） ───────── */
+/* ───────── 底部弹层 ───────── */
 export function Sheet({
   open,
   onClose,
   title,
+  subtitle,
   children,
 }: {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title: ReactNode;
+  subtitle?: ReactNode;
   children: ReactNode;
 }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal aria-label={title}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal>
       <button aria-label="关闭" className="animate-fade-in absolute inset-0 bg-ink/45" onClick={onClose} />
-      <div className="sticker animate-rise safe-bottom relative w-full max-w-[480px] rounded-b-none px-5 pt-5">
-        <h3 className="mb-3 text-xl font-black">{title}</h3>
-        {children}
+      <div className="sticker animate-rise safe-bottom relative flex max-h-[90dvh] w-full max-w-[480px] flex-col rounded-b-none pt-5">
+        <div className="flex items-start gap-3 px-5 pb-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-xl font-black leading-snug">{title}</h3>
+            {subtitle && <p className="mt-0.5 text-[13px] text-ink-soft">{subtitle}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="关闭"
+            className="-mr-2 -mt-1 flex size-11 shrink-0 items-center justify-center rounded-full text-xl text-ink-soft"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5">{children}</div>
       </div>
     </div>
+  );
+}
+
+/* ───────── 私密标记：只有局长知道 ───────── */
+export function LockNote({ children = "只有局长知道", dark, className = "" }: { children?: ReactNode; dark?: boolean; className?: string }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-bold ${
+        dark ? "bg-night-3 text-mustard" : "bg-ink text-mustard"
+      } ${className}`}
+    >
+      <svg width="11" height="12" viewBox="0 0 11 12" aria-hidden fill="currentColor">
+        <path d="M5.5 0A3.3 3.3 0 0 0 2.2 3.3V5H1.6C.7 5 0 5.7 0 6.6v3.8c0 .9.7 1.6 1.6 1.6h7.8c.9 0 1.6-.7 1.6-1.6V6.6C11 5.7 10.3 5 9.4 5h-.6V3.3A3.3 3.3 0 0 0 5.5 0Zm-1.9 5V3.3a1.9 1.9 0 1 1 3.8 0V5H3.6Z" />
+      </svg>
+      {children}
+    </span>
+  );
+}
+
+/* ───────── 打字中 ───────── */
+export function TypingDots({ className = "" }: { className?: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 ${className}`} aria-label="局长正在输入">
+      {[0, 1, 2].map((i) => (
+        <span key={i} className="animate-typing size-2 rounded-full bg-ink-soft" style={{ animationDelay: `${i * 160}ms` }} />
+      ))}
+    </span>
+  );
+}
+
+/* ───────── 满意度条 ───────── */
+export function Meter({ value, tone = "ink", className = "" }: { value: number; tone?: "ink" | "red" | "gold" | "jade"; className?: string }) {
+  const color = tone === "red" ? "bg-cinnabar" : tone === "gold" ? "bg-mustard" : tone === "jade" ? "bg-jade" : "bg-ink";
+  return (
+    <span className={`relative block h-2.5 overflow-hidden rounded-full bg-paper-deep ${className}`}>
+      <span
+        className={`absolute inset-y-0 left-0 rounded-full ${color}`}
+        style={{ width: `${Math.max(3, Math.min(100, value))}%`, transition: "width .6s cubic-bezier(.3,1.2,.5,1)" }}
+      />
+    </span>
   );
 }
 

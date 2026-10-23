@@ -223,13 +223,13 @@ function BigStat({
       <div className={`relative text-[28px] font-black ${accent ? "text-night" : "text-cream"}`}>{label}</div>
       <div className="relative mt-3 flex items-end gap-3">
         {value === null ? (
-          <span className={`font-num text-[150px] font-bold leading-none ${accent ? "text-night/35" : "text-cream-faint"}`}>?</span>
+          <span className={`font-num text-[124px] font-bold leading-none ${accent ? "text-night/35" : "text-cream-faint"}`}>?</span>
         ) : (
-          <Odometer value={value} className={`text-[150px] font-bold ${accent ? "text-night" : "text-mustard"}`} />
+          <Odometer value={value} className={`text-[124px] font-bold ${accent ? "text-night" : "text-mustard"}`} />
         )}
         <span className={`pb-4 text-[30px] font-bold ${accent ? "text-night/70" : "text-cream-faint"}`}>{unit}</span>
       </div>
-      <div className={`relative mt-3 text-[20px] ${accent ? "text-night/75" : "text-cream-faint"}`}>{sub}</div>
+      <div className={`relative mt-3 text-[18px] leading-snug ${accent ? "text-night/75" : "text-cream-faint"}`}>{sub}</div>
     </section>
   );
 }
@@ -286,6 +286,10 @@ export function StatsScreen({ stats, error }: { stats: Stats | null; error?: boo
   const total72 = hourly.reduce((s, r) => s + Math.max(0, num(r.joins)), 0);
   const perJu = juCount > 0 ? Math.round((members / juCount) * 10) / 10 : null;
   const rate = juCount > 0 ? Math.round((confirmed / juCount) * 100) : null;
+  const share =
+    stats && typeof stats.privateShareRate === "number" && Number.isFinite(stats.privateShareRate)
+      ? Math.round(Math.max(0, Math.min(1, stats.privateShareRate)) * 100)
+      : null;
   const updated = stats?.generatedAt ? new Date(stats.generatedAt) : null;
   const updatedText = updated && !Number.isNaN(updated.getTime()) ? updated.toLocaleTimeString("zh-CN", { hour12: false, timeZone: "Asia/Shanghai" }) : "";
 
@@ -317,7 +321,7 @@ export function StatsScreen({ stats, error }: { stats: Stats | null; error?: boo
         </div>
       </header>
 
-      <div className="relative grid h-[300px] grid-cols-3 gap-8 px-12">
+      <div className="relative grid h-[300px] grid-cols-4 gap-7 px-12">
         <BigStat
           label="真实成局"
           value={stats ? confirmed : null}
@@ -325,7 +329,7 @@ export function StatsScreen({ stats, error }: { stats: Stats | null; error?: boo
           sub={juCount > 0 ? <>共 <b className="font-num text-cream">{juCount}</b> 个真实局，盖章率 <b className="font-num text-cream">{rate}%</b></> : "两人以上的真局才算数"}
         >
           <div className="pointer-events-none absolute -right-8 -top-6 rotate-[-12deg] opacity-80" style={{ filter: "drop-shadow(0 0 18px rgb(226 65 46 / .45))" }}>
-            <Stamp size={170} />
+            <Stamp size={140} />
           </div>
         </BigStat>
         <BigStat
@@ -335,11 +339,21 @@ export function StatsScreen({ stats, error }: { stats: Stats | null; error?: boo
           sub={perJu !== null ? <>平均每个局 <b className="font-num text-cream">{perJu}</b> 人</> : "演示成员不计入"}
         />
         <BigStat
+          label="私下说了真话"
+          value={share}
+          unit="%"
+          sub={share !== null ? "的人私下告诉了局长说不出口的话（预算 / 门禁 / 不想去）" : "等第一位朋友私聊完就有了"}
+        >
+          <div className="pointer-events-none absolute -right-3 -top-3 text-[90px] opacity-20" aria-hidden>
+            🤫
+          </div>
+        </BigStat>
+        <BigStat
           accent
-          label={median !== null ? <>朋友平均 <span className="font-num">{median}</span> 秒填完</> : "朋友平均几秒填完？"}
+          label={median !== null ? <>朋友平均 <span className="font-num">{median}</span> 秒入局</> : "朋友平均几秒入局？"}
           value={median}
           unit="秒"
-          sub={median !== null ? "中位数 · 从打开链接到提交表单" : "等第一位朋友填完就有了"}
+          sub={median !== null ? "中位数 · 从打开链接到私聊完成" : "等第一位朋友聊完就有了"}
         />
       </div>
 

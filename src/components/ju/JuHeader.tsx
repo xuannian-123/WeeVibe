@@ -26,10 +26,24 @@ export function categoryEmoji(cat: string): string {
   return "🍽️";
 }
 
-export function JuHeader({ state }: { state: JuState }) {
+export function JuHeader({ state, compact }: { state: JuState; compact?: boolean }) {
   const { ju } = state;
   const org = organizer(state);
   const active = activeMembers(state);
+  const hideNames = ju.quorum?.state === "pending";
+
+  if (compact) {
+    return (
+      <header className="mt-1 flex items-center gap-2.5 rounded-xl border-2 border-ink bg-card px-3 py-2">
+        <span className="text-xl" aria-hidden>
+          {categoryEmoji(ju.spec.category)}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[15px] font-black">{ju.title}</span>
+        <span className="shrink-0 text-[12px] text-ink-faint">{org?.name ?? ju.organizerName ?? ""} 发起</span>
+      </header>
+    );
+  }
+
   return (
     <header className="sticker relative mt-2 overflow-hidden p-4 pr-5">
       <span
@@ -38,7 +52,7 @@ export function JuHeader({ state }: { state: JuState }) {
       >
         {categoryEmoji(ju.spec.category)} {ju.spec.category}
       </span>
-      <h1 className="mb-3 pr-24 text-[28px] font-black leading-[1.15] tracking-tight break-words">{ju.title}</h1>
+      <h1 className="mb-3 pr-24 text-[26px] font-black leading-[1.15] tracking-tight break-words">{ju.title}</h1>
       <div className="mb-3 flex flex-wrap gap-1.5">
         {specChips(ju).map((c) => (
           <span
@@ -52,12 +66,14 @@ export function JuHeader({ state }: { state: JuState }) {
       </div>
       <div className="flex items-center justify-between gap-3 border-t-2 border-dashed border-line pt-3">
         <span className="min-w-0 truncate text-[14px] text-ink-soft">
-          局长 <b className="text-ink">{org?.name ?? ju.organizerName ?? "神秘人"}</b> 发起
+          <b className="text-ink">{org?.name ?? ju.organizerName ?? "神秘人"}</b> 发起
         </span>
-        {active.length > 0 ? (
+        {hideNames ? (
+          <span className="shrink-0 text-[13px] text-ink-faint">🙈 成局后揭晓名单</span>
+        ) : active.length > 0 ? (
           <div className="flex shrink-0 items-center gap-2">
             <AvatarStack members={active} max={5} size={30} />
-            <span className="font-num text-[14px] font-bold">{active.length}人</span>
+            <span className="font-num text-[14px] font-bold">{state.counts?.in ?? active.length}人</span>
           </div>
         ) : (
           <span className="shrink-0 text-[13px] text-ink-faint">还没人入局</span>
