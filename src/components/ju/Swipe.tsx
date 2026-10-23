@@ -156,6 +156,7 @@ export function SwipeView({ state, me, actions }: { state: JuState; me: Member; 
         <div>
           <h2 className="text-[22px] font-black">刷几家店</h2>
           <p className="text-[13px] text-ink-soft">右滑想去 · 上滑超想去 · 左滑不想</p>
+          <p className="mt-0.5 text-[12px] text-ink-faint">这不是投票，是告诉局长你的口味；方案出来后再一起投票。</p>
         </div>
         {deck && total > 0 && (
           <span className="font-num text-[15px] font-bold">

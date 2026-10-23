@@ -256,6 +256,9 @@ function Voting({ c, msgs }: { c: Ctx; msgs: GroupMessages | null }) {
   return (
     <>
       <Card title="🗳️ 大家在投" hint={<span className="font-num">{voted}/{state.counts.in} 已投 · 过半自动定局</span>}>
+        <p className="mb-2.5 text-[12.5px] leading-relaxed text-ink-faint">
+          你自己也要投一票的话，在页面上方的方案里投。这里的“拍板”是发起人直接定，不算投票。
+        </p>
         <ul className="space-y-2.5">
           {plan.proposals.map((p) => {
             const n = tally[p.id] ?? 0;
@@ -271,7 +274,7 @@ function Voting({ c, msgs }: { c: Ctx; msgs: GroupMessages | null }) {
                   {slotLabel(p.slot)} · {p.attendCount} 人到{p.poi.costPerPerson != null ? ` · 人均 ${p.poi.costPerPerson}` : ""}
                 </div>
                 <Button variant={p.recommended ? "primary" : "secondary"} size="sm" className="mt-2 w-full" onClick={() => setPick(p)}>
-                  就它了，盖章
+                  不等投票，直接拍板
                 </Button>
               </li>
             );
@@ -304,9 +307,30 @@ function Voting({ c, msgs }: { c: Ctx; msgs: GroupMessages | null }) {
         </Button>
       </Card>
       <Broadcast msgs={msgs} state={state} />
-      <Sheet open={!!pick} onClose={() => setPick(null)} title="盖章定局？">
+      <Sheet open={!!pick} onClose={() => setPick(null)} title="直接拍板定局？">
         {pick && (
           <div className="pb-4">
+            {voted < state.counts.in && (
+              <div className="mb-3 rounded-xl border-2 border-cinnabar bg-cinnabar-soft p-3">
+                <p className="text-[14.5px] font-black text-cinnabar">
+                  {voted === 0 ? `还没有人投票（0/${state.counts.in}）` : `还有 ${state.counts.in - voted} 人没投票（${voted}/${state.counts.in}）`}
+                </p>
+                <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">现在拍板就不等大家投了，定局卡上会写“发起人拍板”。</p>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2.5 w-full"
+                  loading={busy === "nudge"}
+                  onClick={run("nudge", async () => {
+                    const r = await api.nudge(ju.id, admin);
+                    toast(r.nudged ? `局长私下催了 ${r.nudged} 个人` : "大家都投了", "ok");
+                    setPick(null);
+                  })}
+                >
+                  先让局长催一下大家
+                </Button>
+              </div>
+            )}
             <p className="text-[15px] leading-relaxed text-ink-soft">
               {slotLabel(pick.slot)}，{pick.poi.name}。盖章后局长会通知所有人，并给每个人发专属行程卡。
             </p>

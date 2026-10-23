@@ -62,11 +62,14 @@ export function ExperienceMatrix({ state }: { state: JuState }) {
               <div className="font-num mt-1 flex items-center gap-2 text-[14px] text-cream-faint">
                 <span>{slotLabel(p.slot).split(" ").slice(-1)[0]}</span>
                 {p.poi.costPerPerson != null && <span>¥{p.poi.costPerPerson}</span>}
-                {ju.status !== "collecting" && (
+                {ju.status === "voting" || (ju.status === "confirmed" && Object.keys(ju.votes ?? {}).length > 0) ? (
                   <span className="ml-auto text-[18px] font-bold text-mustard">
                     {tally[p.id] ?? 0}
                     <span className="text-[12px] text-cream-faint">票</span>
                   </span>
+                ) : (
+                  ju.status === "confirmed" &&
+                  p.id === ju.confirmedProposalId && <span className="ml-auto text-[13px] font-bold text-mustard">发起人拍板</span>
                 )}
               </div>
             </div>

@@ -362,6 +362,10 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
   priv.firstPlanAt ??= now.toISOString();
 
   if (deps.announce !== false) announceAt(ju, planText(publicFacts(ju, members), replan), now);
+  for (const m of ins) {
+    if (ju.votes[m.id]) continue;
+    notify(m, "nudge", replan ? "局长更新了方案，去看看还投不投原来那个？" : `局长出了 ${polished.proposals.length} 个方案，去投一票吧，过半就自动定局。`, now);
+  }
 }
 
 // ---------------------------------------------------------------- 投票 / 定局
