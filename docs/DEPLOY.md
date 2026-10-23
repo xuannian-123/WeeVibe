@@ -22,6 +22,15 @@ bash scripts/deploy.sh
 | `/etc/nginx/sites-available/juzhang` | 反向代理到 127.0.0.1:3100；HTTPS 由 certbot 管理并自动续期 |
 
 改 key：`sudo nano /etc/juzhang.env && sudo systemctl restart juzhang`
+
+v3 上线前 `/etc/juzhang.env` 要补两行（否则看图走示例、照片随发布目录丢失）：
+
+```
+LLM_VISION_MODEL=deepseek-flash
+JUZHANG_PHOTOS_DIR=/var/lib/juzhang/photos
+```
+
+`/var/lib/juzhang/photos` 要归 `juzhang` 用户所有：`sudo install -d -o juzhang -g juzhang /var/lib/juzhang/photos`
 看日志：`sudo journalctl -u juzhang -f`
 
 ## 注意
