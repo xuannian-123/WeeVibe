@@ -27,6 +27,9 @@ export function TopBar({ status, offline, right }: { status?: string; offline?: 
       <div className="flex items-center gap-2">
         {offline && <span className="text-[12px] text-ink-faint">重连中…</span>}
         {status && <StatusBadge status={status} />}
+        <Link href="/me" className="min-h-10 px-1 py-2 text-[13px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4">
+          我的局
+        </Link>
         {right}
       </div>
     </div>

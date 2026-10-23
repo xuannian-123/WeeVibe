@@ -20,12 +20,21 @@ const SHOT_LINES = ["局长正在看截图…", "谁说了去，谁说了不去�
 type Mode = "text" | "shot";
 
 function TopBar() {
+  // 本地存的局数在客户端才知道，挂载后再读，避免水合不一致
+  const [mine, setMine] = useState(0);
+  useEffect(() => setMine(store.myJu().length), []);
   return (
     <div className="flex h-14 items-center gap-2.5">
       <SealLogo size={34} />
       <span className="text-[17px] font-black tracking-tight">AI 局长</span>
       <Link href="/firewall" className="ml-auto text-[13px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4">
         局长怎么保密？
+      </Link>
+      <Link
+        href="/me"
+        className="pressable min-h-9 rounded-full border-2 border-ink bg-card px-3 py-1.5 text-[13px] font-black shadow-sticker-sm"
+      >
+        我的局{mine > 0 ? ` · ${mine}` : ""}
       </Link>
     </div>
   );

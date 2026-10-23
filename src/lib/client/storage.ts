@@ -68,6 +68,29 @@ export const store = {
     return pid;
   },
 
+  /* ── 我的局：这台设备上发起过 / 加入过的局（从 token 键里扫出来） ── */
+  myJu: (): { id: string; admin: boolean; member: boolean }[] => {
+    const seen = new Map<string, { id: string; admin: boolean; member: boolean }>();
+    try {
+      const ls = window.localStorage;
+      for (let i = 0; i < ls.length; i++) {
+        const m = /^jz:(admin|mtoken):(.+)$/.exec(ls.key(i) ?? "");
+        if (!m) continue;
+        const e = seen.get(m[2]) ?? { id: m[2], admin: false, member: false };
+        if (m[1] === "admin") e.admin = true;
+        else e.member = true;
+        seen.set(m[2], e);
+      }
+    } catch {
+      /* 隐私模式读不了就当没有 */
+    }
+    return [...seen.values()];
+  },
+  /** 从“我的局”里移除（局不存在了 / 用户自己删） */
+  forget: (id: string) => {
+    for (const k of [`jz:admin:${id}`, `jz:mtoken:${id}`, `jz:member:${id}`]) set(k, null);
+  },
+
   /* ── 页面小状态 ── */
   getJson,
   setJson: (key: string, v: unknown) => set(key, v === null ? null : JSON.stringify(v)),
