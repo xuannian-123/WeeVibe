@@ -69,10 +69,248 @@ export const llmDietJsonSchema = {
   properties: { tags: { type: "array", items: { type: "string", enum: [...DIET_TAGS] } } },
 } as const;
 
-export const llmBlurbSchema = z.object({ blurbs: z.array(z.string()) });
-export const llmBlurbJsonSchema = {
+// ---------------------------------------------------------------- #3 群聊截图
+
+const SAID = ["yes", "no", "maybe"] as const;
+
+export const llmScreenshotSchema = llmParseSchema.extend({
+  /** 群里说的日期原话，如 "这周六"，交给规则解析成具体日期 */
+  dateText: nullToUndef(z.string().max(40)),
+  seeds: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(20),
+        said: z.enum(SAID),
+        quote: nullToUndef(z.string().max(120)),
+        hint: nullToUndef(z.string().max(60)),
+      }),
+    )
+    .max(30),
+});
+
+export const llmScreenshotJsonSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["blurbs"],
-  properties: { blurbs: { type: "array", items: { type: "string" } } },
+  required: [...llmParseJsonSchema.required, "dateText", "seeds"],
+  properties: {
+    ...llmParseJsonSchema.properties,
+    dateText: {
+      anyOf: [{ type: "string" }, { type: "null" }],
+      description: "群里提到的日期原话，如“这周六”“明晚”；没提到给 null",
+    },
+    seeds: {
+      type: "array",
+      description: "群里参与讨论的每个人（发起人也算），按出现顺序",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "said", "quote", "hint"],
+        properties: {
+          name: { type: "string", description: "截图里显示的昵称，原样照抄" },
+          said: { type: "string", enum: [...SAID], description: "yes=说了去 / no=说不去 / maybe=没表态或不确定" },
+          quote: { anyOf: [{ type: "string" }, { type: "null" }], description: "最能代表态度的一句原话" },
+          hint: {
+            anyOf: [{ type: "string" }, { type: "null" }],
+            description: "跟时间安排有关的提示，如“周六加班到 6 点”；没有给 null",
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+// ---------------------------------------------------------------- #7 课表
+
+export const llmScheduleSchema = z.object({
+  busy: z
+    .array(
+      z.object({
+        weekday: z.number().int().min(1).max(7),
+        from: hhmm,
+        to: hhmm,
+        label: nullToUndef(z.string().max(30)),
+      }),
+    )
+    .max(80),
+});
+
+export const llmScheduleJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["busy"],
+  properties: {
+    busy: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["weekday", "from", "to", "label"],
+        properties: {
+          weekday: { type: "integer", description: "1=周一 … 7=周日" },
+          from: { type: "string", description: "开始 HH:mm" },
+          to: { type: "string", description: "结束 HH:mm" },
+          label: { anyOf: [{ type: "string" }, { type: "null" }], description: "课程名" },
+        },
+      },
+    },
+  },
+} as const;
+
+// ---------------------------------------------------------------- #15 小票
+
+export const RECEIPT_TAGS = ["alcohol", "spicy", "meat", "beef", "seafood", "offal", "drink", "shared"] as const;
+
+export const llmReceiptSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(40),
+        price: z.number().min(0).max(100000),
+        qty: z.number().min(0.01).max(1000),
+        tags: z.array(z.string()),
+      }),
+    )
+    .max(80),
+  total: nullToUndef(z.number().min(0).max(1000000)),
+  serviceFee: nullToUndef(z.number().min(0).max(100000)),
+  discount: nullToUndef(z.number().min(0).max(100000)),
+});
+
+export const llmReceiptJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["items", "total", "serviceFee", "discount"],
+  properties: {
+    items: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "price", "qty", "tags"],
+        properties: {
+          name: { type: "string", description: "菜名，原样照抄" },
+          price: { type: "number", description: "单价（元）" },
+          qty: { type: "number", description: "数量" },
+          tags: { type: "array", items: { type: "string", enum: [...RECEIPT_TAGS] } },
+        },
+      },
+    },
+    total: { anyOf: [{ type: "number" }, { type: "null" }], description: "实付总额" },
+    serviceFee: { anyOf: [{ type: "number" }, { type: "null" }], description: "服务费 / 茶位费 / 包间费合计" },
+    discount: { anyOf: [{ type: "number" }, { type: "null" }], description: "优惠 / 折扣 / 抹零合计（正数）" },
+  },
+} as const;
+
+// ---------------------------------------------------------------- 私聊
+
+export const llmChatSchema = z.object({
+  reply: z.string().trim().min(1).max(200),
+  rsvp: nullToUndef(z.enum(["yes", "no"])),
+  placeName: nullToUndef(z.string().trim().max(30)),
+  /** 用户说的时间安排：每个候选日期一条 */
+  availability: nullToUndef(
+    z.array(
+      z.object({
+        date: ymd,
+        from: hhmm,
+        homeBy: nullToUndef(hhmm),
+        pref: z.enum(["best", "ok", "meh"]),
+      }),
+    ),
+  ),
+  dietTags: nullToUndef(z.array(z.enum(DIET_TAGS))),
+  budgetMax: nullToUndef(z.number().min(10).max(5000)),
+  note: nullToUndef(z.string().trim().max(80)),
+  noAlcohol: nullToUndef(z.boolean()),
+  skipItems: nullToUndef(z.array(z.string().trim().min(1).max(12)).max(10)),
+  wantsAutofill: nullToUndef(z.boolean()),
+});
+
+const nullable = (t: Record<string, unknown>) => ({ anyOf: [t, { type: "null" }] });
+
+export const llmChatJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "reply", "rsvp", "placeName", "availability", "dietTags", "budgetMax", "note", "noAlcohol", "skipItems",
+    "wantsAutofill",
+  ],
+  properties: {
+    reply: { type: "string", description: "局长的回复，1-3 句，≤80 字" },
+    rsvp: nullable({ type: "string", enum: ["yes", "no"] }),
+    placeName: nullable({ type: "string", description: "用户说的出发地点名，如“漕河泾”" }),
+    availability: nullable({
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["date", "from", "homeBy", "pref"],
+        properties: {
+          date: { type: "string", description: "YYYY-MM-DD，只能是候选日期之一" },
+          from: { type: "string", description: "最早能出发 HH:mm" },
+          homeBy: nullable({ type: "string", description: "几点前要回到出发地 HH:mm" }),
+          pref: { type: "string", enum: ["best", "ok", "meh"] },
+        },
+      },
+    }),
+    dietTags: nullable({ type: "array", items: { type: "string", enum: [...DIET_TAGS] } }),
+    budgetMax: nullable({ type: "number", description: "人均上限（元）" }),
+    note: nullable({ type: "string", description: "其他想让局长知道的约束摘要" }),
+    noAlcohol: nullable({ type: "boolean", description: "明确说了不喝酒 / 开车" }),
+    skipItems: nullable({ type: "array", items: { type: "string" }, description: "明确说了不吃的菜" }),
+    wantsAutofill: nullable({ type: "boolean", description: "说了“都行 / 随便 / 你定”" }),
+  },
+} as const;
+
+// ---------------------------------------------------------------- 公开文案
+
+export const llmPolishSchema = z.object({
+  blurbs: z.array(z.string()),
+  recommendation: z.string().trim().min(1).max(160),
+});
+export const llmPolishJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["blurbs", "recommendation"],
+  properties: {
+    blurbs: { type: "array", items: { type: "string" } },
+    recommendation: { type: "string" },
+  },
+} as const;
+
+export const llmGroupSchema = z.object({
+  broadcast: z.string().trim().min(1).max(600),
+  reservationScript: nullToUndef(z.string().trim().max(400)),
+  reservationDialog: nullToUndef(
+    z
+      .array(z.object({ who: z.enum(["局长", "店员"]), text: z.string().trim().min(1).max(120) }))
+      .min(6)
+      .max(10),
+  ),
+});
+export const llmGroupJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["broadcast", "reservationScript", "reservationDialog"],
+  properties: {
+    broadcast: { type: "string" },
+    reservationScript: nullable({ type: "string" }),
+    reservationDialog: nullable({
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["who", "text"],
+        properties: { who: { type: "string", enum: ["局长", "店员"] }, text: { type: "string" } },
+      },
+    }),
+  },
+} as const;
+
+export const llmRecapSchema = z.object({ recap: z.string().trim().min(1).max(240) });
+export const llmRecapJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["recap"],
+  properties: { recap: { type: "string" } },
 } as const;

@@ -1,5 +1,5 @@
 // 规则兜底：没有 LLM 或 LLM 出错时用。纯函数、确定性，便于单测。
-import type { DietTag, JuSpec, Member, Plan, PlanOption } from "../types";
+import type { DietTag, JuSpec } from "../types";
 import { NUM_RE_SRC, parseCnNumber } from "./cn-number";
 import {
   addDays,
@@ -14,7 +14,7 @@ import {
 
 // ---------------------------------------------------------------- 品类
 
-type Kind = "food" | "sport" | "fun" | "drink" | "outdoor";
+export type Kind = "food" | "sport" | "fun" | "drink" | "outdoor";
 type CategoryDef = { category: string; kind: Kind; re: RegExp; keywords: string[]; duration: number };
 
 // 顺序有意义：越具体越靠前
@@ -161,7 +161,7 @@ function nextWeek(now: ShNow, isoDow: number, weeks = 1): string {
   return addDays(now.ymd, 7 * weeks - now.isoDow + isoDow);
 }
 
-function detectDates(text: string, now: ShNow): DateHit | undefined {
+export function detectDates(text: string, now: ShNow): DateHit | undefined {
   const dates: string[] = [];
   const labels: string[] = [];
   const add = (d: string, label: string) => {
@@ -284,7 +284,7 @@ function hourWithPeriod(h: number, period: string | undefined, kind: Kind | unde
   return h;
 }
 
-function detectWindow(text: string, kind: Kind | undefined): Window | undefined {
+export function detectWindow(text: string, kind: Kind | undefined): Window | undefined {
   const periodRe = "(凌晨|早上|早晨|上午|中午|下午|傍晚|晚上|今晚|明晚|晚|夜里)?";
   const timeRe = `(${NUM})\\s*(?:点|:|：|时)\\s*(半|一刻|(\\d{1,2}))?`;
 
@@ -460,7 +460,7 @@ export function charLen(s: string): number {
   return Array.from(s).length;
 }
 
-function fit(parts: string[], max = BLURB_MAX): string {
+export function fit(parts: string[], max = BLURB_MAX): string {
   let out = "";
   for (const p of parts) {
     if (!p) continue;
@@ -471,49 +471,10 @@ function fit(parts: string[], max = BLURB_MAX): string {
   return out || Array.from(parts.find(Boolean) ?? "").slice(0, max).join("");
 }
 
-function farthest(opt: PlanOption, members: Member[]): { name: string; minutes: number } | undefined {
-  const c = [...opt.commutes].sort((a, b) => b.minutes - a.minutes)[0];
-  if (!c) return undefined;
-  const m = members.find((x) => x.id === c.memberId);
-  return { name: m?.name ?? "最远的人", minutes: Math.round(c.minutes) };
-}
-
 /** 按最长通勤分档：≤15 才说“近”，16–25 说“不算远”，>25 不提“近” */
 export function commuteHead(maxMinutes: number): string | undefined {
   const m = Math.round(maxMinutes);
   if (m <= 15) return "离大家都近";
   if (m <= 25) return "大家都不算远";
   return undefined;
-}
-
-export function ruleBlurbs(plan: Plan, members: Member[]): string[] {
-  const opts = plan.options;
-  if (opts.length === 0) return [];
-  const costs = opts.map((o) => o.poi.costPerPerson).filter((c): c is number => c !== undefined);
-  const minCost = costs.length > 1 && new Set(costs).size > 1 ? Math.min(...costs) : undefined;
-  const ratings = opts.map((o) => o.poi.rating).filter((r): r is number => !!r);
-  const maxRating = ratings.length > 1 && new Set(ratings).size > 1 ? Math.max(...ratings) : undefined;
-
-  return opts.map((o, i) => {
-    const far = farthest(o, members);
-    const minutes = far?.minutes ?? Math.round(o.maxCommute);
-    const who = far ? `最远的${far.name}` : "最远";
-    const farPart = minutes <= 20 ? `${who}也就${minutes}分钟` : `${who}打车${minutes}分钟`;
-    const cost = o.poi.costPerPerson;
-    const costPart = cost !== undefined ? `人均${Math.round(cost)}` : "";
-    const ratingPart = o.poi.rating ? `评分${o.poi.rating.toFixed(1)}` : "";
-    const conflictPart = o.conflicts.length ? `注意：${o.conflicts[0].split(/[：:（(]/)[0]}有忌口` : "";
-
-    // 角度优先级：最便宜 → 评分最高 → 通勤分档 → 第一名说“综合分最高” → 只陈述事实
-    if (minCost !== undefined && cost === minCost) {
-      return fit(["最省钱的一家", costPart, farPart, conflictPart]);
-    }
-    if (maxRating !== undefined && o.poi.rating === maxRating) {
-      return fit(["口碑最好", ratingPart, farPart, conflictPart]);
-    }
-    const near = commuteHead(o.maxCommute);
-    if (near) return fit([near, farPart, costPart || ratingPart, conflictPart]);
-    if (i === 0) return fit(["综合分最高", costPart || ratingPart, farPart, conflictPart]);
-    return fit([o.poi.name.replace(/[(（].*$/, ""), costPart || ratingPart, farPart, conflictPart]);
-  });
 }
