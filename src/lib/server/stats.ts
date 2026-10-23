@@ -23,6 +23,23 @@ export function median(xs: number[]): number | undefined {
   return Math.round(v * 10) / 10;
 }
 
+/** 这个成员有没有在私聊里主动说过私密约束（预算 / 门禁 / 备注 / 私下拒绝）。局长预填的不算 */
+export function sharedPrivate(m: Member): boolean {
+  const p = m.private;
+  if (!p) return false;
+  const auto = new Set(p.autoFilled ?? []);
+  if (p.rsvp === "no") return true;
+  if (p.budgetMax !== undefined && !auto.has("budget")) return true;
+  if ((p.notes ?? []).length > 0) return true;
+  if (!auto.has("availability") && Object.values(p.availability ?? {}).some((d) => !!d.homeBy)) return true;
+  return false;
+}
+
+/** 私聊里真的开过口的人（至少说过一句话） */
+function chatted(m: Member): boolean {
+  return (m.private?.chat ?? []).some((t) => t.role === "me");
+}
+
 export function computeStats(jus: Ju[], members: Member[], now = new Date()): Stats {
   const real = members.filter((m) => !m.isDemo);
   const realByJu = new Map<string, number>();
@@ -45,11 +62,15 @@ export function computeStats(jus: Ju[], members: Member[], now = new Date()): St
   }
 
   const medianFillSeconds = median(fills);
+  const talkers = real.filter(chatted);
+  const privateShareRate =
+    talkers.length > 0 ? Math.round((talkers.filter(sharedPrivate).length / talkers.length) * 1000) / 1000 : undefined;
   return {
     juCount: realJus.length,
     confirmedCount: realJus.filter((j) => j.status === "confirmed").length,
     memberCount: real.length,
     ...(medianFillSeconds !== undefined ? { medianFillSeconds } : {}),
+    ...(privateShareRate !== undefined ? { privateShareRate } : {}),
     recent: realJus.slice(0, 10).map((j) => ({
       id: j.id,
       title: j.title,

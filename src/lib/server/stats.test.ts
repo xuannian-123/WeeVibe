@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Ju, Member } from "../types";
-import { addMemberBody } from "./schemas";
+import { fillSecondsField } from "./schemas";
 import { computeStats, median } from "./stats";
 
 // 2026-10-22 18:30 北京时间
@@ -18,6 +18,10 @@ const ju = (id: string, createdAt: string, status: Ju["status"] = "collecting"):
   status,
   createdAt,
   votes: {},
+  trace: [],
+  announcements: [],
+  pendingChanges: 0,
+  revisions: [],
 });
 
 let n = 0;
@@ -27,9 +31,8 @@ const mem = (juId: string, joinedAt: string, extra: Partial<Member> = {}): Membe
   name: "x",
   avatar: "🐱",
   location: { lat: 31, lng: 120, label: "" },
-  availableSlotIds: [],
-  dietRaw: "",
-  dietTags: [],
+  role: "guest",
+  intake: "done",
   status: "in",
   joinedAt,
   isOrganizer: false,
@@ -99,7 +102,6 @@ describe("computeStats", () => {
 });
 
 describe("fillSeconds 入参", () => {
-  const base = { name: "x", location: { lat: 31, lng: 120, label: "" } };
   it.each([
     [9.46, 9.5],
     [0, 0],
@@ -109,6 +111,34 @@ describe("fillSeconds 入参", () => {
     ["12", undefined],
     [undefined, undefined],
   ])("%s → %s", (v, want) => {
-    expect(addMemberBody.parse({ ...base, fillSeconds: v }).fillSeconds).toBe(want);
+    expect(fillSecondsField.parse(v)).toBe(want);
+  });
+});
+
+describe("privateShareRate", () => {
+  const priv = (over: Partial<NonNullable<Member["private"]>>): NonNullable<Member["private"]> => ({
+    chat: [{ role: "me", text: "hi", at: "2026-10-22T10:00:00Z" }],
+    availability: {},
+    dietTags: [],
+    notes: [],
+    swipes: {},
+    autoFilled: [],
+    wants: [],
+    matches: [],
+    billFacts: {},
+    inbox: [],
+    ...over,
+  });
+  it("真实成员里开过口的人中，主动说了私密约束的比例；预填的不算、演示成员不算", () => {
+    const ms = [
+      mem("a", "2026-10-22T09:05:00Z", { private: priv({ budgetMax: 80 }) }),
+      mem("a", "2026-10-22T09:05:00Z", { private: priv({ rsvp: "no" }) }),
+      mem("a", "2026-10-22T09:05:00Z", { private: priv({ budgetMax: 100, autoFilled: ["budget"] }) }),
+      mem("a", "2026-10-22T09:05:00Z", { private: priv({ availability: { "2026-10-23": { from: "18:00", homeBy: "23:00", pref: "ok" } } }) }),
+      mem("a", "2026-10-22T09:05:00Z", { private: priv({ chat: [] , notes: ["x"] }) }), // 没开过口，不进分母
+      mem("a", "2026-10-22T09:05:00Z", { isDemo: true, private: priv({ budgetMax: 80 }) }),
+    ];
+    expect(computeStats([], ms, NOW).privateShareRate).toBe(0.75);
+    expect(computeStats([], [], NOW).privateShareRate).toBeUndefined();
   });
 });

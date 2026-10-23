@@ -1,4 +1,5 @@
-import { handle, json, readBody } from "@/lib/server/http";
+// 投票：在场者过半投同一方案自动定局
+import { handle, json, readBody, viewerOf } from "@/lib/server/http";
 import { vote } from "@/lib/server/ju";
 import { voteBody } from "@/lib/server/schemas";
 
@@ -10,7 +11,7 @@ type Ctx = { params: Promise<{ id: string }> };
 export function POST(req: Request, { params }: Ctx) {
   return handle(async () => {
     const { id } = await params;
-    const { memberId, poiId } = await readBody(req, voteBody);
-    return json(await vote(id, memberId, poiId));
+    const body = await readBody(req, voteBody);
+    return json(await vote(id, viewerOf(req).memberToken ?? "", body.proposalId, viewerOf(req)));
   });
 }

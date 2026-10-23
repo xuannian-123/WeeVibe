@@ -61,3 +61,10 @@ export function requireAdmin(req: Request, juId: string): void {
     throw new HttpError(401, "需要发起人权限（x-admin-token）");
   }
 }
+
+/** 从请求头取出调用者身份（成员 token / 发起人 token），交给 firewall.publicState 判断 */
+export function viewerOf(req: Request): { memberToken?: string; adminToken?: string } {
+  const memberToken = req.headers.get("x-member-token") ?? undefined;
+  const adminToken = req.headers.get("x-admin-token") ?? undefined;
+  return { ...(memberToken ? { memberToken } : {}), ...(adminToken ? { adminToken } : {}) };
+}

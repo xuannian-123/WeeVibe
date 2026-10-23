@@ -1,0 +1,465 @@
+// 局的状态机：纯内存操作（不碰数据库），DB 层（ju.ts / intake.ts / seed.ts）和反事实检验（privacy.ts）共用。
+// 所以反事实检验测到的，就是线上真实跑的那一份逻辑。
+import { pushNotice } from "./after/inbox";
+import { autofillFromProfile, planJu } from "../planner";
+import type { JuPrivate, PlanSnapshot } from "../db";
+import type {
+  DietTag,
+  Ju,
+  LedgerEntry,
+  MapProvider,
+  Member,
+  MemberPrivate,
+  Notice,
+  Plan,
+  Profile,
+  PublicFacts,
+  TraceEvent,
+} from "../types";
+import { guardPlan, publicFacts, quorumHidden, rulePolish } from "./firewall";
+import { HttpError } from "./http";
+import { confirmedText, planText, quorumMetText } from "./ju-text";
+
+// ---------------------------------------------------------------- 时间 / 思考流 / 公告
+
+/** 叠加 admin.clockOffsetMin 的"演示时钟" */
+export function nowFor(ju: Ju): Date {
+  return new Date(Date.now() + (ju.admin?.clockOffsetMin ?? 0) * 60_000);
+}
+
+const TRACE_MAX = 80;
+const ANNOUNCE_MAX = 40;
+
+/** 追加一条思考流。id 由局 id + 递增序号构成（确定性：同样的操作序列得到同样的 id） */
+export function appendTraceAt(ju: Ju, kind: TraceEvent["kind"], text: string, at: Date): void {
+  const last = ju.trace.at(-1)?.id ?? "";
+  const seq = Number(last.split("-t").at(-1)) || 0;
+  ju.trace.push({ id: `${ju.id}-t${seq + 1}`, at: at.toISOString(), kind, text });
+  if (ju.trace.length > TRACE_MAX) ju.trace.splice(0, ju.trace.length - TRACE_MAX);
+}
+
+export function announceAt(ju: Ju, text: string, at: Date): void {
+  ju.announcements.push({ at: at.toISOString(), text });
+  if (ju.announcements.length > ANNOUNCE_MAX) ju.announcements.splice(0, ju.announcements.length - ANNOUNCE_MAX);
+}
+
+export function notify(m: Member, kind: Notice["kind"], text: string, now: Date): void {
+  if (!m.private) m.private = emptyPrivate();
+  pushNotice(m, kind, text, now);
+}
+
+export function emptyPrivate(): MemberPrivate {
+  return {
+    chat: [],
+    availability: {},
+    dietTags: [],
+    notes: [],
+    swipes: {},
+    autoFilled: [],
+    wants: [],
+    matches: [],
+    billFacts: {},
+    inbox: [],
+  };
+}
+
+export const inOnly = (ms: Member[]) => ms.filter((m) => m.status === "in");
+
+// ---------------------------------------------------------------- 名额 / 圈层（#2）
+
+export function isTierOpen(ju: Ju, tier: number): boolean {
+  if (tier <= 1) return true;
+  return !!ju.admin?.tiers.find((t) => t.tier === tier)?.openedAt;
+}
+
+/** 名额还剩几个（没设上限 = 无穷） */
+export function capacityLeft(ju: Ju, members: Member[]): number {
+  if (!ju.capacity) return Infinity;
+  return ju.capacity - inOnly(members).length;
+}
+
+/** 新来的 / 想回来的人：圈没开放或名额满 → 候补 */
+export function admitStatus(ju: Ju, members: Member[], tier: number): "in" | "waitlist" {
+  if (!isTierOpen(ju, tier)) return "waitlist";
+  return capacityLeft(ju, members) > 0 ? "in" : "waitlist";
+}
+
+/**
+ * 候补转正：按 (tier, joinedAt) 顺序，只转已开放圈层的人，直到名额用完。
+ * 私信不提圈层，只说"名额确认了"。返回转正的人。
+ */
+export function promoteWaitlist(ju: Ju, members: Member[], now: Date, priv?: JuPrivate): Member[] {
+  // 注意：定局后的转正由 B3 的 onMembershipChangedAfterConfirm 调本函数（和桌数调整、revision 私信一起），
+  // B2 这边的调用点在定局后不调它，避免同一个人收到两条私信
+  if (ju.status === "cancelled") return [];
+  const queue = members
+    .filter((m) => m.status === "waitlist" && isTierOpen(ju, m.secret?.tier ?? 1))
+    .sort((a, b) => (a.secret?.tier ?? 1) - (b.secret?.tier ?? 1) || a.joinedAt.localeCompare(b.joinedAt) || (a.id < b.id ? -1 : 1));
+  const promoted: Member[] = [];
+  for (const m of queue) {
+    if (capacityLeft(ju, members) <= 0) break;
+    m.status = "in";
+    promoted.push(m);
+    notify(m, "promoted", "好消息！名额确认了，你已经在局里了 🎉", now);
+    if (priv) markChanged(ju, priv, m.id);
+  }
+  return promoted;
+}
+
+// ---------------------------------------------------------------- 门限成局（#1）
+
+/** rsvp=yes 的在局人数达到门槛 → met：公开名单揭晓、发公告、给大家发私信 */
+export function evalQuorum(ju: Ju, members: Member[], now: Date): boolean {
+  const q = ju.quorum;
+  if (!q || q.state !== "pending" || ju.status === "cancelled") return false;
+  const have = inOnly(members).filter((m) => m.private?.rsvp === "yes").length;
+  if (have < q.min) return false;
+  q.state = "met";
+  q.metAt = now.toISOString();
+  appendTraceAt(ju, "decide", `门限达成：${have} 位朋友私下说了"来"，局正式成立，名单揭晓`, now);
+  announceAt(ju, quorumMetText(publicFacts(ju, members)), now);
+  for (const m of inOnly(members)) notify(m, "quorum", `凑齐啦！${have} 位朋友都说了来，「${ju.title}」正式成局 🎉`, now);
+  return true;
+}
+
+/** 门限截止还没达成 → failed，悄悄作废：不发群公告，只私下告诉说了"来"的人 */
+export function failQuorumIfDue(ju: Ju, members: Member[], now: Date): boolean {
+  const q = ju.quorum;
+  if (!q || q.state !== "pending" || !q.deadline || now.getTime() < Date.parse(q.deadline)) return false;
+  q.state = "failed";
+  ju.status = "cancelled";
+  appendTraceAt(ju, "done", "门限截止，这次没凑齐，局长悄悄收起了这个局", now);
+  for (const m of members) {
+    if (m.private?.rsvp === "yes" || m.isOrganizer) {
+      notify(m, "quorum", "这次没凑齐，局长悄悄把局收起来了。放心，没有人知道谁说了来、谁没说。", now);
+    }
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------- 攒批重算（#4）
+
+/** 方案出来之后的成员变化只记数，不立即重算（CONTRACT 第二节第 6 条） */
+export function markChanged(ju: Ju, priv: JuPrivate, memberId: string): void {
+  if (!ju.plan || ju.status !== "voting") return;
+  if (!priv.pendingMembers.includes(memberId)) priv.pendingMembers.push(memberId);
+  ju.pendingChanges = priv.pendingMembers.length;
+}
+
+export const BATCH_MIN_CHANGES = 2;
+export const BATCH_MIN_INTERVAL_MS = 3 * 60_000;
+
+export function lastPlanAt(ju: Ju, priv: JuPrivate): number {
+  return Date.parse(priv.snapshot?.now ?? ju.plan?.computedAt ?? "") || 0;
+}
+
+/** pendingChanges ≥ 2 且距上次重算 ≥ 3 分钟 */
+export function batchDue(ju: Ju, priv: JuPrivate, now: Date): boolean {
+  return (
+    ju.status === "voting" &&
+    !!ju.plan &&
+    priv.pendingMembers.length >= BATCH_MIN_CHANGES &&
+    now.getTime() - lastPlanAt(ju, priv) >= BATCH_MIN_INTERVAL_MS
+  );
+}
+
+// ---------------------------------------------------------------- 互选（#2）
+
+/** 重新算 me 和其他人的互选。返回新成立的配对（对方 Member） */
+export function recomputeMatches(members: Member[], me: Member, now: Date): Member[] {
+  const fresh: Member[] = [];
+  const myWants = new Set(me.private?.wants ?? []);
+  for (const other of members) {
+    if (other.id === me.id || !other.private || !me.private) continue;
+    const mutual = myWants.has(other.id) && other.private.wants.includes(me.id);
+    const had = me.private.matches.includes(other.id);
+    if (mutual && !had) {
+      me.private.matches.push(other.id);
+      if (!other.private.matches.includes(me.id)) other.private.matches.push(me.id);
+      fresh.push(other);
+      notify(me, "match", `你和${other.name}互相都想认识，局长会安排你们坐一起 ✨`, now);
+      notify(other, "match", `你和${me.name}互相都想认识，局长会安排你们坐一起 ✨`, now);
+    } else if (!mutual && had) {
+      me.private.matches = me.private.matches.filter((x) => x !== other.id);
+      other.private.matches = other.private.matches.filter((x) => x !== me.id);
+    }
+  }
+  return fresh;
+}
+
+// ---------------------------------------------------------------- 预填（#6）
+
+/** 局长按档案替他预填（说"都行"，或截止时还没完成入局）。只填空着的字段 */
+export function autofillMember(ju: Ju, m: Member, profile: Profile | undefined): boolean {
+  if (!m.private) m.private = emptyPrivate();
+  const p = m.private;
+  const fill = autofillFromProfile(profile, ju);
+  let changed = false;
+  const mark = (k: MemberPrivate["autoFilled"][number]) => {
+    if (!p.autoFilled.includes(k)) p.autoFilled.push(k);
+    changed = true;
+  };
+  if (Object.keys(p.availability).length === 0 && Object.keys(fill.availability).length > 0) {
+    p.availability = { ...fill.availability };
+    mark("availability");
+  }
+  if (p.budgetMax === undefined && fill.budgetMax !== undefined) {
+    p.budgetMax = fill.budgetMax;
+    mark("budget");
+  }
+  if (p.dietTags.length === 0 && fill.dietTags.length > 0) {
+    p.dietTags = [...fill.dietTags] as DietTag[];
+    mark("diet");
+  }
+  if (!m.location && profile?.lastLocation) {
+    m.location = { ...profile.lastLocation };
+    changed = true;
+  }
+  return changed;
+}
+
+/** 截止 / 发起人出方案时，还没完成入局的人由局长预填，发 autofill 私信 */
+export function autofillPending(ju: Ju, members: Member[], profiles: Record<string, Profile | undefined>, now: Date): number {
+  let n = 0;
+  for (const m of inOnly(members)) {
+    if (m.intake === "done") continue;
+    autofillMember(ju, m, m.profileId ? profiles[m.profileId] : undefined);
+    if (!m.private!.rsvp) m.private!.rsvp = "yes";
+    m.intake = "done";
+    n++;
+    notify(m, "autofill", "时间快到了，局长按你平时的习惯先帮你填好了，点进来 10 秒就能确认或修改～", now);
+  }
+  if (n > 0) appendTraceAt(ju, "listen", `${n} 位朋友还没聊完，局长按大家平时的习惯先预填了`, now);
+  return n;
+}
+
+// ---------------------------------------------------------------- 出方案
+
+export type PlanDeps = {
+  map: MapProvider;
+  now: Date;
+  /** memberId -> 账本（从档案取） */
+  ledgers: Record<string, LedgerEntry[]>;
+  /** 公开 LLM 润色（B1 polishPlan）；不传 = 规则版 */
+  polish?: (facts: PublicFacts, plan: Plan) => Promise<Plan>;
+  /** 是否发群公告（反事实检验里也发，因为公告是公开输出的一部分） */
+  announce?: boolean;
+};
+
+type MapLog = Record<string, unknown>;
+
+/** 包一层地图：记录每次调用的返回值，复算时回放 */
+export function recordingMap(map: MapProvider, log: MapLog): MapProvider {
+  const wrap =
+    <K extends keyof MapProvider>(k: K) =>
+    async (...args: unknown[]) => {
+      const key = `${k}:${JSON.stringify(args)}`;
+      const r = await (map[k] as (...a: unknown[]) => Promise<unknown>)(...args);
+      log[key] = structuredClone(r);
+      return r;
+    };
+  return {
+    searchPlaces: wrap("searchPlaces") as MapProvider["searchPlaces"],
+    reverseGeocode: wrap("reverseGeocode") as MapProvider["reverseGeocode"],
+    searchAround: wrap("searchAround") as MapProvider["searchAround"],
+    commute: wrap("commute") as MapProvider["commute"],
+    transitRoute: wrap("transitRoute") as MapProvider["transitRoute"],
+  };
+}
+
+/** 回放地图：有记录就用记录，没有再问真地图 */
+export function replayMap(log: MapLog, fallback: MapProvider): MapProvider {
+  const wrap =
+    <K extends keyof MapProvider>(k: K) =>
+    async (...args: unknown[]) => {
+      const key = `${k}:${JSON.stringify(args)}`;
+      if (key in log) return structuredClone(log[key]);
+      return (fallback[k] as (...a: unknown[]) => Promise<unknown>)(...args);
+    };
+  return {
+    searchPlaces: wrap("searchPlaces") as MapProvider["searchPlaces"],
+    reverseGeocode: wrap("reverseGeocode") as MapProvider["reverseGeocode"],
+    searchAround: wrap("searchAround") as MapProvider["searchAround"],
+    commute: wrap("commute") as MapProvider["commute"],
+    transitRoute: wrap("transitRoute") as MapProvider["transitRoute"],
+  };
+}
+
+/** 调 C 的 planJu：同一份输入，出方案和复算走的是同一个函数 */
+export async function runPlanner(
+  ju: Ju,
+  members: Member[],
+  map: MapProvider,
+  ledgers: Record<string, LedgerEntry[]>,
+  now: Date,
+) {
+  if (!ju.admin?.auditSecret) throw new HttpError(500, "局缺少审计密钥");
+  return planJu(ju, inOnly(members), map, {
+    auditSecret: ju.admin.auditSecret,
+    onTrace: (kind, text) => appendTraceAt(ju, kind, text, now),
+    ledgers,
+    now,
+  });
+}
+
+/**
+ * 出方案 / 重算：C planJu → B1 polishPlan(publicFacts) → 防火墙兜底 → 存 plan、每人的 mine、输入快照。
+ * 重算时思考流只说"有 N 位朋友更新了情况"。
+ */
+export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, deps: PlanDeps): Promise<void> {
+  const ins = inOnly(members);
+  if (ins.length === 0) throw new HttpError(400, "还没有人入局，先把链接发到群里吧");
+  const now = deps.now;
+  const replan = !!ju.plan;
+  if (replan) {
+    const n = priv.pendingMembers.length;
+    appendTraceAt(ju, "listen", n > 0 ? `有 ${n} 位朋友更新了情况，局长重新算一遍` : "局长重新算一遍", now);
+  } else {
+    appendTraceAt(ju, "listen", `${ins.length} 位朋友都跟局长聊过了，开始出方案`, now);
+  }
+
+  // 快照：规划输入原样留一份（含私密数据，只在 ju_private 里）
+  const snapJu = structuredClone(ju);
+  const snapMembers = structuredClone(ins);
+  const mapLog: MapLog = {};
+
+  let result: Awaited<ReturnType<typeof planJu>>;
+  try {
+    result = await runPlanner(ju, ins, recordingMap(deps.map, mapLog), deps.ledgers, now);
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
+    throw new HttpError(422, (e as Error)?.message || "出方案失败");
+  }
+  const { plan, mine } = result;
+
+  let polished: Plan;
+  if (deps.polish) {
+    let out: Plan | undefined;
+    try {
+      out = await deps.polish(publicFacts({ ...ju, plan }, members), structuredClone(plan));
+    } catch (e) {
+      console.warn(`[ju ${ju.id}] polishPlan 失败，用规则版：${(e as Error)?.message ?? e}`);
+    }
+    polished = guardPlan(ju, members, plan, out);
+  } else {
+    polished = rulePolish(plan);
+  }
+
+  const prevVotes = ju.votes;
+  ju.plan = polished;
+  ju.status = "voting";
+  // 票保留：还在局里、投的方案还在
+  const ids = new Set(polished.proposals.map((p) => p.id));
+  const inIds = new Set(ins.map((m) => m.id));
+  ju.votes = {};
+  for (const [mid, pid] of Object.entries(prevVotes ?? {})) if (inIds.has(mid) && ids.has(pid)) ju.votes[mid] = pid;
+
+  priv.mine = mine;
+  const snapshot: PlanSnapshot = { ju: snapJu, members: snapMembers, ledgers: deps.ledgers, now: now.toISOString(), mapLog };
+  priv.snapshot = snapshot;
+  priv.pendingMembers = [];
+  ju.pendingChanges = 0;
+  priv.firstPlanAt ??= now.toISOString();
+
+  if (deps.announce !== false) announceAt(ju, planText(publicFacts(ju, members), replan), now);
+}
+
+// ---------------------------------------------------------------- 投票 / 定局
+
+export function confirmProposal(ju: Ju, members: Member[], proposalId: string, now: Date, how: "vote" | "admin" | "deadline"): void {
+  if (!ju.plan?.proposals.some((p) => p.id === proposalId)) throw new HttpError(400, "这个方案不在候选里");
+  ju.status = "confirmed";
+  ju.confirmedProposalId = proposalId;
+  const why = how === "vote" ? "过半朋友投给了同一个方案" : how === "deadline" ? "截止时间到，按局长推荐定局" : "发起人拍板";
+  appendTraceAt(ju, "done", `定局：${why}`, now);
+  announceAt(ju, confirmedText(publicFacts(ju, members)), now);
+}
+
+/** 记一票；在场者过半投同一方案就自动定局。返回是否定局 */
+export function castVote(ju: Ju, members: Member[], me: Member, proposalId: string, now: Date): boolean {
+  if (ju.status !== "voting" || !ju.plan) throw new HttpError(409, ju.status === "confirmed" ? "已经定局了" : "现在还不能投票");
+  if (me.status !== "in") throw new HttpError(409, "你现在不在局里，不能投票");
+  if (!ju.plan.proposals.some((p) => p.id === proposalId)) throw new HttpError(400, "这个方案不在候选里");
+  ju.votes[me.id] = proposalId;
+  const ins = inOnly(members);
+  const n = ins.filter((m) => ju.votes[m.id] === proposalId).length;
+  if (n * 2 > ins.length) {
+    confirmProposal(ju, members, proposalId, now, "vote");
+    return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------- 成员状态
+
+/**
+ * 改一个人的 in / out（本人退出、私下说不来、想回来）。
+ * 返回值告诉调用方：定局后的变化要交给 B3 的 onMembershipChangedAfterConfirm（锁外调用）。
+ */
+export function setMemberStatus(
+  ju: Ju,
+  members: Member[],
+  m: Member,
+  want: "in" | "out",
+  now: Date,
+  priv: JuPrivate,
+): { changed: boolean; afterConfirm: boolean; promoted: Member[] } {
+  const before = m.status;
+  let promoted: Member[] = [];
+  if (want === "out") {
+    if (before === "out") return { changed: false, afterConfirm: false, promoted };
+    m.status = "out";
+    if (ju.votes[m.id]) delete ju.votes[m.id];
+    if (before === "in") {
+      markChanged(ju, priv, m.id);
+      if (ju.status !== "confirmed") promoted = promoteWaitlist(ju, members, now, priv);
+    }
+  } else {
+    if (before === "in") return { changed: false, afterConfirm: false, promoted };
+    if (before === "waitlist") return { changed: false, afterConfirm: false, promoted }; // 候补只能等转正
+    m.status = m.isOrganizer ? "in" : admitStatus(ju, members, m.secret?.tier ?? 1);
+    if (m.private && m.private.rsvp === "no") m.private.rsvp = "yes";
+    if (m.status === "in") markChanged(ju, priv, m.id);
+  }
+  const changedInOut = (before === "in") !== (m.status === "in") || promoted.length > 0;
+  return { changed: before !== m.status, afterConfirm: ju.status === "confirmed" && changedInOut, promoted };
+}
+
+// ---------------------------------------------------------------- 定时推进（截止 / 攒批）
+
+export type AdvanceDeps = Omit<PlanDeps, "now"> & { profiles: Record<string, Profile | undefined> };
+
+/**
+ * 幂等：到点的事情做掉。返回是否有改动。
+ * - 门限截止未达成 → 悄悄作废
+ * - 收集中 + 截止时间到 → 没完成入局的人预填，出方案
+ * - 投票中 + 截止时间到（且第一次出方案早于截止）→ 有攒着的变化先重算，再按推荐定局
+ * - 投票中 + pendingChanges ≥ 2 且距上次重算 ≥ 3 分钟 → 攒批重算
+ */
+export async function advance(ju: Ju, members: Member[], priv: JuPrivate, now: Date, deps: AdvanceDeps): Promise<boolean> {
+  let dirty = failQuorumIfDue(ju, members, now);
+  if (ju.status === "cancelled") return dirty;
+  const deadlinePassed = !!ju.deadline && now.getTime() >= Date.parse(ju.deadline);
+
+  if (ju.status === "collecting" && deadlinePassed && !quorumHidden(ju) && inOnly(members).length > 0) {
+    appendTraceAt(ju, "listen", "截止时间到了", now);
+    autofillPending(ju, members, deps.profiles, now);
+    await computePlan(ju, members, priv, { ...deps, now });
+    return true;
+  }
+
+  if (ju.status === "voting" && ju.plan) {
+    const firstPlanBeforeDeadline = !!priv.firstPlanAt && !!ju.deadline && Date.parse(priv.firstPlanAt) < Date.parse(ju.deadline);
+    if (deadlinePassed && firstPlanBeforeDeadline) {
+      if (priv.pendingMembers.length > 0) await computePlan(ju, members, priv, { ...deps, now });
+      const rec = ju.plan.proposals.find((p) => p.recommended) ?? ju.plan.proposals[0];
+      if (rec) confirmProposal(ju, members, rec.id, now, "deadline");
+      return true;
+    }
+    if (batchDue(ju, priv, now)) {
+      await computePlan(ju, members, priv, { ...deps, now });
+      dirty = true;
+    }
+  }
+  return dirty;
+}
