@@ -2,7 +2,7 @@
 // 顺序：(#1 时) 来不来 → 从哪出发 → 时间 / 课表 → 忌口 → 预算（委婉）→ 还有什么想让局长知道的 → 刷卡。
 // 规则版：脚本式问答 + quickReplies 引导；LLM 版：LLM 写回复 + 抽取 patch，规则结果做兜底和校验。
 // 这里会看到本人的私密信息，但输出只回给本人；提示词里不放任何其他成员的信息。
-import type { ChatPatch, ChatReply, ChatWidget, DayAvailability, DietTag, Ju, Member, Place, Profile } from "../types";
+import type { ChatAsk, ChatPatch, ChatReply, ChatWidget, DayAvailability, DietTag, Ju, Member, Place, Profile } from "../types";
 import { NUM_RE_SRC, parseCnNumber } from "./cn-number";
 import { callLlmJson, currentProvider } from "./provider";
 import { ruleParseDiet } from "./rules";
@@ -18,8 +18,9 @@ export type ChatCtx = {
   now: Date;
 };
 
-export type ChatStep = "rsvp" | "location" | "time" | "diet" | "budget" | "notes" | "swipe";
-export type ChatResult = ChatReply & { patch: ChatPatch };
+export type ChatStep = ChatAsk;
+/** ask = 局长这一轮问的是哪一项（存进聊天记录，下一轮据此判断"问过什么"） */
+export type ChatResult = ChatReply & { patch: ChatPatch; ask?: ChatStep };
 
 // ================================================================ 地点（无 key 也能用的小词典，GCJ-02 近似坐标）
 
@@ -73,6 +74,8 @@ const NOTHING_RE = /^(没有了?|没了|无|就这些|没啥了?|没什么了?|�
 const NOTE_RE = /减肥|别太油|太油|清淡点|安静|包间|腿|脚|过敏|怀孕|带娃|早点走|早走|先走|不想排队|排队|胃不好|拉肚子|感冒|嗓子/;
 const NO_ALCOHOL_RE = /不喝酒|不能喝酒|喝不了酒|不喝了|开车|酒精过敏|戒酒|滴酒不沾|不碰酒|不沾酒|吃头孢/;
 const SCHEDULE_RE = /课表|课程表|发.*截图|上传/;
+/** 暗示手头紧：没明说预算，也要优先委婉确认 */
+const POOR_RE = /穷|没钱|手头紧|手头有点紧|月底|吃土|省钱|拮据|破产|生活费|钱包|囊中羞涩|紧巴/;
 
 const CLEAN_RE = /[\s，,。.!！?？~～、…]+/g;
 const strip = (s: string) => s.replace(CLEAN_RE, "");
@@ -132,6 +135,8 @@ const HOME_RES = [
 
 const DOW_CH: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7, 七: 7 };
 const NEG_DAY_RE = /不行|不可以|没空|不方便|有事|去不了|来不了|不太行|没时间|排满|有课|不能|够呛/;
+/** 光提到某天不算"那天能来"，要有肯定的说法或具体钟点 */
+const POS_DAY_RE = /可以|行|有空|能来|能去|方便|都ok|没问题|最好|ok/i;
 
 function clauseDows(clause: string, now: Date): number[] {
   const out = new Set<number>();
@@ -187,14 +192,16 @@ export function ruleParseTimes(
       : /勉强|也行|也可以|凑合|实在不行/.test(clause)
         ? "meh"
         : undefined;
-    if (dows.length) mentioned = true;
     if (dates.length) {
       for (const d of dates) {
         if (isNeg) {
           neg.add(d);
+          mentioned = true;
           continue;
         }
+        if (!from && !home && !pref && !POS_DAY_RE.test(clause)) continue;
         pos.add(d);
+        mentioned = true;
         per[d] = { ...per[d], ...(from ? { from } : {}), ...(home ? { homeBy: home } : {}), ...(pref ? { pref } : {}) };
       }
     } else {
@@ -301,7 +308,11 @@ export function ruleExtract(text: string, ctx: ChatCtx, pending: ChatStep | unde
   if (Object.keys(billFacts).length) patch.billFacts = billFacts;
 
   // 备注：“还有什么想让局长知道的”这一问的回答，或者话里有明显的约束
-  if ((pending === "notes" && !NOTHING_RE.test(s)) || NOTE_RE.test(s)) patch.note = t.slice(0, 80);
+  // “还有什么”这一问的回答记成备注；但回答的其实是预算 / 忌口 / 时间 / 地点时，已经进了对应字段，不再重复记
+  const answeredOther = !!(patch.budgetMax || patch.dietTags || patch.availability || patch.location || patch.billFacts);
+  if ((pending === "notes" && !NOTHING_RE.test(s) && !answeredOther) || NOTE_RE.test(s) || POOR_RE.test(s)) {
+    patch.note = t.slice(0, 80);
+  }
   return patch;
 }
 
@@ -373,7 +384,7 @@ function isAnswered(step: ChatStep, v: View, asked: Set<ChatStep>): boolean {
     case "budget":
       return v.budgetMax !== undefined || v.autoFilled.includes("budget") || v.wantsAutofill || asked.has("budget");
     case "notes":
-      return v.notes.length > 0 || asked.has("notes");
+      return asked.has("notes");
     case "swipe":
       return v.swipes > 0;
   }
@@ -388,18 +399,29 @@ function history(ctx: ChatCtx): { pending?: ChatStep; asked: Set<ChatStep>; open
   let pending: ChatStep | undefined;
   let lastAsk: ChatStep | undefined;
   for (const turn of chat) {
-    if (turn.role === "juzhang") lastAsk = classifyAsk(turn.text);
+    if (turn.role === "juzhang") lastAsk = turn.ask ?? classifyAsk(turn.text);
     else if (lastAsk) asked.add(lastAsk);
   }
   const lastJz = [...chat].reverse().find((x) => x.role === "juzhang");
   const lastIsJz = chat.length > 0 && chat[chat.length - 1].role === "juzhang";
-  if (lastJz && lastIsJz) pending = classifyAsk(lastJz.text);
+  if (lastJz && lastIsJz) pending = lastJz.ask ?? classifyAsk(lastJz.text);
   if (pending && ctx.userText !== null && ctx.userText.trim()) asked.add(pending);
   return { pending, asked, opening: chat.length === 0 };
 }
 
-function nextStep(ctx: ChatCtx, v: View, asked: Set<ChatStep>): ChatStep | undefined {
-  return stepOrder(ctx.quorumPending).find((s) => !isAnswered(s, v, asked));
+/** 还没问到 / 没答上的项，按顺序 */
+function missingSteps(ctx: ChatCtx, v: View, asked: Set<ChatStep>): ChatStep[] {
+  return stepOrder(ctx.quorumPending).filter((s) => !isAnswered(s, v, asked));
+}
+
+/** 下一问。对方暗示手头紧时，预算提到前面（来不来、出发地之后） */
+function nextStep(ctx: ChatCtx, v: View, asked: Set<ChatStep>, text = ""): ChatStep | undefined {
+  const missing = missingSteps(ctx, v, asked);
+  if (missing.includes("budget") && POOR_RE.test(text)) {
+    const first = missing[0];
+    if (first !== "rsvp" && first !== "location") return "budget";
+  }
+  return missing[0];
 }
 
 // ================================================================ 规则版文案
@@ -441,7 +463,9 @@ function ackFor(patch: ChatPatch, ctx: ChatCtx): string[] {
   if (patch.budgetMax) out.push(`人均 ${patch.budgetMax} 以内，收到。这个数只有我知道。`);
   if (patch.billFacts?.noAlcohol) out.push("不喝酒记下了，到时候酒水不算你的。");
   else if (patch.billFacts?.skipItems?.length) out.push(`${patch.billFacts.skipItems.join("、")}不吃，记下了，分账时不算你的。`);
-  if (patch.note && !patch.billFacts?.noAlcohol) out.push("这个我记着，排方案时会考虑，对外不会说是谁。");
+  if (patch.note && !patch.billFacts?.noAlcohol && !patch.budgetMax) {
+    out.push(POOR_RE.test(patch.note) ? "懂，月底谁不紧呢，这个我心里有数。" : "这个我记着，排方案时会考虑，对外不会说是谁。");
+  }
   return out;
 }
 
@@ -565,15 +589,24 @@ function composeRule(ctx: ChatCtx, patch: ChatPatch, h: ReturnType<typeof histor
     return { reply, widget: intake === "swiping" ? "swipe" : null, quickReplies: [], done: true, patch };
   }
 
-  const step = nextStep(ctx, v, h.asked);
+  const step = nextStep(ctx, v, h.asked, ctx.userText ?? "");
   const head: string[] = [];
   if (ctx.userText === null && h.opening) head.push(greeting(ctx));
-  head.push(...ackFor(patch, ctx));
+  const ack = ackFor(patch, ctx);
+  // 收尾那一轮不复述一长串，一句“都记下了”就够
+  head.push(...(step === "swipe" || !step ? (ack.length ? ["都记下了！"] : []) : ack));
   if (!step) {
-    return { reply: [...head, "都记下了，谢谢！"].join(""), widget: null, quickReplies: [], done: true, patch };
+    return { reply: [...head, "谢谢，有变化随时跟我说。"].join(""), widget: null, quickReplies: [], done: true, patch };
   }
   const ask = askFor(step, ctx, h.pending, v);
-  return { reply: [...head, ask.text].join(""), widget: ask.widget, quickReplies: ask.quickReplies, done: ask.done, patch };
+  return {
+    reply: [...head, ask.text].join(""),
+    widget: ask.widget,
+    quickReplies: ask.quickReplies,
+    done: ask.done,
+    patch,
+    ask: step,
+  };
 }
 
 // ================================================================ LLM 版
@@ -621,6 +654,16 @@ const STEP_GOAL: Record<ChatStep, string> = {
   swipe: "告诉对方最后刷几家店：右滑想去、上滑超想去、左滑不想去，刷完就齐活",
 };
 
+/** 模型爱把之前说过的约束再总结一遍：和已有备注大面积重合的不再记 */
+function isNewNote(note: string, ctx: ChatCtx): boolean {
+  const old = strip((ctx.me.private?.notes ?? []).join(""));
+  const n = strip(note);
+  if (!n || old.includes(n)) return false;
+  const grams = Array.from({ length: Math.max(0, n.length - 1) }, (_, i) => n.slice(i, i + 2));
+  const seen = grams.filter((g) => old.includes(g)).length;
+  return grams.length === 0 || seen / grams.length < 0.6;
+}
+
 /** 合并 LLM 抽取结果：规则抽到的优先，LLM 补规则没抽到的；全部做合法性校验 */
 function mergePatch(rule: ChatPatch, llm: ReturnType<typeof llmChatSchema.parse>, ctx: ChatCtx, text: string): ChatPatch {
   const out: ChatPatch = { ...rule };
@@ -636,7 +679,7 @@ function mergePatch(rule: ChatPatch, llm: ReturnType<typeof llmChatSchema.parse>
   if (!out.availability && llm.availability?.length) {
     const avail: Record<string, DayAvailability> = {};
     for (const a of llm.availability) {
-      if (!ctx.ju.spec.dates.includes(a.date)) continue;
+      if (!ctx.ju.spec.dates.includes(a.date) || !a.from) continue;
       avail[a.date] = { from: a.from, ...(a.homeBy ? { homeBy: a.homeBy } : {}), pref: a.pref };
     }
     if (Object.keys(avail).length) out.availability = avail;
@@ -648,7 +691,11 @@ function mergePatch(rule: ChatPatch, llm: ReturnType<typeof llmChatSchema.parse>
   if (out.budgetMax === undefined && llm.budgetMax !== undefined && new RegExp(NUM_RE_SRC).test(text)) {
     out.budgetMax = Math.round(llm.budgetMax);
   }
-  if (!out.note && llm.note) out.note = llm.note.slice(0, 80);
+  if (!out.note && llm.note) {
+    // 模型常把几条约束拼成一句：拆开，只留这次新冒出来的
+    const fresh = llm.note.split(/[；;，,。]/).map((x) => x.trim()).filter((x) => x && isNewNote(x, ctx));
+    if (fresh.length) out.note = fresh.join("，").slice(0, 80);
+  }
   const noAlcohol = out.billFacts?.noAlcohol || llm.noAlcohol;
   const skip = Array.from(new Set([...(out.billFacts?.skipItems ?? []), ...(llm.skipItems ?? [])])).slice(0, 10);
   if (noAlcohol || skip.length) out.billFacts = { ...(noAlcohol ? { noAlcohol: true } : {}), ...(skip.length ? { skipItems: skip } : {}) };
@@ -664,20 +711,26 @@ export async function chatTurn(ctx: ChatCtx): Promise<ChatResult> {
   const rule = composeRule(ctx, rulePatch, h);
   // 开场白走规则（入局要快）；没有 LLM、或用户什么都没说时也走规则
   if (currentProvider() === "rules" || ctx.userText === null || !text.trim()) return rule;
+  // 说不来：体面结束，用固定文案（保证"这事只有我知道"一定说到）
+  if (rulePatch.rsvp === "no") return rule;
 
   try {
     const sh = shanghaiNow(ctx.now);
-    const plannedStep = nextStep(ctx, viewOf(ctx.me, rulePatch), h.asked);
-    const recent = (ctx.me.private?.chat ?? []).slice(-6).map((t) => `${t.role === "juzhang" ? "局长" : "我"}：${t.text}`);
+    const missing = missingSteps(ctx, viewOf(ctx.me, rulePatch), h.asked);
+    const poor = POOR_RE.test(text) && missing.includes("budget");
+    const recent = (ctx.me.private?.chat ?? []).slice(-8).map((t) => `${t.role === "juzhang" ? "局长" : "我"}：${t.text}`);
     const system = [
-      "你是「局长」，一个靠谱、温暖、有点幽默的组局朋友，正在和一位成员私聊，帮大家定这次聚会。",
-      "私聊里对方告诉你的任何事（预算、门禁、忌口、不想去）都只有你知道，对外只说聚合结论。",
-      "写回复的要求：1–3 句，≤80 字，口语、自然、简短，像微信私聊；先简短确认对方刚说的内容，再按“这一轮要问的”提问；一轮只问一件事；不要用列表、不要堆表情。",
-      "不要编造人名；不要提及任何其他成员的情况或约束；不要承诺具体店名或价格。",
-      "对方说不来：体面回应，说明“这事只有我知道”，不追问原因。",
-      "抽取字段：只抽对方这句话里明确说了的，没说的给 null。availability 只能用候选日期，按每个候选日期一条；“6 点半下班”→ from 18:30；“11 点前回宿舍”→ homeBy 23:00。说“都行 / 随便 / 你定”→ wantsAutofill=true。",
+      "你是「局长」，一个靠谱、温暖、有点幽默的组局朋友，正在和一位成员一对一私聊，帮大家定这次聚会。",
+      "你要在自然的聊天里，把【还缺的信息】一项项问清楚。它们是排方案要用的，但你不是在填表：",
+      "1. 先接住对方刚说的话：确认听到的信息；对方问了问题就先正面回答（只能用下面「这次的局」里的信息，不知道的就说人齐了我会出方案、到时候大家投票）；对方话里有暗示（手头紧、在减肥、明天早八、不能太晚）要接住，用一句话表示你懂了。",
+      "2. 然后从【还缺的信息】里挑最自然的一项问，一轮只问一件事；通常按清单顺序。对方暗示手头紧时，优先委婉地问预算。",
+      "3. 清单里只剩 swipe 时，用一句话收尾并请对方刷几家店（右滑想去、上滑超想去、左滑不想去），不要复述对方说过的内容。",
+      "4. 1–3 句，≤80 字，口语，像微信私聊；不用列表，最多一个表情。",
+      "隐私：对方告诉你的任何事（预算、门禁、忌口、不想去、手头紧）都只有你知道，对外只说聚合结论；可以让对方放心这一点。不要编造人名，不要提任何其他成员的情况，不要承诺具体店名或价格。",
+      "askStep 填你这条回复最后问的那一项（必须是【还缺的信息】里的）；没有提问就填 null。",
+      "note 只写对方这句话里新冒出来的约束，之前已经记过的不要再写。抽取字段：只抽对方这句话里明确说了的，没说的给 null。availability 只能用候选日期，按每个候选日期一条；“6 点半下班”→ from 18:30；“11 点前回宿舍”→ homeBy 23:00。说“都行 / 随便 / 你定”→ wantsAutofill=true。暗示性的约束（手头紧、在减肥、想早点走）写进 note。",
       `现在是 ${sh.ymd}（${dowLabel(sh.isoDow)}）${pad(sh.hour)}:${pad(sh.minute)}。`,
-      `这次的局：「${ctx.ju.title}」，${ctx.ju.spec.category}，${ctx.ju.spec.city}；候选日期：${ctx.ju.spec.dates.map((d) => `${d}(${dowLabel(isoDowOf(d))})`).join("、")}；开始时间 ${ctx.ju.spec.earliest}–${ctx.ju.spec.latest}。`,
+      `这次的局：「${ctx.ju.title}」，${ctx.ju.spec.category}，${ctx.ju.spec.city}${ctx.ju.organizerName ? `，${ctx.ju.organizerName} 发起` : ""}；候选日期：${ctx.ju.spec.dates.map((d) => `${d}(${dowLabel(isoDowOf(d))})`).join("、")}；开始时间 ${ctx.ju.spec.earliest}–${ctx.ju.spec.latest}，大约 ${ctx.ju.spec.durationMinutes} 分钟。`,
     ].join("\n");
     const user = [
       `【对方目前告诉你的】\n${describeMe(ctx)}`,
@@ -685,7 +738,9 @@ export async function chatTurn(ctx: ChatCtx): Promise<ChatResult> {
       recent.length ? `【最近的对话】\n${recent.join("\n")}` : "",
       `【对方刚说】${text}`,
       `【规则抽取参考】${JSON.stringify(rulePatch)}`,
-      plannedStep ? `【这一轮要问的】${STEP_GOAL[plannedStep]}` : "【这一轮要问的】都问完了，简短道谢收尾",
+      missing.length
+        ? `【还缺的信息】（按顺序）\n${missing.map((s) => `- ${s}：${STEP_GOAL[s]}`).join("\n")}${poor ? "\n（对方暗示手头紧，优先委婉问 budget）" : ""}`
+        : "【还缺的信息】没有了，简短道谢收尾",
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -693,19 +748,19 @@ export async function chatTurn(ctx: ChatCtx): Promise<ChatResult> {
     const out = llmChatSchema.parse(raw);
     const patch = mergePatch(rulePatch, out, ctx, text);
     const composed = composeRule(ctx, patch, h);
-    // 回复必须问到状态机要问的那一步，否则用规则文案（保证“问过的不重复问”能从历史里认出来）
-    const step = patch.rsvp === "no" ? undefined : nextStep(ctx, viewOf(ctx.me, patch), h.asked);
-    let reply = composed.reply;
-    if (patch.rsvp === "no") {
-      if (/只有我知道/.test(out.reply)) reply = out.reply;
-    } else if (ctx.me.intake !== "chatting") {
-      reply = out.reply;
-    } else if (step && classifyAsk(out.reply) === step) {
-      reply = out.reply;
-    } else if (!step) {
-      reply = out.reply;
+    if (patch.rsvp === "no") return composed;
+    if (ctx.me.intake !== "chatting") return { ...composed, reply: out.reply };
+
+    // 合并抽取结果后还缺什么：LLM 问的必须是其中一项，界面上的组件 / 快捷回复跟着它走
+    const after = missingSteps(ctx, viewOf(ctx.me, patch), h.asked);
+    const ask = out.askStep;
+    if (ask && after.includes(ask)) {
+      const a = askFor(ask, ctx, h.pending, viewOf(ctx.me, patch));
+      return { reply: out.reply, widget: a.widget, quickReplies: a.quickReplies, done: a.done, patch, ask };
     }
-    return { ...composed, reply, patch };
+    if (!ask && after.length === 0) return { ...composed, reply: out.reply };
+    // 没问到该问的（或问了已经答过的）：用规则文案兜底，保证流程往前走
+    return composed;
   } catch (e) {
     warn(e);
     return rule;

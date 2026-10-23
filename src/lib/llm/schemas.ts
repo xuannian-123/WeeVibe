@@ -203,8 +203,12 @@ export const llmReceiptJsonSchema = {
 
 // ---------------------------------------------------------------- 私聊
 
+const CHAT_ASKS = ["rsvp", "location", "time", "diet", "budget", "notes", "swipe"] as const;
+
 export const llmChatSchema = z.object({
   reply: z.string().trim().min(1).max(200),
+  /** 这条回复最后问的是哪一项；没有提问（只回答对方的问题 / 收尾）为 null */
+  askStep: nullToUndef(z.enum(CHAT_ASKS)),
   rsvp: nullToUndef(z.enum(["yes", "no"])),
   placeName: nullToUndef(z.string().trim().max(30)),
   /** 用户说的时间安排：每个候选日期一条 */
@@ -212,9 +216,10 @@ export const llmChatSchema = z.object({
     z.array(
       z.object({
         date: ymd,
-        from: hhmm,
-        homeBy: nullToUndef(hhmm),
-        pref: z.enum(["best", "ok", "meh"]),
+        // 模型偶尔给 null / 非法时间：这一条丢掉，不让整轮回复作废（mergePatch 里过滤）
+        from: hhmm.nullable().optional().catch(undefined),
+        homeBy: hhmm.nullable().optional().catch(undefined),
+        pref: z.enum(["best", "ok", "meh"]).catch("ok"),
       }),
     ),
   ),
@@ -232,11 +237,12 @@ export const llmChatJsonSchema = {
   type: "object",
   additionalProperties: false,
   required: [
-    "reply", "rsvp", "placeName", "availability", "dietTags", "budgetMax", "note", "noAlcohol", "skipItems",
+    "reply", "askStep", "rsvp", "placeName", "availability", "dietTags", "budgetMax", "note", "noAlcohol", "skipItems",
     "wantsAutofill",
   ],
   properties: {
     reply: { type: "string", description: "局长的回复，1-3 句，≤80 字" },
+    askStep: nullable({ type: "string", enum: [...CHAT_ASKS], description: "这条回复最后问的是清单里哪一项" }),
     rsvp: nullable({ type: "string", enum: ["yes", "no"] }),
     placeName: nullable({ type: "string", description: "用户说的出发地点名，如“漕河泾”" }),
     availability: nullable({

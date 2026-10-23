@@ -1,5 +1,5 @@
 // v3 LLM 模块单测：全部在“没有 key”下跑，fetch 被打桩成直接报错，保证不真调网络。
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Ju, Member, MemberPrivate, Plan, Profile, PublicFacts } from "../types";
 import {
   chatTurn,
@@ -20,7 +20,7 @@ import { parseImage } from "./provider";
 
 // 2026-10-22 周四 10:00（北京时间）
 const NOW = new Date("2026-10-22T02:00:00Z");
-const KEYS = ["ANTHROPIC_API_KEY", "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "LLM_VISION"] as const;
+const KEYS = ["ANTHROPIC_API_KEY", "LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "LLM_VISION", "LLM_VISION_MODEL"] as const;
 const saved: Record<string, string | undefined> = {};
 
 beforeAll(() => {
@@ -98,7 +98,7 @@ function mkMe(over: Partial<Member> = {}): Member {
 function apply(me: Member, userText: string | null, r: Awaited<ReturnType<typeof chatTurn>>): void {
   const p = me.private!;
   if (userText !== null) p.chat.push({ role: "me", text: userText, at: "" });
-  p.chat.push({ role: "juzhang", text: r.reply, at: "" });
+  p.chat.push({ role: "juzhang", text: r.reply, at: "", ...(r.ask ? { ask: r.ask } : {}) });
   const x = r.patch;
   if (x.rsvp) p.rsvp = x.rsvp;
   if (x.location) me.location = x.location;
@@ -539,4 +539,73 @@ describe("小工具", () => {
 
 beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+
+describe("私聊：大模型主导 + 接住暗示", () => {
+  /** 让 provider 走 OpenAI 兼容接口，fetch 返回给定的 LLM JSON */
+  function withLlm(out: Record<string, unknown>) {
+    process.env.LLM_API_KEY = "test";
+    const body = {
+      reply: "", askStep: null, rsvp: null, placeName: null, availability: null, dietTags: null,
+      budgetMax: null, note: null, noAlcohol: null, skipItems: null, wantsAutofill: null, ...out,
+    };
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(body) } }] }))),
+    );
+  }
+  afterEach(() => {
+    delete process.env.LLM_API_KEY;
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("测试里不许联网")));
+  });
+
+  it("规则版：说手头紧，下一问提前到预算，并私下记一笔", async () => {
+    const me = mkMe();
+    const [, r] = await talk(mkJu(), me, [null, "漕河泾，就是最近有点穷哈哈"]);
+    expect(r.ask).toBe("budget");
+    expect(r.widget).toBe("budget");
+    expect(me.private!.notes.join("")).toContain("穷");
+  });
+
+  it("规则版：话里顺带了备注，也一定会问「还有什么想让我知道的」", async () => {
+    const me = mkMe();
+    const rs = await talk(mkJu(), me, [null, "漕河泾，在减肥", "6 点半下班，11 点前回宿舍", "不吃辣", "80"]);
+    expect(rs[rs.length - 1].ask).toBe("notes");
+  });
+
+  it("规则版：收尾一轮不复述清单", async () => {
+    const me = mkMe();
+    const rs = await talk(mkJu(), me, [null, "漕河泾", "6 点半下班，11 点前回宿舍", "不吃辣", "80", "我不喝酒"]);
+    const last = rs[rs.length - 1];
+    expect(last.ask).toBe("swipe");
+    expect(last.reply.length).toBeLessThan(60);
+  });
+
+  it("大模型问的是还缺的一项：采用它的回复，组件跟着它走", async () => {
+    const me = mkMe();
+    await talk(mkJu(), me, [null]);
+    withLlm({ reply: "漕河泾收到～最近紧的话，人均多少你比较舒服？只有我知道。", askStep: "budget", placeName: "漕河泾", note: "最近手头紧" });
+    const r = await chatTurn({ ju: mkJu(), me, userText: "漕河泾，就是最近有点穷", quorumPending: false, now: NOW });
+    expect(r.reply).toContain("最近紧的话");
+    expect(r.ask).toBe("budget");
+    expect(r.widget).toBe("budget");
+    expect(r.patch.location?.label).toBe("漕河泾");
+  });
+
+  it("大模型先回答对方的问题，再问下一项", async () => {
+    const me = mkMe({ location: { lat: 31.17, lng: 121.4, label: "漕河泾" } });
+    await talk(mkJu(), me, [null]);
+    withLlm({ reply: "人齐了我会出两三个方案大家投～你几点能出发？", askStep: "time" });
+    const r = await chatTurn({ ju: mkJu(), me, userText: "去哪家定了吗？", quorumPending: false, now: NOW });
+    expect(r.reply).toContain("出两三个方案");
+    expect(r.ask).toBe("time");
+  });
+
+  it("大模型问了已经答过的项：退回规则文案", async () => {
+    const me = mkMe();
+    await talk(mkJu(), me, [null]);
+    withLlm({ reply: "你从哪儿出发呀？", askStep: "location", placeName: "漕河泾" });
+    const r = await chatTurn({ ju: mkJu(), me, userText: "我在漕河泾", quorumPending: false, now: NOW });
+    expect(r.reply).not.toBe("你从哪儿出发呀？");
+    expect(r.ask).toBe("time");
+  });
 });

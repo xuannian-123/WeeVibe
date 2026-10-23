@@ -56,8 +56,11 @@ export type BusyBlock = {
 /** 刷卡表态 */
 export type SwipeVerdict = "love" | "like" | "pass";
 
-/** 局长私聊的一轮 */
-export type ChatTurn = { role: "juzhang" | "me"; text: string; at: string };
+/** 私聊里局长要收集的一项信息 */
+export type ChatAsk = "rsvp" | "location" | "time" | "diet" | "budget" | "notes" | "swipe";
+
+/** 局长私聊的一轮。ask = 局长这一轮问的是哪一项（旧记录没有，靠文字推断） */
+export type ChatTurn = { role: "juzhang" | "me"; text: string; at: string; ask?: ChatAsk };
 
 /** 私聊里局长想让前端顺手弹出的输入组件 */
 export type ChatWidget = "rsvp" | "location" | "time" | "schedule" | "diet" | "budget" | "swipe" | null;

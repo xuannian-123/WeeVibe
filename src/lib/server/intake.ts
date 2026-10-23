@@ -218,7 +218,7 @@ export async function join(
     const me = ctx.members.find((x) => x.id === m.id);
     if (!me) return;
     const p = (me.private ??= emptyPrivate());
-    p.chat.push({ role: "juzhang", text: r.reply, at: ctx.now.toISOString() });
+    p.chat.push({ role: "juzhang", text: r.reply, at: ctx.now.toISOString(), ...(r.ask ? { ask: r.ask } : {}) });
     applyPatch(ctx, me, r.patch ?? {}, profile);
   });
   return {
@@ -282,7 +282,7 @@ export async function chat(juId: string, token: string, body: ChatBody): Promise
     const patch: ChatPatch = { ...(r.patch ?? {}) };
     for (const k of WIDGET_KEYS) if (widget[k] !== undefined) delete patch[k];
     applyPatch(ctx, me, patch, s1.profile);
-    me.private!.chat.push({ role: "juzhang", text: r.reply, at: ctx.now.toISOString() });
+    me.private!.chat.push({ role: "juzhang", text: r.reply, at: ctx.now.toISOString(), ...(r.ask ? { ask: r.ask } : {}) });
     if (me.private!.chat.length > 200) me.private!.chat.splice(0, me.private!.chat.length - 200);
     if (r.done && me.intake === "chatting" && me.private!.rsvp !== "no") me.intake = "swiping";
     return { reply: r.reply, widget: r.widget, quickReplies: r.quickReplies, done: r.done, me: selfMember(me) };

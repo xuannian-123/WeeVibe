@@ -155,6 +155,8 @@ async function callOpenAi(req: LlmRequest, images: ParsedImage[], signal: AbortS
       model,
       // 看图模型（如 deepseek-flash）会先推理，推理 token 也算在 max_tokens 里，给小了正文会是空的
       max_tokens: images.length > 0 ? Math.max(req.maxTokens ?? 1024, 8192) : (req.maxTokens ?? 1024),
+      // 文本请求开 JSON 模式（DeepSeek / 通义都支持），否则偶尔会在 JSON 前后夹带解释文字
+      ...(images.length === 0 ? { response_format: { type: "json_object" } } : {}),
       messages: [
         {
           role: "system",
