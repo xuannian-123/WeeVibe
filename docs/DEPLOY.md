@@ -19,7 +19,7 @@ bash scripts/deploy.sh
 | `/etc/juzhang.env`（600，root） | 生产环境变量：各种 key、`PORT=3100`、`JUZHANG_DB` |
 | `/etc/systemd/system/juzhang.service` | 以 `juzhang` 系统用户运行，崩溃 3 秒后自动重启，开机自启 |
 | `/var/lib/juzhang/juzhang.db` | 生产数据库，独立于发布目录，重新部署不会丢 |
-| `/etc/nginx/sites-available/juzhang` | 反向代理到 127.0.0.1:3100；HTTPS 由 certbot 管理并自动续期 |
+| `/etc/nginx/sites-available/juzhang` | 反向代理到 127.0.0.1:3100；HTTPS 由 certbot 管理并自动续期；`client_max_body_size 10m`（照片 / 小票 / 截图上传，1m 会 413） |
 
 改 key：`sudo nano /etc/juzhang.env && sudo systemctl restart juzhang`
 
