@@ -1,0 +1,1054 @@
+{
+  "schemaVersion": 1,
+  "fixtureKind": "synthetic",
+  "date": "2026-10-24",
+  "systemInstruction": "只返回JSON。输出严格遵循给定schema；未知保留缺项，不猜事实；仅草稿，不直接应用，不替用户同意/审批/成局/预订；地点不变。checks与synthetic输出不提供给模型。",
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "status",
+      "baseVersion",
+      "applyIntent",
+      "changes",
+      "missing",
+      "unknowns",
+      "affectedMembers",
+      "facts",
+      "explanation",
+      "draft",
+      "text"
+    ],
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": [
+          "proposal",
+          "needs_info",
+          "no_solution"
+        ]
+      },
+      "baseVersion": {
+        "type": "integer"
+      },
+      "applyIntent": {
+        "type": "boolean",
+        "enum": [
+          false
+        ]
+      },
+      "changes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "start",
+            "end"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "start": {
+              "type": "integer"
+            },
+            "end": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "missing": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "unknowns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "affectedMembers": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "facts": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "minimumGap",
+          "freeSeats",
+          "feeYuan",
+          "deadline",
+          "entry",
+          "booked"
+        ],
+        "properties": {
+          "minimumGap": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "freeSeats": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "feeYuan": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "deadline": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "entry": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "booked": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "explanation": {
+        "type": "string"
+      },
+      "draft": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "types",
+          "primaryId"
+        ],
+        "properties": {
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "primaryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "text": {
+        "type": "string"
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "AI-01-create-missing",
+      "input": {
+        "task": "create",
+        "text": "周六下午桌游，之后吃饭唱歌，桌游至少四人",
+        "selectedDate": "2026-10-24",
+        "timezone": "Asia/Shanghai"
+      },
+      "hardConstraints": [
+        "不猜地点费用上限截止或主环节，明确缺项；只给可编辑草稿，不发布"
+      ],
+      "checks": [
+        {
+          "op": "eq",
+          "path": "/applyIntent",
+          "value": false
+        },
+        {
+          "op": "eq",
+          "path": "/status",
+          "value": "needs_info"
+        },
+        {
+          "op": "eq",
+          "path": "/draft/types",
+          "value": [
+            "board_game",
+            "meal",
+            "sing"
+          ]
+        },
+        {
+          "op": "eq",
+          "path": "/draft/primaryId",
+          "value": null
+        },
+        {
+          "op": "contains",
+          "path": "/missing",
+          "value": "places"
+        },
+        {
+          "op": "contains",
+          "path": "/missing",
+          "value": "times"
+        },
+        {
+          "op": "contains",
+          "path": "/missing",
+          "value": "capacities"
+        },
+        {
+          "op": "contains",
+          "path": "/missing",
+          "value": "fees"
+        },
+        {
+          "op": "contains",
+          "path": "/missing",
+          "value": "deadlines"
+        },
+        {
+          "op": "eq",
+          "path": "/changes",
+          "value": []
+        }
+      ],
+      "gate": {
+        "currentVersion": 7,
+        "manager": true,
+        "confirmed": false
+      }
+    },
+    {
+      "id": "AI-02-invite-facts",
+      "input": {
+        "task": "invitation",
+        "text": "给桌游补位写邀请",
+        "snapshot": {
+          "version": 7,
+          "now": "2026-10-24T10:00:00+08:00",
+          "timezone": "Asia/Shanghai",
+          "segments": [
+            {
+              "id": "board",
+              "place": "桌游A",
+              "start": 840,
+              "end": 1020,
+              "min": 4,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 2,
+              "members": [
+                "u1",
+                "u2",
+                "u3",
+                "u4"
+              ],
+              "heldPending": 1
+            }
+          ],
+          "transferMinutes": [
+            30,
+            30
+          ]
+        },
+        "facts": {
+          "minimumGap": 1,
+          "freeSeats": 3,
+          "feeYuan": 60,
+          "deadline": "2026-10-24T12:00:00+08:00",
+          "entry": "invite-demo-7",
+          "booked": false
+        }
+      },
+      "hardConstraints": [
+        "占位含保位；最低缺口1不等于剩余上限3；不说已预订、自动占位或已发送；文案必须包含给定事实"
+      ],
+      "checks": [
+        {
+          "op": "eq",
+          "path": "/applyIntent",
+          "value": false
+        },
+        {
+          "op": "eq",
+          "path": "/status",
+          "value": "proposal"
+        },
+        {
+          "op": "eq",
+          "path": "/facts",
+          "value": {
+            "minimumGap": 1,
+            "freeSeats": 3,
+            "feeYuan": 60,
+            "deadline": "2026-10-24T12:00:00+08:00",
+            "entry": "invite-demo-7",
+            "booked": false
+          }
+        },
+        {
+          "op": "contains",
+          "path": "/text",
+          "value": "还差1人"
+        },
+        {
+          "op": "contains",
+          "path": "/text",
+          "value": "余位3"
+        },
+        {
+          "op": "contains",
+          "path": "/text",
+          "value": "60"
+        },
+        {
+          "op": "contains",
+          "path": "/text",
+          "value": "12:00"
+        },
+        {
+          "op": "contains",
+          "path": "/text",
+          "value": "invite-demo-7"
+        },
+        {
+          "op": "contains",
+          "path": "/text",
+          "value": "本人申请"
+        },
+        {
+          "op": "eq",
+          "path": "/changes",
+          "value": []
+        }
+      ],
+      "gate": {
+        "currentVersion": 7,
+        "manager": true,
+        "confirmed": false
+      }
+    },
+    {
+      "id": "AI-03-delay",
+      "input": {
+        "task": "coordinate",
+        "text": "桌游延后一小时，各段时长不变，后面可顺延",
+        "snapshot": {
+          "version": 7,
+          "now": "2026-10-24T10:00:00+08:00",
+          "timezone": "Asia/Shanghai",
+          "segments": [
+            {
+              "id": "board",
+              "place": "桌游A",
+              "start": 840,
+              "end": 1020,
+              "min": 4,
+              "capacity": 6,
+              "occupied": 4,
+              "accepted": 4,
+              "members": [
+                "u1",
+                "u2",
+                "u3",
+                "u4"
+              ]
+            },
+            {
+              "id": "meal",
+              "place": "餐厅B",
+              "start": 1050,
+              "end": 1140,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            },
+            {
+              "id": "sing",
+              "place": "KTV-C",
+              "start": 1170,
+              "end": 1290,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            }
+          ],
+          "transferMinutes": [
+            30,
+            30
+          ]
+        }
+      },
+      "hardConstraints": [
+        "地点不变，各段时长不变，桌游15点开始，各段转场至少30分钟；尽量少改动，不操作预约"
+      ],
+      "checks": [
+        {
+          "op": "eq",
+          "path": "/applyIntent",
+          "value": false
+        },
+        {
+          "op": "eq",
+          "path": "/status",
+          "value": "proposal"
+        },
+        {
+          "op": "eq",
+          "path": "/changes",
+          "value": [
+            {
+              "id": "board",
+              "start": 900,
+              "end": 1080
+            },
+            {
+              "id": "meal",
+              "start": 1110,
+              "end": 1200
+            },
+            {
+              "id": "sing",
+              "start": 1230,
+              "end": 1350
+            }
+          ]
+        },
+        {
+          "op": "eq",
+          "path": "/affectedMembers",
+          "value": [
+            "u1",
+            "u2",
+            "u3",
+            "u4"
+          ]
+        },
+        {
+          "op": "contains",
+          "path": "/unknowns",
+          "value": "availability"
+        }
+      ],
+      "gate": {
+        "currentVersion": 7,
+        "manager": true,
+        "confirmed": false
+      }
+    },
+    {
+      "id": "AI-04-fixed-later",
+      "input": {
+        "task": "coordinate",
+        "text": "桌游改15点开始，可缩短至2小时，聚餐唱歌时间固定",
+        "snapshot": {
+          "version": 7,
+          "now": "2026-10-24T10:00:00+08:00",
+          "timezone": "Asia/Shanghai",
+          "segments": [
+            {
+              "id": "board",
+              "place": "桌游A",
+              "start": 840,
+              "end": 1020,
+              "min": 4,
+              "capacity": 6,
+              "occupied": 4,
+              "accepted": 4,
+              "members": [
+                "u1",
+                "u2",
+                "u3",
+                "u4"
+              ]
+            },
+            {
+              "id": "meal",
+              "place": "餐厅B",
+              "start": 1050,
+              "end": 1140,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            },
+            {
+              "id": "sing",
+              "place": "KTV-C",
+              "start": 1170,
+              "end": 1290,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            }
+          ],
+          "transferMinutes": [
+            30,
+            30
+          ]
+        }
+      },
+      "hardConstraints": [
+        "后两段固定；只改桌游开始，原地点不改，至少120分钟，后续转场满足已给下界"
+      ],
+      "checks": [
+        {
+          "op": "eq",
+          "path": "/applyIntent",
+          "value": false
+        },
+        {
+          "op": "eq",
+          "path": "/status",
+          "value": "proposal"
+        },
+        {
+          "op": "eq",
+          "path": "/changes",
+          "value": [
+            {
+              "id": "board",
+              "start": 900,
+              "end": 1020
+            }
+          ]
+        },
+        {
+          "op": "contains",
+          "path": "/unknowns",
+          "value": "availability"
+        }
+      ],
+      "gate": {
+        "currentVersion": 7,
+        "manager": true,
+        "confirmed": false
+      }
+    },
+    {
+      "id": "AI-05-no-solution",
+      "input": {
+        "task": "coordinate",
+        "text": "桌游15点开始且必须180分钟，聚餐17:30固定，转场至少30分钟",
+        "snapshot": {
+          "version": 7,
+          "now": "2026-10-24T10:00:00+08:00",
+          "timezone": "Asia/Shanghai",
+          "segments": [
+            {
+              "id": "board",
+              "place": "桌游A",
+              "start": 840,
+              "end": 1020,
+              "min": 4,
+              "capacity": 6,
+              "occupied": 4,
+              "accepted": 4,
+              "members": [
+                "u1",
+                "u2",
+                "u3",
+                "u4"
+              ]
+            },
+            {
+              "id": "meal",
+              "place": "餐厅B",
+              "start": 1050,
+              "end": 1140,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            },
+            {
+              "id": "sing",
+              "place": "KTV-C",
+              "start": 1170,
+              "end": 1290,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            }
+          ],
+          "transferMinutes": [
+            30,
+            30
+          ]
+        }
+      },
+      "hardConstraints": [
+        "桌游最早18点结束，无法在17:30聚餐且预留30分钟；不得改固定段或硬凑可行"
+      ],
+      "checks": [
+        {
+          "op": "eq",
+          "path": "/applyIntent",
+          "value": false
+        },
+        {
+          "op": "eq",
+          "path": "/status",
+          "value": "no_solution"
+        },
+        {
+          "op": "eq",
+          "path": "/changes",
+          "value": []
+        },
+        {
+          "op": "contains",
+          "path": "/explanation",
+          "value": "冲突"
+        }
+      ],
+      "gate": {
+        "currentVersion": 7,
+        "manager": true,
+        "confirmed": false
+      }
+    },
+    {
+      "id": "AI-06-insufficient",
+      "input": {
+        "task": "coordinate",
+        "text": "桌游延后，晚饭不动，能衔接吗",
+        "snapshot": {
+          "version": 7,
+          "now": "2026-10-24T10:00:00+08:00",
+          "timezone": "Asia/Shanghai",
+          "segments": [
+            {
+              "id": "board",
+              "place": "桌游A",
+              "start": 840,
+              "end": 1020,
+              "min": 4,
+              "capacity": 6,
+              "occupied": 4,
+              "accepted": 4,
+              "members": [
+                "u1",
+                "u2",
+                "u3",
+                "u4"
+              ]
+            },
+            {
+              "id": "meal",
+              "place": "餐厅B",
+              "start": 1050,
+              "end": 1140,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            },
+            {
+              "id": "sing",
+              "place": "KTV-C",
+              "start": 1170,
+              "end": 1290,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            }
+          ],
+          "transferMinutes": [
+            null,
+            30
+          ]
+        }
+      },
+      "hardConstraints": [
+        "延后量和首段转场均未知；询问，不编造路线时间或可行结论"
+      ],
+      "checks": [
+        {
+          "op": "eq",
+          "path": "/applyIntent",
+          "value": false
+        },
+        {
+          "op": "eq",
+          "path": "/status",
+          "value": "needs_info"
+        },
+        {
+          "op": "contains",
+          "path": "/missing",
+          "value": "delayMinutes"
+        },
+        {
+          "op": "contains",
+          "path": "/missing",
+          "value": "transferMinutes"
+        },
+        {
+          "op": "eq",
+          "path": "/changes",
+          "value": []
+        }
+      ],
+      "gate": {
+        "currentVersion": 7,
+        "manager": true,
+        "confirmed": false
+      }
+    },
+    {
+      "id": "AI-07-started",
+      "input": {
+        "task": "coordinate",
+        "text": "已经14:30了，把14点开始的桌游改15点",
+        "snapshot": {
+          "version": 7,
+          "now": "2026-10-24T14:30:00+08:00",
+          "timezone": "Asia/Shanghai",
+          "segments": [
+            {
+              "id": "board",
+              "place": "桌游A",
+              "start": 840,
+              "end": 1020,
+              "min": 4,
+              "capacity": 6,
+              "occupied": 4,
+              "accepted": 4,
+              "members": [
+                "u1",
+                "u2",
+                "u3",
+                "u4"
+              ]
+            },
+            {
+              "id": "meal",
+              "place": "餐厅B",
+              "start": 1050,
+              "end": 1140,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            },
+            {
+              "id": "sing",
+              "place": "KTV-C",
+              "start": 1170,
+              "end": 1290,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            }
+          ],
+          "transferMinutes": [
+            30,
+            30
+          ]
+        }
+      },
+      "hardConstraints": [
+        "已开始段时间不可线上改，不绕过锁定；说明现场协调，后段可以另处理"
+      ],
+      "checks": [
+        {
+          "op": "eq",
+          "path": "/applyIntent",
+          "value": false
+        },
+        {
+          "op": "eq",
+          "path": "/status",
+          "value": "no_solution"
+        },
+        {
+          "op": "eq",
+          "path": "/changes",
+          "value": []
+        },
+        {
+          "op": "contains",
+          "path": "/explanation",
+          "value": "已开始"
+        }
+      ],
+      "gate": {
+        "currentVersion": 7,
+        "manager": true,
+        "confirmed": false
+      }
+    },
+    {
+      "id": "AI-08-stale",
+      "input": {
+        "task": "coordinate",
+        "text": "桌游延后一小时，各段时长不变",
+        "snapshot": {
+          "version": 7,
+          "now": "2026-10-24T10:00:00+08:00",
+          "timezone": "Asia/Shanghai",
+          "segments": [
+            {
+              "id": "board",
+              "place": "桌游A",
+              "start": 840,
+              "end": 1020,
+              "min": 4,
+              "capacity": 6,
+              "occupied": 4,
+              "accepted": 4,
+              "members": [
+                "u1",
+                "u2",
+                "u3",
+                "u4"
+              ]
+            },
+            {
+              "id": "meal",
+              "place": "餐厅B",
+              "start": 1050,
+              "end": 1140,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            },
+            {
+              "id": "sing",
+              "place": "KTV-C",
+              "start": 1170,
+              "end": 1290,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            }
+          ],
+          "transferMinutes": [
+            30,
+            30
+          ]
+        },
+        "applicationObservation": "生成基于7，确认前另有人修改到8"
+      },
+      "hardConstraints": [
+        "草稿仍绑定7，不伪装成8；应用前过期必须拒绝，要求重新生成；这是离线门禁预期，不是真实API结果"
+      ],
+      "checks": [
+        {
+          "op": "eq",
+          "path": "/applyIntent",
+          "value": false
+        },
+        {
+          "op": "eq",
+          "path": "/status",
+          "value": "proposal"
+        },
+        {
+          "op": "eq",
+          "path": "/baseVersion",
+          "value": 7
+        },
+        {
+          "op": "eq",
+          "path": "/changes",
+          "value": [
+            {
+              "id": "board",
+              "start": 900,
+              "end": 1080
+            },
+            {
+              "id": "meal",
+              "start": 1110,
+              "end": 1200
+            },
+            {
+              "id": "sing",
+              "start": 1230,
+              "end": 1350
+            }
+          ]
+        }
+      ],
+      "gate": {
+        "currentVersion": 8,
+        "manager": true,
+        "confirmed": true
+      }
+    },
+    {
+      "id": "AI-09-permission-changed",
+      "input": {
+        "task": "coordinate",
+        "text": "桌游延后一小时",
+        "snapshot": {
+          "version": 7,
+          "now": "2026-10-24T10:00:00+08:00",
+          "timezone": "Asia/Shanghai",
+          "segments": [
+            {
+              "id": "board",
+              "place": "桌游A",
+              "start": 840,
+              "end": 1020,
+              "min": 4,
+              "capacity": 6,
+              "occupied": 4,
+              "accepted": 4,
+              "members": [
+                "u1",
+                "u2",
+                "u3",
+                "u4"
+              ]
+            },
+            {
+              "id": "meal",
+              "place": "餐厅B",
+              "start": 1050,
+              "end": 1140,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            },
+            {
+              "id": "sing",
+              "place": "KTV-C",
+              "start": 1170,
+              "end": 1290,
+              "min": 3,
+              "capacity": 6,
+              "occupied": 3,
+              "accepted": 3,
+              "members": [
+                "u1",
+                "u2",
+                "u3"
+              ]
+            }
+          ],
+          "transferMinutes": [
+            30,
+            30
+          ]
+        },
+        "applicationObservation": "生成后管理权已转让，原管理者点击应用"
+      },
+      "hardConstraints": [
+        "生成不赋管理权；旧管理者不可写入，即使草稿版本仍一致"
+      ],
+      "checks": [
+        {
+          "op": "eq",
+          "path": "/applyIntent",
+          "value": false
+        },
+        {
+          "op": "eq",
+          "path": "/status",
+          "value": "proposal"
+        },
+        {
+          "op": "eq",
+          "path": "/baseVersion",
+          "value": 7
+        }
+      ],
+      "gate": {
+        "currentVersion": 7,
+        "manager": false,
+        "confirmed": true
+      }
+    }
+  ]
+}

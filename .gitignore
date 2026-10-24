@@ -22,7 +22,8 @@ project.private.config.json
 *.sqlite*
 .DS_Store
 # Local planning, account audits and original provider responses stay on this machine.
-/data/
+/data/*
+!/data/ai-evaluation-cases.json
 /docs/*
 !/docs/11-首版成局加入与补位规则.md
 !/docs/team/
