@@ -6,7 +6,8 @@ type CloudHTTPOptions = {
   data?: unknown; timeout: number;
   success: (response: unknown) => void; fail: (error: unknown) => void;
 };
-type NativeCloudHTTP = { callHTTPFunction: (options: CloudHTTPOptions) => unknown };
+type NativeCloudHTTP = { initialize: (env: string) => void; callHTTPFunction: (options: CloudHTTPOptions) => unknown };
+const initializedClouds = new WeakMap<object, string>();
 declare const wx: unknown;
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -14,12 +15,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function nativeCloud(): NativeCloudHTTP {
   // Taro's installed types do not yet expose this native API. Never switch transports.
   const platform: unknown = typeof wx === 'undefined' ? undefined : wx;
-  if (!isRecord(platform) || !isRecord(platform.cloud) || typeof platform.cloud.callHTTPFunction !== 'function') {
+  if (!isRecord(platform) || !isRecord(platform.cloud) || typeof platform.cloud.init !== 'function' || typeof platform.cloud.callHTTPFunction !== 'function') {
     throw new ApiClientError('NOT_CONFIGURED', '当前微信环境不支持云 HTTP，请使用基础库 3.15.2 或以上版本', 0);
   }
   const cloud = platform.cloud;
   const call = platform.cloud.callHTTPFunction;
-  return { callHTTPFunction: options => Reflect.apply(call, cloud, [options]) };
+  const init = cloud.init as (options: { env: string }) => unknown;
+  return {
+    initialize: env => {
+      // A saved Weego session survives restarts; the native cloud SDK does not.
+      // Initialize before the first business request, independently of login.
+      if (initializedClouds.get(cloud) === env) return;
+      Reflect.apply(init, cloud, [{ env }]);
+      initializedClouds.set(cloud, env);
+    },
+    callHTTPFunction: options => Reflect.apply(call, cloud, [options])
+  };
 }
 export function assertCloudHTTPAvailable() { nativeCloud(); }
 
@@ -32,6 +43,7 @@ export async function callCloudHTTP(request: TransportRequest, env: string, name
   const cloud = nativeCloud();
   let result: unknown;
   try {
+    cloud.initialize(env);
     result = await new Promise<unknown>((resolve, reject) => {
       cloud.callHTTPFunction({
         name, config: { env }, path: request.path,

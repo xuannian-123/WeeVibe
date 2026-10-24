@@ -1,0 +1,26 @@
+.home-screen { padding-top: 36px; }
+.home-hero { padding: 24px 8px 30px; }
+.home-wordmark { display: block; color: #28654f; font-size: 34px; font-weight: 700; letter-spacing: 2px; }
+.home-title { display: block; margin-top: 24px; font-size: 48px; font-weight: 700; line-height: 1.4; color: #243d32; }
+.home-subtitle { display: block; margin: 18px 0 32px; font-size: 28px; line-height: 1.75; color: #69746c; }
+.home-account { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 20px; gap: 12px; }
+.home-account-info { display: flex; align-items: center; gap: 12px; font-size: 25px; color: #637268; }
+.home-status-dot { width: 12px; height: 12px; border-radius: 50%; background: #aaa99d; flex-shrink: 0; }
+.home-status-dot-ready { background: #3e8464; }
+.home-account > .action, .home-section-heading > .action { margin: 0; flex-shrink: 0; }
+.home-feedback { margin-bottom: 20px; }
+.home-section-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 8px; gap: 16px; }
+.home-section-title { font-size: 34px; font-weight: 700; color: #293f34; }
+.home-recent-note { display: block; margin: 8px 8px 22px; color: #7b8279; font-size: 24px; line-height: 1.7; }
+.home-empty { display: flex; flex-direction: column; gap: 14px; padding: 44px 28px; margin-bottom: 24px; border-radius: 24px; background: #f0f3eb; color: #778174; font-size: 27px; line-height: 1.7; }
+.home-empty-title { color: #3c5446; font-size: 31px; font-weight: 600; }
+.home-activity-card { padding: 28px; margin-bottom: 22px; border-radius: 24px; border: 1px solid #e4e9df; background: #fffefa; }
+.home-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
+.home-card-title { font-size: 33px; font-weight: 600; color: #2c4436; line-height: 1.5; overflow-wrap: anywhere; }
+.home-role { padding: 7px 12px; border-radius: 10px; background: #edf3e8; font-size: 22px; color: #4b7258; flex-shrink: 0; }
+.home-formation { display: block; font-size: 25px; color: #687569; margin-bottom: 20px; }
+.home-segment { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 18px; padding: 12px 0; border-top: 1px solid #eff0e9; line-height: 1.6; }
+.home-segment-name { font-size: 27px; color: #445748; overflow-wrap: anywhere; }
+.home-segment-count { font-size: 24px; color: #7a8277; }
+.home-activity-card > .action { margin-bottom: 0; }
+.home-more { margin-top: 20px; }

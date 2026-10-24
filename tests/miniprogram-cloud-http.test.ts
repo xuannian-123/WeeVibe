@@ -28,6 +28,30 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('explicit native cloud HTTP transport (mock platform only)', () => {
+  it('restores a saved session in a fresh cloud runtime without another login', async () => {
+    let initialized = false;
+    const cloud = { init: vi.fn(() => { initialized = true; }), callHTTPFunction: vi.fn(options => {
+      if (!initialized) { options.fail(new Error('cloud runtime is not initialized')); return; }
+      options.success({ statusCode: 200, data: user });
+    }) };
+    vi.stubGlobal('wx', { cloud });
+    expect(await api.me()).toEqual(user);
+    expect(await api.me()).toEqual(user);
+    expect(cloud.init).toHaveBeenCalledExactlyOnceWith({ env: 'fixture-env' });
+    expect(platform.login).not.toHaveBeenCalled();
+    expect(platform.cloud.callFunction).not.toHaveBeenCalled();
+    expect(platform.setStorageSync).not.toHaveBeenCalled();
+  });
+  it('retries a failed native initialization without sending or switching transports', async () => {
+    const cloud = { init: vi.fn().mockImplementationOnce(() => { throw new Error('private init error'); }).mockImplementation(() => {}),
+      callHTTPFunction: vi.fn(options => options.success({ statusCode: 200, data: user })) };
+    vi.stubGlobal('wx', { cloud });
+    await expect(api.me()).rejects.toMatchObject({ code: 'NETWORK_ERROR' });
+    expect(cloud.callHTTPFunction).not.toHaveBeenCalled();
+    expect(await api.me()).toEqual(user);
+    expect(cloud.init).toHaveBeenCalledTimes(2);
+    expect(platform.request).not.toHaveBeenCalled();
+  });
   it('uses fixed function/environment and forwards the Weego bearer, method and path', async () => {
     respond(200, user);
     expect(await api.me()).toEqual(user);

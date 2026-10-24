@@ -19,6 +19,9 @@ export function emptySegment(): SegmentForm {
     place: '', address: '', amount: '', feeUnit: 'unknown', feeNote: '', requirements: '', minimum: '', capacity: '' };
 }
 export function emptyForm(): ActivityForm { const segment = emptySegment(); return { name: '', nickname: '', mainRef: segment.ref, attending: [], segments: [segment] }; }
+export function segmentName(form: ActivityForm, segment: SegmentForm): string {
+  return segment.name.trim() || (form.segments.length === 1 ? form.name.trim() : '');
+}
 export function shanghaiTime(date: string, time: string): string {
   const raw = `${date}T${time}:00+08:00`;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new Error('请完整填写日期与时间（Asia/Shanghai）');
@@ -41,8 +44,10 @@ export function positiveInteger(value: string) {
 export function buildCreateInput(form: ActivityForm, key: string): CreateActivityInput {
   const segments = form.segments.map((s, i) => {
     try {
-      return { client_ref: s.ref, type: s.type, name: s.name.trim(),
-        starts_at: shanghaiTime(s.startDate, s.startTime), ends_at: shanghaiTime(s.endDate, s.endTime), deadline_at: shanghaiTime(s.deadlineDate, s.deadlineTime),
+      const followsStart = !s.deadlineDate && !s.deadlineTime;
+      return { client_ref: s.ref, type: s.type, name: segmentName(form, s),
+        starts_at: shanghaiTime(s.startDate, s.startTime), ends_at: shanghaiTime(s.endDate || s.startDate, s.endTime),
+        deadline_at: followsStart ? shanghaiTime(s.startDate, s.startTime) : shanghaiTime(s.deadlineDate, s.deadlineTime),
         minimum_participants: positiveInteger(s.minimum), capacity: positiveInteger(s.capacity),
         location: { name: s.place.trim(), address: s.address.trim() || null, source_url: null },
         fee: { kind: s.feeUnit, amount_cents: s.feeUnit === 'unknown' ? null : moneyCents(s.amount), currency: 'CNY', note: s.feeNote.trim() },

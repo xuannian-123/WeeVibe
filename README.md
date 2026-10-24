@@ -23,13 +23,13 @@ pnpm build:mini
 
 ## 当前实现
 
-- 小程序：首页、创建、详情、选段报名、整体批准/拒绝、技术检查。
+- 小程序：首页、创建预览与确认、详情、选段报名、整体批准/拒绝；三页轻量整理，选填项收进更多设置。
 - 后端：服务端微信身份、摘要会话、本人记录、多环节创建/申请/整体审批、版本/权限/容量/幂等保护。
 - 云身份入口：专用普通云函数到Next.js的签名验证、一次性凭证事务和客户端显式适配；默认关闭，不依赖原AppSecret。见[接入与验收说明](cloudfunctions/weegoLogin/README.md)。
 - 高德：服务端搜索、附近及步行接口和共享客户端；小程序选择器待接。
 - AI：严格结构化契约及纯函数约束校验；供应商、真实模型与确认应用待接。
 
-当前已通过162项离线测试、类型检查、双端构建，以及Linux上的真实临时PG、重启、容器和SCF打包检查。独立Neon Free PostgreSQL与现有CloudBase中的HTTP云函数已接通，继续运行同一Next.js API；正式微信开发工具中的原生云HTTP调用、真实云身份登录及`/me`已通过。两微信真机、冷启动及完整流程仍需分别验收，详见[当前架构与证据](docs/team/architecture.md)。[CI](https://github.com/xuannian-123/weego/actions)中的身份仍为fixture，不混记为真实微信结果。
+当前已通过168项离线测试、类型检查与小程序构建。Linux上的真实临时PG、重启、容器和SCF打包已有独立检查。Neon Free PostgreSQL与现有CloudBase中的HTTP云函数已接通，继续运行同一Next.js API；正式微信开发工具的真实云身份与业务调用已通过，上一临时预览的单手机打开及登录由用户确认。当前新界面、两微信、冷启动及完整流程分别验收，详见[当前架构与证据](docs/team/architecture.md)。[CI](https://github.com/xuannian-123/weego/actions)中的身份仍为fixture，不混记为真实微信结果。
 
 ## 规则与协作
 
