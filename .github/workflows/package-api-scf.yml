@@ -35,12 +35,38 @@ jobs:
           mkdir -p .working/scf-smoke
           unzip -q .working/weego-api-scf.zip -d .working/scf-smoke
           test -x .working/scf-smoke/scf_bootstrap
+          # Extraction must preserve internal pnpm links and every link target.
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { lstat, readdir, realpath } from 'node:fs/promises';
+          import { resolve, sep } from 'node:path';
+          const root = await realpath('.working/scf-smoke');
+          let links = 0;
+          async function verify(path) {
+            const stat = await lstat(path);
+            if (stat.isSymbolicLink()) {
+              const actual = await realpath(path);
+              assert.ok(actual === root || actual.startsWith(root + sep), 'Extracted runtime link escapes ZIP');
+              links++;
+            } else if (stat.isDirectory()) {
+              for (const name of await readdir(path)) await verify(resolve(path, name));
+            }
+          }
+          await verify(root);
+          assert.ok(links > 0, 'pnpm runtime links must survive ZIP extraction');
+          console.log(`Verified ${links} internal runtime links after extraction`);
+          NODE
           HOSTNAME=127.0.0.1 PORT=43189 node .working/scf-smoke/apps/web/server.js > .working/scf-smoke.log 2>&1 &
           api_pid=$!
           trap 'kill -TERM "$api_pid" 2>/dev/null || true' EXIT
           curl --fail --retry 30 --retry-all-errors --retry-delay 1 --max-time 5 http://127.0.0.1:43189/api/v1/health
           status=$(curl --silent --output .working/scf-ready.json --write-out '%{http_code}' http://127.0.0.1:43189/api/v1/ready)
           test "$status" = '503'
+      - name: Diagnose failed extracted runtime
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f .working/scf-smoke.log ]; then tail -n 80 .working/scf-smoke.log; fi
       - name: Upload only the Linux runtime zip
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:

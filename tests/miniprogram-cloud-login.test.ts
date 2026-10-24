@@ -11,6 +11,7 @@ import { establishSession, api } from '../apps/miniprogram/src/platform/api';
 const session = () => ({ token: randomBytes(32).toString('base64url'), expires_at: new Date(Date.now() + 86400000).toISOString(), user: { user_id: randomUUID() } });
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal('__WEEGO_API_TRANSPORT__', 'https'); vi.stubGlobal('__WEEGO_CLOUD_API_FUNCTION__', '');
   vi.stubGlobal('__WEEGO_LOGIN_MODE__', 'cloud'); vi.stubGlobal('__WEEGO_API_BASE_URL__', 'https://api.example.invalid');
   vi.stubGlobal('__WEEGO_CLOUD_ENV_ID__', 'fixture-env'); vi.stubGlobal('__WEEGO_CLOUD_LOGIN_FUNCTION__', 'fixtureLogin');
 });
