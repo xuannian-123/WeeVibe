@@ -12,6 +12,7 @@ import { SeedList, SpecPreview, type Draft } from "@/components/launch/SpecPrevi
 import { Advanced, DEFAULT_ADV, deadlineIso, type AdvancedOpts } from "@/components/launch/Advanced";
 import { InviteLinks } from "@/components/launch/InviteLinks";
 import { QrSvg } from "@/components/screen/bits";
+import { Guide, GuideButton, HOME_GUIDE, useGuide } from "@/components/Guide";
 
 const EXAMPLES = ["周五晚上 8 个人吃火锅，人均 100", "周六下午打羽毛球", "今晚宵夜烧烤"];
 const PARSE_LINES = ["局长正在翻黄历…", "掐指一算，宜聚餐…", "正在数人头…", "正在盘算人均…"];
@@ -23,12 +24,13 @@ function TopBar() {
   // 本地存的局数在客户端才知道，挂载后再读，避免水合不一致
   const [mine, setMine] = useState(0);
   useEffect(() => setMine(store.myJu().length), []);
+  const guide = useGuide("home");
   return (
     <div className="flex h-14 items-center gap-2.5">
       <SealLogo size={34} />
       <span className="text-[17px] font-black tracking-tight">AI 局长</span>
       <Link href="/firewall" className="ml-auto text-[13px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4">
-        局长怎么保密？
+        怎么保密
       </Link>
       <Link
         href="/me"
@@ -36,6 +38,8 @@ function TopBar() {
       >
         我的局{mine > 0 ? ` · ${mine}` : ""}
       </Link>
+      <GuideButton onClick={guide.show} />
+      <Guide steps={HOME_GUIDE} open={guide.open} onClose={guide.close} />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { JuState, Notice } from "@/lib/types";
+import type { JuState, JuStatus, Notice } from "@/lib/types";
 import { ago } from "@/lib/client/format";
 import { ApiError } from "@/lib/client/api";
 import type { JuActions } from "@/lib/client/useJu";
@@ -74,7 +74,8 @@ export function useInbox(state: JuState, actions: JuActions, enabled: boolean) {
     }
   };
 
-  return { notices, unread: notices.filter((n) => !n.read).length, markRead };
+  const status = state.ju.status;
+  return { notices, unread: notices.filter((n) => !n.read && !stale(n, status)).length, markRead };
 }
 
 export function InboxBell({ unread, onClick }: { unread: number; onClick: () => void }) {
@@ -95,8 +96,13 @@ export function InboxBell({ unread, onClick }: { unread: number; onClick: () => 
   );
 }
 
-export function InboxBanner({ notices, onOpen }: { notices: Notice[]; onOpen: () => void }) {
-  const n = notices.find((x) => !x.read);
+/** 催入局 / 催投票的私信，局定了或散了就过期，不再挂在顶上 */
+function stale(n: Notice, status: JuStatus): boolean {
+  return n.kind === "nudge" && (status === "confirmed" || status === "cancelled");
+}
+
+export function InboxBanner({ notices, status, onOpen }: { notices: Notice[]; status: JuStatus; onOpen: () => void }) {
+  const n = notices.find((x) => !x.read && !stale(x, status));
   if (!n) return null;
   return (
     <button

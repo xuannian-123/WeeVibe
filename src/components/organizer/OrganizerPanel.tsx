@@ -52,10 +52,19 @@ function Meter({ have, need, label }: { have: number; need: number; label?: stri
   );
 }
 
-function CopyBlock({ text, label = "复制" }: { text: string; label?: string }) {
+function CopyBlock({ text, label = "复制", clamp }: { text: string; label?: string; clamp?: boolean }) {
+  const [full, setFull] = useState(false);
+  const long = !!clamp && text.split("\n").length + text.length / 40 > 4;
   return (
     <div>
-      <p className="whitespace-pre-wrap rounded-lg border-2 border-dashed border-line bg-paper px-3 py-2 text-[14px] leading-relaxed">{text}</p>
+      <p className={`whitespace-pre-wrap rounded-lg border-2 border-dashed border-line bg-paper px-3 py-2 text-[14px] leading-relaxed ${long && !full ? "line-clamp-3" : ""}`}>
+        {text}
+      </p>
+      {long && (
+        <button type="button" onClick={() => setFull((x) => !x)} className="mt-1 min-h-9 text-[13px] font-bold text-ink-soft underline underline-offset-4">
+          {full ? "收起" : "展开全文"}
+        </button>
+      )}
       <Button
         variant="gold"
         size="sm"
@@ -101,8 +110,8 @@ function Broadcast({ msgs, state }: { msgs: GroupMessages | null; state: JuState
   const fallback = state.ju.announcements.at(-1)?.text;
   const text = msgs?.broadcast || fallback;
   return (
-    <Card title="📣 群公告" hint="局长按当前进度写好了，复制就能发">
-      {text ? <CopyBlock text={text} label="复制群公告" /> : <p className="text-[14px] text-ink-faint">局长在写…</p>}
+    <Card title="📣 群公告">
+      {text ? <CopyBlock text={text} label="复制群公告" clamp /> : <p className="text-[14px] text-ink-faint">局长在写…</p>}
     </Card>
   );
 }
@@ -256,9 +265,7 @@ function Voting({ c, msgs }: { c: Ctx; msgs: GroupMessages | null }) {
   return (
     <>
       <Card title="🗳️ 大家在投" hint={<span className="font-num">{voted}/{state.counts.in} 已投 · 过半自动定局</span>}>
-        <p className="mb-2.5 text-[12.5px] leading-relaxed text-ink-faint">
-          你自己也要投一票的话，在页面上方的方案里投。这里的“拍板”是发起人直接定，不算投票。
-        </p>
+        <p className="mb-2.5 text-[12.5px] text-ink-faint">你自己投票在“我的”里；这里的拍板不算投票。</p>
         <ul className="space-y-2.5">
           {plan.proposals.map((p) => {
             const n = tally[p.id] ?? 0;
@@ -744,11 +751,54 @@ function DemoTools({ c }: { c: Ctx }) {
   );
 }
 
+/* ───────── 定局后：按时间先后只放眼前的事 ───────── */
+function Confirmed({ c, msgs, setMsgs }: { c: Ctx; msgs: GroupMessages | null; setMsgs: (m: GroupMessages) => void }) {
+  const { state } = c;
+  const p = confirmedProposal(state.ju);
+  const over = !!state.ju.settlement || !!state.ju.recap?.text || (p ? Date.now() >= Date.parse(p.slot.end) : false);
+  const changes = state.ju.revisions.length > 0 && (
+    <Card title="🔄 定局后的变化">
+      <ul className="space-y-1 text-[13px] text-ink-soft">
+        {state.ju.revisions.slice(-3).flatMap((r) => r.changes).map((t, i) => (
+          <li key={i}>· {t}</li>
+        ))}
+      </ul>
+    </Card>
+  );
+  const afterTools = (
+    <>
+      {state.ju.settlement ? <PayStatus c={c} /> : <Bill c={c} />}
+      <After c={c} />
+    </>
+  );
+  if (over) {
+    return (
+      <>
+        {afterTools}
+        {changes}
+        <Reservation c={c} msgs={msgs} setMsgs={setMsgs} />
+        <Broadcast msgs={msgs} state={state} />
+      </>
+    );
+  }
+  return (
+    <>
+      <Reservation c={c} msgs={msgs} setMsgs={setMsgs} />
+      {changes}
+      <Broadcast msgs={msgs} state={state} />
+      <details className="rounded-[var(--radius-card)] border-2 border-dashed border-ink-faint px-3.5 py-2">
+        <summary className="min-h-10 cursor-pointer py-2 text-[15px] font-black text-ink-soft">吃完以后：拍小票分账 · 回顾 · 再约</summary>
+        <div className="space-y-3 pb-2 pt-1">{afterTools}</div>
+      </details>
+    </>
+  );
+}
+
 /* ───────── 主体 ───────── */
 const STATUS_HEAD: Record<string, [string, string]> = {
   collecting: ["收人中", "等大家私聊局长"],
   voting: ["投票中", "大家在挑方案"],
-  confirmed: ["已成局", "订位、分账、回顾都在这"],
+  confirmed: ["已成局", "现在该做的在最上面"],
   cancelled: ["局已散", "这次没凑成"],
 };
 
@@ -797,7 +847,7 @@ export function OrganizerPanel(props: { state: JuState; adminToken: string; onSt
         <span className="flex size-8 -rotate-6 items-center justify-center rounded-md border-2 border-ink bg-cinnabar text-[15px] font-black text-white">令</span>
         <div className="min-w-0">
           <h3 className="text-[17px] font-black leading-tight">局长控制台</h3>
-          <p className="text-[12px] text-ink-faint">只有发起人能看到 · {sub}</p>
+          <p className="text-[12px] text-ink-faint">{sub}</p>
         </div>
         <span className="ml-auto rounded-full border-2 border-ink bg-card px-2.5 py-0.5 text-[12px] font-bold">{head}</span>
       </header>
@@ -805,23 +855,7 @@ export function OrganizerPanel(props: { state: JuState; adminToken: string; onSt
       <div className="space-y-3">
         {st === "collecting" && <Collecting c={c} msgs={msgs} />}
         {st === "voting" && <Voting c={c} msgs={msgs} />}
-        {st === "confirmed" && (
-          <>
-            <Broadcast msgs={msgs} state={state} />
-            {state.ju.revisions.length > 0 && (
-              <Card title="🔄 定局后的变化" hint="人数变了，局长尽量不动原方案">
-                <ul className="space-y-1 text-[13px] text-ink-soft">
-                  {state.ju.revisions.slice(-3).flatMap((r) => r.changes).map((t, i) => (
-                    <li key={i}>· {t}</li>
-                  ))}
-                </ul>
-              </Card>
-            )}
-            <Reservation c={c} msgs={msgs} setMsgs={setMsgs} />
-            {state.ju.settlement ? <PayStatus c={c} /> : <Bill c={c} />}
-            <After c={c} />
-          </>
-        )}
+        {st === "confirmed" && <Confirmed c={c} msgs={msgs} setMsgs={setMsgs} />}
         {st === "cancelled" && (
           <Card title="🍃 这次没凑成">
             <p className="text-[14px] leading-relaxed text-ink-soft">

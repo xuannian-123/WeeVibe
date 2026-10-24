@@ -48,6 +48,11 @@ export function notify(m: Member, kind: Notice["kind"], text: string, now: Date)
   pushNotice(m, kind, text, now);
 }
 
+/** 进入下一阶段时，上一阶段的催促私信作废（标成已读），不再挂在别人顶上 */
+export function expireNudges(members: Member[]): void {
+  for (const m of members) for (const n of m.private?.inbox ?? []) if (n.kind === "nudge") n.read = true;
+}
+
 export function emptyPrivate(): MemberPrivate {
   return {
     chat: [],
@@ -362,6 +367,7 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
   priv.firstPlanAt ??= now.toISOString();
 
   if (deps.announce !== false) announceAt(ju, planText(publicFacts(ju, members), replan), now);
+  expireNudges(members);
   for (const m of ins) {
     if (ju.votes[m.id]) continue;
     notify(m, "nudge", replan ? "局长更新了方案，去看看还投不投原来那个？" : `局长出了 ${polished.proposals.length} 个方案，去投一票吧，过半就自动定局。`, now);
@@ -374,6 +380,7 @@ export function confirmProposal(ju: Ju, members: Member[], proposalId: string, n
   if (!ju.plan?.proposals.some((p) => p.id === proposalId)) throw new HttpError(400, "这个方案不在候选里");
   ju.status = "confirmed";
   ju.confirmedProposalId = proposalId;
+  expireNudges(members);
   const why = how === "vote" ? "过半朋友投给了同一个方案" : how === "deadline" ? "截止时间到，按局长推荐定局" : "发起人拍板";
   appendTraceAt(ju, "done", `定局：${why}`, now);
   announceAt(ju, confirmedText(publicFacts(ju, members)), now);

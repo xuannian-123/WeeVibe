@@ -189,10 +189,7 @@ function OnTheWay({ state, me, actions, p }: { state: JuState; me: Member; actio
           <Button variant={eta ? "secondary" : "gold"} className="w-full" loading={busy} onClick={share}>
             {eta ? `更新一下（预计 ${hhmm(eta.arriveAt)} 到）` : "我在路上"}
           </Button>
-          <p className="mt-2 flex items-start gap-1.5 text-[12.5px] leading-relaxed text-ink-soft">
-            <span aria-hidden>🛡️</span>
-            只共享到达时间，不共享位置。坐标算完就丢，服务器不保存。
-          </p>
+          <p className="mt-2 text-center text-[12.5px] text-ink-soft">🛡️ 只共享到达时间，不共享位置</p>
         </>
       )}
       {others.length > 0 && (
@@ -325,7 +322,6 @@ function PhotosCard({ state, actions }: { state: JuState; actions: JuActions }) 
       <Button variant="secondary" className="w-full" loading={busy > 0} onClick={() => fileRef.current?.click()}>
         {busy > 0 ? `正在上传 ${busy} 张…` : "上传照片"}
       </Button>
-      <p className="mt-2 text-[12px] text-ink-faint">吃完传几张，局长会做成回顾，大家都能看到。</p>
     </section>
   );
 }
@@ -357,19 +353,43 @@ function RecapCard({ state }: { state: JuState }) {
   );
 }
 
+/** 按时间分阶段：局前只看行程，当天加上“我在路上”，局后才是转账、照片、回顾 */
+type Phase = "before" | "day" | "after";
+function phaseOf(state: JuState, p: Proposal, now = Date.now()): Phase {
+  const { ju } = state;
+  if (ju.settlement || ju.recap?.text || now >= Date.parse(p.slot.end)) return "after";
+  if (now >= Date.parse(p.slot.start) - 3 * 3600_000) return "day";
+  return "before";
+}
+
 export function ConfirmedView({ state, me, actions }: { state: JuState; me: Member | null; actions: JuActions }) {
   const { ju } = state;
   const p = confirmedProposal(ju) ?? ju.plan?.proposals[0];
   if (!p) return null;
   const inJu = me && me.status === "in";
+  const phase = phaseOf(state, p);
+
+  const travel = (
+    <div className="grid grid-cols-2 gap-3">
+      <a href={api.icsUrl(ju.id)} download={`${ju.title}.ics`} className="pressable sticker flex min-h-14 items-center justify-center gap-2 font-bold">
+        📅 加入日历
+      </a>
+      <a
+        href={amapUrl(p.poi.lng, p.poi.lat, p.poi.name)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="pressable flex min-h-14 items-center justify-center gap-2 rounded-[var(--radius-card)] border-2 border-ink bg-cinnabar font-bold text-white shadow-sticker"
+      >
+        🧭 导航过去
+      </a>
+    </div>
+  );
+
   return (
     <div className="space-y-5 pb-10">
       <Hero state={state} p={p} />
       {ju.nextJuId && (
-        <Link
-          href={`/j/${ju.nextJuId}`}
-          className="pressable sticker flex items-center gap-3 bg-mustard p-4"
-        >
+        <Link href={`/j/${ju.nextJuId}`} className="pressable sticker flex items-center gap-3 bg-mustard p-4">
           <span className="text-3xl" aria-hidden>
             🔁
           </span>
@@ -380,31 +400,45 @@ export function ConfirmedView({ state, me, actions }: { state: JuState; me: Memb
           <span className="text-xl font-black">→</span>
         </Link>
       )}
-      <RecapCard state={state} />
-      {inJu && <PaymentCard state={state} me={me} actions={actions} />}
       <Revisions state={state} />
-      {inJu && <ItineraryCard state={state} actions={actions} p={p} />}
 
-      <div className="grid grid-cols-2 gap-3">
-        <a href={api.icsUrl(ju.id)} download={`${ju.title}.ics`} className="pressable sticker flex min-h-14 items-center justify-center gap-2 font-bold">
-          📅 加入日历
-        </a>
-        <a
-          href={amapUrl(p.poi.lng, p.poi.lat, p.poi.name)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="pressable flex min-h-14 items-center justify-center gap-2 rounded-[var(--radius-card)] border-2 border-ink bg-cinnabar font-bold text-white shadow-sticker"
-        >
-          🧭 导航过去
-        </a>
-      </div>
-      <p className="-mt-3 px-1 text-[12px] text-ink-faint">日历里带出发前提醒。微信里下载不了？点右上角 ··· 用浏览器打开</p>
+      {phase === "after" ? (
+        <>
+          {inJu && <PaymentCard state={state} me={me} actions={actions} />}
+          <RecapCard state={state} />
+          {inJu && <PhotosCard state={state} actions={actions} />}
+        </>
+      ) : (
+        <>
+          {inJu && <ItineraryCard state={state} actions={actions} p={p} />}
+          {travel}
+          {inJu && phase === "day" && <OnTheWay state={state} me={me} actions={actions} p={p} />}
+        </>
+      )}
 
-      {inJu && <OnTheWay state={state} me={me} actions={actions} p={p} />}
-      {inJu && <PhotosCard state={state} actions={actions} />}
       {me?.status === "waitlist" && <WaitlistCard />}
-      {!inJu && me?.status !== "waitlist" && (
-        <p className="text-center text-[14px] text-ink-soft">这个局已经定了。下次有局，局长再叫你 👋</p>
+      {!inJu && me?.status !== "waitlist" && <p className="text-center text-[14px] text-ink-soft">这个局已经定了。下次有局，局长再叫你 👋</p>}
+
+      {/* 不在当前阶段的功能收起来，需要时还能点开 */}
+      {inJu && (
+        <details className="rounded-[var(--radius-card)] border-2 border-dashed border-line px-4 py-2">
+          <summary className="min-h-10 cursor-pointer py-2 text-[14px] font-bold text-ink-soft">
+            {phase === "after" ? "行程和导航" : "更多：我在路上 · 局后传照片"}
+          </summary>
+          <div className="space-y-4 pb-3 pt-2">
+            {phase === "after" ? (
+              <>
+                <ItineraryCard state={state} actions={actions} p={p} />
+                {travel}
+              </>
+            ) : (
+              <>
+                {phase === "before" && <OnTheWay state={state} me={me} actions={actions} p={p} />}
+                <PhotosCard state={state} actions={actions} />
+              </>
+            )}
+          </div>
+        </details>
       )}
     </div>
   );

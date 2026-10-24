@@ -6,7 +6,8 @@ import type { JuState, Member } from "@/lib/types";
 import { errMsg } from "@/lib/client/api";
 import type { JuActions } from "@/lib/client/useJu";
 import { OrganizerPanel } from "@/components/organizer/OrganizerPanel";
-import { Button, SealLogo, Sheet, StatusBadge } from "../ui";
+import { Button, SealLogo, StatusBadge } from "../ui";
+import { Guide, GuideButton, MEMBER_GUIDE, ORGANIZER_GUIDE, useGuide } from "../Guide";
 import { toast } from "../toast";
 import { JuHeader } from "./JuHeader";
 import { EntryView } from "./Entry";
@@ -113,8 +114,10 @@ export function JuView({
   const isAdmin = !!adminToken && state.isAdmin !== false;
   const [forceSwipe, setForceSwipe] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
+  // 发起人：「我的」= 自己作为成员要做的事；「管理」= 发起人的事。两边分开，投票和拍板不再混在一页
+  const [tab, setTab] = useState<"me" | "manage">("me");
   const inbox = useInbox(state, actions, !!me);
+  const guide = useGuide(isAdmin ? "ju-organizer" : "ju-member", ju.status !== "cancelled");
 
   let view: View;
   if (ju.status === "cancelled") view = "cancelled";
@@ -157,6 +160,7 @@ export function JuView({
   }
 
   const panel = isAdmin && adminToken ? <OrganizerPanel state={state} adminToken={adminToken} onState={actions.apply} /> : null;
+  const managing = !!panel && tab === "manage";
 
   return (
     <main className="mx-auto w-full max-w-[480px] overflow-x-clip px-4">
@@ -165,38 +169,28 @@ export function JuView({
         offline={offline}
         right={
           <>
-            {panel && immersive && (
-              <button
-                type="button"
-                onClick={() => setPanelOpen(true)}
-                className="pressable min-h-10 rounded-full border-2 border-ink bg-mustard px-3 text-[13px] font-black shadow-sticker-sm"
-              >
-                👑 控制台
-              </button>
-            )}
+            <GuideButton onClick={guide.show} />
             {me && <InboxBell unread={inbox.unread} onClick={() => setInboxOpen(true)} />}
           </>
         }
       />
-      <JuHeader state={state} compact={immersive} />
-      {me && !immersive && <InboxBanner notices={inbox.notices} onOpen={() => setInboxOpen(true)} />}
-
-      <div className="mt-4">{body}</div>
-
-      {panel && !immersive && (
-        <div className="mb-10 mt-2">
-          <div className="mb-2 flex items-center gap-2 px-1 text-[13px] font-bold text-ink-faint">
-            <span className="h-0.5 flex-1 bg-line" />
-            发起人才看得到
-            <span className="h-0.5 flex-1 bg-line" />
-          </div>
-          {panel}
-        </div>
+      <JuHeader state={state} compact={immersive || managing} />
+      {panel && <RoleTabs tab={tab} onTab={setTab} dot={organizerDot(state)} />}
+      {me && !immersive && !managing && (
+        <InboxBanner notices={inbox.notices} status={ju.status} onOpen={() => setInboxOpen(true)} />
       )}
-      {me && me.status === "in" && (view === "waiting" || view === "plans") && (
-        <LeaveLink actions={actions} planned={ju.status !== "collecting"} />
+
+      {managing ? (
+        <div className="mb-10 mt-4">{panel}</div>
+      ) : (
+        <>
+          <div className="mt-4">{body}</div>
+          {me && me.status === "in" && (view === "waiting" || view === "plans") && (
+            <LeaveLink actions={actions} planned={ju.status !== "collecting"} />
+          )}
+          {view === "plans" && <div className="h-28" aria-hidden />}
+        </>
       )}
-      {view === "plans" && <div className="h-28" aria-hidden />}
 
       <InboxDrawer
         open={inboxOpen}
@@ -206,11 +200,40 @@ export function JuView({
         }}
         notices={inbox.notices}
       />
-      {panel && (
-        <Sheet open={panelOpen && immersive} onClose={() => setPanelOpen(false)} title="👑 发起人控制台">
-          <div className="pb-4">{panel}</div>
-        </Sheet>
-      )}
+      <Guide steps={isAdmin ? ORGANIZER_GUIDE : MEMBER_GUIDE} open={guide.open} onClose={guide.close} />
     </main>
+  );
+}
+
+/** 发起人有该拍板 / 该出方案的事时，「管理」标签上亮个红点 */
+function organizerDot(state: JuState): boolean {
+  const { ju, counts } = state;
+  if (ju.status === "collecting") return ju.quorum?.state !== "pending" && counts.done >= 2;
+  if (ju.status === "voting") return Object.keys(ju.votes ?? {}).length >= counts.in;
+  return false;
+}
+
+function RoleTabs({ tab, onTab, dot }: { tab: "me" | "manage"; onTab: (t: "me" | "manage") => void; dot: boolean }) {
+  const item = (key: "me" | "manage", label: string) => (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={tab === key}
+      onClick={() => onTab(key)}
+      className={`relative min-h-11 flex-1 rounded-xl text-[15px] font-black transition-colors ${
+        tab === key ? "border-2 border-ink bg-card shadow-sticker-sm" : "text-ink-soft"
+      }`}
+    >
+      {label}
+      {key === "manage" && dot && tab !== "manage" && (
+        <span className="absolute right-3 top-2 size-2.5 rounded-full bg-cinnabar" aria-label="有事要处理" />
+      )}
+    </button>
+  );
+  return (
+    <div role="tablist" className="mt-3 flex gap-1 rounded-2xl border-2 border-ink bg-paper-deep p-1">
+      {item("me", "我的")}
+      {item("manage", "👑 管理")}
+    </div>
   );
 }

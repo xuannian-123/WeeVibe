@@ -198,14 +198,11 @@ function ProposalDetail({ p, state, me, members }: { p: Proposal; state: JuState
       <div className="space-y-4 p-4">
         {me && <MyExperienceBox p={p} state={state} me={me} />}
 
-        <div>
-          <p className="text-[16px] font-black leading-snug">{p.headline}</p>
-          {p.blurb && <p className="mt-1.5 border-l-4 border-mustard pl-3 text-[14.5px] leading-relaxed">“{p.blurb}”</p>}
-        </div>
+        <p className="text-[16px] font-black leading-snug">{p.headline}</p>
 
         {p.highlights.length > 0 && (
           <ul className="space-y-1">
-            {p.highlights.map((h) => (
+            {p.highlights.slice(0, 3).map((h) => (
               <li key={h} className="flex gap-2 text-[14px]">
                 <span className="font-black text-jade">✓</span>
                 <span>{h}</span>
@@ -232,7 +229,7 @@ function ProposalDetail({ p, state, me, members }: { p: Proposal; state: JuState
             </span>
           </div>
           <Matrix p={p} members={members} meId={me?.id} />
-          <p className="mt-2 text-[11.5px] leading-relaxed text-ink-faint">这里只按通勤、到达和离开时间算，预算和口味这些私事不会反映在别人能看到的数字里。</p>
+          <p className="mt-2 text-[11.5px] text-ink-faint">🔒 只按通勤和时间算，预算、口味不会出现在这里</p>
         </div>
       </div>
     </article>
