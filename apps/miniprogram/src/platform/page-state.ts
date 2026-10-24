@@ -33,34 +33,40 @@ export function errorText(error: unknown): string {
 }
 
 // Visible-page generation guards both lifecycle changes and out-of-order reads.
-export function usePageRead<T>(loader: () => Promise<T>, enabled = true) {
+export function usePageRead<T>(loader: () => Promise<T>, enabled = true, options: { pollIntervalMs?: number } = {}) {
   const [data, setData] = useState<T>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const visible = useRef(false); const seq = useRef(0); const failures = useRef(0);
   const loadRef = useRef(loader); loadRef.current = loader;
   const enabledRef = useRef(enabled); enabledRef.current = enabled;
+  const intervalRef = useRef(options.pollIntervalMs ?? 0); intervalRef.current = options.pollIntervalMs ?? 0;
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const clear = () => { if (timer.current) clearTimeout(timer.current); };
-  const refresh = useCallback(async () => {
+  const read = useCallback(async (background = false) => {
     clear();
     if (!visible.current || !enabledRef.current) return;
-    const epoch = ++seq.current; setLoading(true);
+    const epoch = ++seq.current;
+    if (!background) setLoading(true);
+    let canPoll = true;
     try {
       const next = await loadRef.current();
       if (!visible.current || epoch !== seq.current) return;
       setData(next); setError(''); failures.current = 0;
     } catch (e) {
       if (!visible.current || epoch !== seq.current) return;
-      if (e instanceof ApiClientError && e.code === 'UNAUTHENTICATED') forgetSession();
+      if (e instanceof ApiClientError && e.code === 'UNAUTHENTICATED') { forgetSession(); canPoll = false; }
       setError(errorText(e)); failures.current++;
     } finally {
       if (visible.current && epoch === seq.current) {
-        setLoading(false);
-        timer.current = setTimeout(() => { void refresh(); }, Math.min(30000, 5000 * 2 ** Math.min(failures.current, 3)));
+        if (!background) setLoading(false);
+        if (canPoll && intervalRef.current > 0 && enabledRef.current) {
+          timer.current = setTimeout(() => { void read(true); }, Math.min(60000, intervalRef.current * 2 ** Math.min(failures.current, 3)));
+        }
       }
     }
   }, []);
+  const refresh = useCallback(() => read(false), [read]);
   const stop = () => { visible.current = false; seq.current++; clear(); };
   useDidShow(() => { visible.current = true; void refresh(); });
   useDidHide(stop); useUnload(stop);

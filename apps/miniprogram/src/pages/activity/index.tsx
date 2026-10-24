@@ -23,7 +23,7 @@ export default function Activity() {
   const [selected, setSelected] = useState<string[]>([]); const [nickname, setNickname] = useState('');
   const [accepted, setAccepted] = useState(''); const [validation, setValidation] = useState('');
   const [showMore, setShowMore] = useState(false);
-  const read = usePageRead(async () => { const detail = await api.getActivity(id); rememberActivity(detail.viewer.user_id, detail); return detail; }, !!id);
+  const read = usePageRead(async () => { const detail = await api.getActivity(id); rememberActivity(detail.viewer.user_id, detail); return detail; }, !!id, { pollIntervalMs: 20000 });
   const login = useLogin(read.refresh); const detail = read.data?.activity_id === id ? read.data : undefined; const userId = detail?.viewer.user_id ?? undefined;
   const apply = useStoredWrite({ storageKey: `weego-apply-pending-v1:${id}:${userId ?? 'guest'}`, userId,
     parse: raw => applyToActivityInputSchema.parse(raw), execute: input => api.applyToActivity(id, input),
