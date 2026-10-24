@@ -20,6 +20,10 @@ describe('lightweight creation keeps an explicit complete server arrangement', (
     expect(input.participating_segment_refs).toEqual([]);
     expect(value.segments[0].endDate).toBe('');
     expect(value.segments[0].deadlineTime).toBe('');
+    // Removing the main segment from three, then reducing to one, can leave
+    // an older saved draft without a mainRef. There is only one choice now.
+    value.mainRef = '';
+    expect(buildCreateInput(value, 'lightweight-fixture-reduced').main_segment_ref).toBe(value.segments[0].ref);
   });
   it('keeps explicit cross-day endings, early deadlines and known fees', () => {
     const value = minimalForm();

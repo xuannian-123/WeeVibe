@@ -70,7 +70,7 @@ export function ActivityEditor({ value, onChange, disabled }: { value: ActivityF
           </View>}
           {value.segments.length > 1 && <Action variant="danger" disabled={disabled} onClick={() => {
             const segments = value.segments.filter(item => item.ref !== s.ref);
-            onChange({ ...value, segments, attending: value.attending.filter(ref => ref !== s.ref), mainRef: value.mainRef === s.ref ? (segments.length === 1 ? segments[0].ref : '') : value.mainRef });
+            onChange({ ...value, segments, attending: value.attending.filter(ref => ref !== s.ref), mainRef: segments.length === 1 ? segments[0].ref : value.mainRef === s.ref ? '' : value.mainRef });
           }}>移除这段安排</Action>}
         </View>}
       </Panel>;

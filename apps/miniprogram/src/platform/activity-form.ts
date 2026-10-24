@@ -55,7 +55,7 @@ export function buildCreateInput(form: ActivityForm, key: string): CreateActivit
     } catch (error) { throw new Error(`环节 ${i + 1}：${error instanceof Error ? error.message : '请核对字段'}`); }
   });
   const result = createActivityInputSchema.safeParse({ idempotency_key: key, name: form.name.trim(), timezone: 'Asia/Shanghai',
-    main_segment_ref: form.mainRef, participating_segment_refs: form.attending, segments,
+    main_segment_ref: form.segments.length === 1 ? form.segments[0].ref : form.mainRef, participating_segment_refs: form.attending, segments,
     ...(form.nickname.trim() ? { display_name: form.nickname.trim() } : {}) });
   if (!result.success) {
     const labels: Record<string, string> = { name: '名称', timezone: '时区', main_segment_ref: '主环节', participating_segment_refs: '本人参加选择',
