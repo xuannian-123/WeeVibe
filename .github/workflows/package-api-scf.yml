@@ -1,0 +1,51 @@
+name: Package API for SCF
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm install --global pnpm@11.15.1
+      - run: pnpm install --frozen-lockfile --filter weego --filter @weego/web...
+      - run: pnpm db:generate
+      - run: pnpm build:api
+      - run: node scripts/package-api-scf.mjs
+      - name: Bound temporary artifact storage
+        run: test "$(stat -c%s .working/weego-api-scf.zip)" -le 104857600
+      - name: Smoke test the extracted Linux zip without secrets
+        shell: bash
+        run: |
+          mkdir -p .working/scf-smoke
+          unzip -q .working/weego-api-scf.zip -d .working/scf-smoke
+          test -x .working/scf-smoke/scf_bootstrap
+          HOSTNAME=127.0.0.1 PORT=43189 node .working/scf-smoke/apps/web/server.js > .working/scf-smoke.log 2>&1 &
+          api_pid=$!
+          trap 'kill -TERM "$api_pid" 2>/dev/null || true' EXIT
+          curl --fail --retry 30 --retry-all-errors --retry-delay 1 --max-time 5 http://127.0.0.1:43189/api/v1/health
+          status=$(curl --silent --output .working/scf-ready.json --write-out '%{http_code}' http://127.0.0.1:43189/api/v1/ready)
+          test "$status" = '503'
+      - name: Upload only the Linux runtime zip
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: weego-api-scf-${{ github.sha }}
+          path: .working/weego-api-scf.zip
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0

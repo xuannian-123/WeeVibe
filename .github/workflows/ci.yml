@@ -14,6 +14,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  package-scf:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/package-api-scf.yml
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
