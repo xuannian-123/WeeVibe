@@ -7,6 +7,7 @@ RUN npm install --global pnpm@11.15.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web ./apps/web
 COPY packages/contracts ./packages/contracts
+COPY cloudfunctions/weegoLogin/proof.cjs cloudfunctions/weegoLogin/proof.d.cts ./cloudfunctions/weegoLogin/
 COPY prisma ./prisma
 COPY scripts/prisma-check.mjs scripts/check-api-artifact.mjs ./scripts/
 RUN pnpm install --frozen-lockfile --filter weego --filter @weego/web...

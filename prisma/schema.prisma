@@ -42,6 +42,15 @@ model AuthSession {
   @@index([expiresAt])
 }
 
+// One-use server-to-server login proofs; no OpenID, signature or raw proof body.
+model CloudLoginUse {
+  digest String @id
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model UserTestRecord {
   userId    String   @id @db.Uuid
   value     String

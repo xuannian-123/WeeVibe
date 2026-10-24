@@ -9,6 +9,7 @@ git clone https://github.com/xuannian-123/weego.git
 cd weego
 npm install --global pnpm@11.15.1
 pnpm install --frozen-lockfile
+npm ci --prefix cloudfunctions/weegoLogin --ignore-scripts --no-audit --no-fund
 pnpm db:generate
 pnpm db:validate
 pnpm typecheck
@@ -27,12 +28,13 @@ typecheck会先执行Next typegen，生成新克隆缺少的.next路由类型，
 |---|---|
 | DATABASE_URL | 独立Weego PG，开发与验收分库 |
 | WECHAT_APP_ID | 与原账号项目配置一致的公开AppID |
-| WECHAT_APP_SECRET | 仅服务端；未知时由管理员安全配置已有Secret，不擅自重置 |
+| WECHAT_APP_SECRET | 普通code交换方式需要；仅服务端，不擅自重置原密钥 |
+| WEEGO_CLOUD_AUTH_* | 可选云身份适配，默认关闭；API只配置公钥，函数私钥不注入API或小程序 |
 | AMAP_WEB_SERVICE_KEY | 可选地图查询密钥，缺少时地点可手填 |
 
 Next从apps/web读取.env.local；Prisma CLI需进程中同一正确DATABASE_URL，不能假设复制根.env.local就会同时配置二者。先核对目标专用库，再执行pnpm db:migrate；这是真实DDL写入，不是离线检查。
 
-随后pnpm dev:api监听127.0.0.1:43188。/api/v1/health只证明进程存活，/api/v1/ready检查PG，不证明微信身份。没有Secret或数据库时应明确失败，不用样例冒充成功。
+随后pnpm dev:api监听127.0.0.1:43188。/api/v1/health只证明进程存活，/api/v1/ready检查PG，不证明微信身份。普通code交换缺Secret、云身份入口缺签名配置或业务缺数据库时应明确失败，不用样例冒充成功。可选云登录的独立安装、配置和部署条件见[云身份接入说明](../../cloudfunctions/weegoLogin/README.md)。
 
 ## 小程序构建与开发工具
 
@@ -42,7 +44,7 @@ TARO_APP_API_BASE_URL是小程序构建时公开HTTPS地址，需在构建进程
 
 ## 显式真实PG集成
 
-准备两个隔离库：日常开发库与名称以weego_acceptance_开头的本机验收库。脚本拒绝其他库名及远程目标。对验收库应用两条迁移，并用同一验收URL启动API；脚本通过真实HTTP和PG操作检查，播种的用户/会话都是fixture。
+准备两个隔离库：日常开发库与名称以weego_acceptance_开头的本机验收库。脚本拒绝其他库名及远程目标。对验收库应用全部迁移，并用同一验收URL启动API；脚本通过真实HTTP和PG操作检查，播种的用户/会话都是fixture。
 
 ```text
 # 在专用终端安全设置DATABASE_URL和WEEGO_CHECK_API_BASE_URL后：

@@ -14,7 +14,7 @@ export async function handle(action: () => Promise<unknown>) {
     return ok({ error: { code: known ? error.code : 'INTERNAL_ERROR', message: known ? error.message : '服务暂时不可用，请稍后重试' }, request_id: randomUUID() }, known ? error.status : 500);
   }
 }
-export async function readJson(request: Request, maxBytes = 4096) {
+export async function readText(request: Request, maxBytes = 4096) {
   // Codes/tokens and provider error bodies must never be logged.
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 65_536) throw new RangeError('Invalid JSON byte limit');
   if (Number(request.headers.get('content-length') ?? 0) > maxBytes) throw new ServiceError('INVALID_INPUT', 400, '请求过大');
@@ -35,7 +35,11 @@ export async function readJson(request: Request, maxBytes = 4096) {
       reader.releaseLock();
     }
   }
-  const text = Buffer.concat(chunks).toString('utf8');
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)); }
+  catch { throw new ServiceError('INVALID_INPUT', 400, '请求格式不正确'); }
+}
+export async function readJson(request: Request, maxBytes = 4096) {
+  const text = await readText(request, maxBytes);
   try { return JSON.parse(text) as unknown; }
   catch { throw new ServiceError('INVALID_INPUT', 400, '请求格式不正确'); }
 }

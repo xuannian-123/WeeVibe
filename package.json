@@ -18,7 +18,8 @@
     "check:local-api": "tsx tests/local-api-check.ts",
     "check:business-boundaries": "node scripts/check-business-boundaries.mjs",
     "check:postgres:prepare": "tsx scripts/check-postgres-integration.ts prepare",
-    "check:postgres:verify": "tsx scripts/check-postgres-integration.ts verify"
+    "check:postgres:verify": "tsx scripts/check-postgres-integration.ts verify",
+    "check:cloud-identity": "tsx scripts/check-cloud-identity-integration.ts"
   },
   "devDependencies": {
     "@prisma/client": "6.19.3",

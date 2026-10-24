@@ -48,19 +48,22 @@ jobs:
           package-manager-cache: false
       - run: npm install --global pnpm@11.15.1
       - run: pnpm install --frozen-lockfile
+      - run: npm ci --prefix cloudfunctions/weegoLogin --ignore-scripts --no-audit --no-fund
       - run: pnpm db:generate && pnpm db:validate
       - run: pnpm typecheck && pnpm test
       - run: pnpm build:api && pnpm build:mini
       - run: pnpm db:migrate
+      - run: node scripts/prepare-cloud-identity-fixture.mjs --fixture-only
       - name: Start standalone and test real PG transactions
         shell: bash
         run: |
           mkdir -p .working
-          HOSTNAME=127.0.0.1 PORT=43188 node apps/web/.next/standalone/apps/web/server.js > .working/ci-api.log 2>&1 &
+          HOSTNAME=127.0.0.1 PORT=43188 node --env-file=.working/cloud-identity-api.fixture.env apps/web/.next/standalone/apps/web/server.js > .working/ci-api.log 2>&1 &
           echo $! > .working/ci-api.pid
           curl --fail --retry 30 --retry-all-errors --retry-delay 1 --max-time 5 http://127.0.0.1:43188/api/v1/ready
           pnpm check:business-boundaries
           pnpm check:postgres:prepare
+          node --env-file=.working/cloud-identity-test.fixture.env --import tsx scripts/check-cloud-identity-integration.ts
       - name: Restart PG and standalone, then verify persistence
         shell: bash
         env:
@@ -79,7 +82,7 @@ jobs:
             sleep 1
           done
           docker exec "$POSTGRES_CONTAINER" pg_isready -U postgres -d weego_acceptance_ci
-          HOSTNAME=127.0.0.1 PORT=43188 node apps/web/.next/standalone/apps/web/server.js > .working/ci-api-restart.log 2>&1 &
+          HOSTNAME=127.0.0.1 PORT=43188 node --env-file=.working/cloud-identity-api.fixture.env apps/web/.next/standalone/apps/web/server.js > .working/ci-api-restart.log 2>&1 &
           echo $! > .working/ci-api.pid
           curl --fail --retry 30 --retry-all-errors --retry-delay 1 --max-time 5 http://127.0.0.1:43188/api/v1/ready
           pnpm check:postgres:verify

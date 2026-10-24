@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { activityDetailSchema, type ActivityDetail, type CreateActivityInput } from '../packages/contracts/src';
@@ -252,7 +252,9 @@ async function main() {
   await check('database_identity_matches_guarded_target', async () => {
     const rows = await db!.$queryRaw<Array<{ database: string }>>`SELECT current_database()::text AS database`;
     assert.equal(rows[0].database, database);
-    assert.equal(await db!.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL`.then(r => Number(r[0].n)), 2);
+    const migrations = (await readdir(resolve(root, 'prisma/migrations'), { withFileTypes: true })).filter(entry => entry.isDirectory()).map(entry => entry.name).sort();
+    const applied = await db!.$queryRaw<Array<{ migration_name: string }>>`SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name`;
+    assert.deepEqual(applied.map(row => row.migration_name), migrations);
   });
   if (phase === 'prepare') await prepare(database, api); else await verify(database, api);
   await writeFile(resultPath, JSON.stringify({ phase, status: 'passed', checks, wechat_exchange: 'not_executed_fixture_sessions', database_scope: 'dedicated_local_acceptance', checked_at: new Date().toISOString() }, null, 2) + '\n');
