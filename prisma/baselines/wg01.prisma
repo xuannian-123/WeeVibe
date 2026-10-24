@@ -1,0 +1,40 @@
+// Read-only schema reference for the offline round-two migration diff.
+// This file is not runtime configuration or a separately executed migration.
+generator client {
+  provider = "prisma-client-js"
+  engineType = "client"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now())
+  identities WechatIdentity[]
+  sessions AuthSession[]
+  testRecord UserTestRecord?
+}
+model WechatIdentity {
+  id String @id @default(uuid()) @db.Uuid
+  appId String
+  openId String
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([appId, openId])
+}
+model AuthSession {
+  tokenHash String @id
+  userId String @db.Uuid
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+model UserTestRecord {
+  userId String @id @db.Uuid
+  value String
+  updatedAt DateTime @updatedAt
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

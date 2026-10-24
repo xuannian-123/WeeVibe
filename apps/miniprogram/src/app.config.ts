@@ -1,0 +1,1 @@
+export default defineAppConfig({ pages: ['pages/index/index', 'pages/editor/index', 'pages/activity/index', 'pages/diagnostics/index'], window: { navigationBarTitleText: 'Weego', backgroundTextStyle: 'light' } });

@@ -1,0 +1,53 @@
+packages:
+  - apps/*
+  - packages/*
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  prisma: true
+  esbuild: true
+  '@swc/core': true
+  '@parcel/watcher': true
+  '@tarojs/binding': true
+  '@tarojs/cli': false
+  core-js: false
+  core-js-pure: false
+overrides:
+  'schema-utils@^4': 4.3.2
+minimumReleaseAgeExclude:
+  - '@next/env@16.4.3'
+  - '@next/swc-darwin-arm64@16.4.3'
+  - '@next/swc-darwin-x64@16.4.3'
+  - '@next/swc-linux-arm64-gnu@16.4.3'
+  - '@next/swc-linux-arm64-musl@16.4.3'
+  - '@next/swc-linux-x64-gnu@16.4.3'
+  - '@next/swc-linux-x64-musl@16.4.3'
+  - '@next/swc-win32-arm64-msvc@16.4.3'
+  - '@next/swc-win32-x64-msvc@16.4.3'
+  - '@tarojs/api@4.3.1'
+  - '@tarojs/binding-darwin-arm64@4.3.1'
+  - '@tarojs/binding-darwin-x64@4.3.1'
+  - '@tarojs/binding-linux-arm64-gnu@4.3.1'
+  - '@tarojs/binding-linux-x64-gnu@4.3.1'
+  - '@tarojs/binding-win32-x64-msvc@4.3.1'
+  - '@tarojs/binding@4.3.1'
+  - '@tarojs/cli@4.3.1'
+  - '@tarojs/components@4.3.1'
+  - '@tarojs/helper@4.3.1'
+  - '@tarojs/plugin-framework-react@4.3.1'
+  - '@tarojs/plugin-platform-weapp@4.3.1'
+  - '@tarojs/react@4.3.1'
+  - '@tarojs/runner-utils@4.3.1'
+  - '@tarojs/runtime@4.3.1'
+  - '@tarojs/service@4.3.1'
+  - '@tarojs/shared@4.3.1'
+  - '@tarojs/taro-loader@4.3.1'
+  - '@tarojs/taro@4.3.1'
+  - '@tarojs/webpack5-prebundle@4.3.1'
+  - '@tarojs/webpack5-runner@4.3.1'
+  - babel-plugin-transform-solid-jsx@4.3.1
+  - babel-preset-taro@4.3.1
+  - next@16.4.3
+  - postcss-html-transform@4.3.1
+  - postcss-plugin-constparse@4.3.1
+  - postcss-pxtransform@4.3.1

@@ -1,0 +1,13 @@
+{
+  "name": "@weego/miniprogram", "version": "0.0.1", "private": true,
+  "scripts": { "build": "taro build --type weapp", "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@tarojs/components": "4.3.1", "@tarojs/helper": "4.3.1", "@tarojs/plugin-framework-react": "4.3.1",
+    "@tarojs/plugin-platform-weapp": "4.3.1", "@tarojs/react": "4.3.1", "@tarojs/runtime": "4.3.1",
+    "@tarojs/shared": "4.3.1", "@tarojs/taro": "4.3.1", "@weego/contracts": "workspace:*", "@weego/api-client": "workspace:*", "react": "18.3.1", "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@babel/core": "7.28.5", "@babel/preset-react": "7.28.5", "@tarojs/cli": "4.3.1", "@tarojs/webpack5-runner": "4.3.1",
+    "@types/react": "18.3.27", "babel-preset-taro": "4.3.1", "webpack": "5.91.0", "postcss": "8.5.6", "vite": "4.5.14"
+  }
+}

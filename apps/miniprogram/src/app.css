@@ -1,0 +1,11 @@
+page { background: #f5f6f8; color: #202735; font-size: 30px; }
+.screen { padding: 24px; padding-bottom: 60px; }
+.panel { background: #fff; padding: 24px; margin-bottom: 24px; border-radius: 12px; }
+.heading { font-weight: 600; font-size: 34px; margin-bottom: 16px; }
+.notice { padding: 16px; margin: 12px 0; background: #eef2f6; line-height: 1.6; overflow-wrap: anywhere; }
+.field { margin: 18px 0; }
+.field input { background: #f5f6f8; padding: 16px; margin-top: 8px; height: 52px; }
+.action { margin: 16px 0; font-size: 30px; }
+.row { margin: 12px 0; line-height: 1.6; }
+.choice { display: flex; align-items: center; margin: 14px 0; }
+.caption { font-size: 26px; color: #5c6470; line-height: 1.6; }

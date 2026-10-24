@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String           @id @default(uuid()) @db.Uuid
+  createdAt  DateTime         @default(now())
+  identities WechatIdentity[]
+  sessions   AuthSession[]
+  testRecord UserTestRecord?
+  managedActivities Activity[] @relation("CurrentManager")
+  activityApplications ActivityApplication[]
+  participations Participation[]
+  mutationKeys ActivityMutationKey[]
+  activityEvents ActivityEvent[]
+}
+
+model WechatIdentity {
+  id        String @id @default(uuid()) @db.Uuid
+  appId     String
+  openId    String
+  userId    String @db.Uuid
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([appId, openId])
+}
+
+model AuthSession {
+  tokenHash String   @id
+  userId    String   @db.Uuid
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model UserTestRecord {
+  userId    String   @id @db.Uuid
+  value     String
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum ActivitySegmentType {
+  sport
+  dinner
+  karaoke
+  drinks
+  board_game
+  custom
+}
+
+enum ActivityApplicationStatus {
+  pending
+  approved
+  rejected
+  withdrawn
+}
+
+enum ParticipationStatus {
+  joined
+  exited
+}
+
+enum SegmentVerificationStatus {
+  unknown
+  manual_checked
+}
+
+enum SegmentBookingStatus {
+  unknown
+  manual_booked
+}
+
+model Activity {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  timezone String
+  currentManagerId String @db.Uuid
+  currentManager User @relation("CurrentManager", fields: [currentManagerId], references: [id], onDelete: Restrict)
+  // Null only during this service's uncommitted create transaction.
+  // A committed API-created activity always has one main segment.
+  mainSegmentId String? @db.Uuid
+  mainSegment Segment? @relation("MainSegment", fields: [id, mainSegmentId], references: [activityId, id], onDelete: NoAction, onUpdate: NoAction)
+  revision Int @default(1)
+  membershipRevision Int @default(1)
+  managementRevision Int @default(1)
+  mainRevision Int @default(1)
+  confirmedMainRevision Int?
+  confirmedPlanRevision Int?
+  confirmedAt DateTime?
+  cancelledAt DateTime?
+  createdAt DateTime @default(now())
+  segments Segment[] @relation("ActivitySegments")
+  applications ActivityApplication[]
+  mutationKeys ActivityMutationKey[]
+  events ActivityEvent[]
+}
+
+model Segment {
+  id String @id @default(uuid()) @db.Uuid
+  activityId String @db.Uuid
+  activity Activity @relation("ActivitySegments", fields: [activityId], references: [id], onDelete: Restrict)
+  mainForActivities Activity[] @relation("MainSegment")
+  clientRef String
+  position Int
+  type ActivitySegmentType
+  name String
+  startsAt DateTime
+  endsAt DateTime
+  deadlineAt DateTime
+  minimumParticipants Int
+  capacity Int
+  location Json
+  fee Json
+  requirements String
+  planRevision Int @default(1)
+  cancelledAt DateTime?
+  verificationStatus SegmentVerificationStatus @default(unknown)
+  bookingStatus SegmentBookingStatus @default(unknown)
+  participations Participation[]
+  applicationTargets ApplicationTarget[]
+
+  @@unique([activityId, id])
+  @@unique([activityId, clientRef])
+  @@unique([activityId, position])
+}
+
+model ActivityApplication {
+  id String @id @default(uuid()) @db.Uuid
+  activityId String @db.Uuid
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  applicantUserId String @db.Uuid
+  applicant User @relation(fields: [applicantUserId], references: [id], onDelete: Restrict)
+  displayName String?
+  status ActivityApplicationStatus @default(pending)
+  createdAt DateTime @default(now())
+  decidedAt DateTime?
+  targets ApplicationTarget[]
+  participations Participation[]
+
+  @@unique([activityId, id])
+  @@index([activityId, status])
+  @@index([applicantUserId])
+}
+
+model ApplicationTarget {
+  activityId String @db.Uuid
+  applicationId String @db.Uuid
+  segmentId String @db.Uuid
+  acceptedPlanRevision Int
+  application ActivityApplication @relation(fields: [activityId, applicationId], references: [activityId, id], onDelete: Restrict)
+  segment Segment @relation(fields: [activityId, segmentId], references: [activityId, id], onDelete: Restrict)
+
+  @@id([applicationId, segmentId])
+}
+
+model Participation {
+  id String @id @default(uuid()) @db.Uuid
+  activityId String @db.Uuid
+  segmentId String @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  segment Segment @relation(fields: [activityId, segmentId], references: [activityId, id], onDelete: Restrict)
+  status ParticipationStatus @default(joined)
+  // Version mismatch leaves this row occupying a seat, awaiting acceptance.
+  acceptedPlanRevision Int?
+  acceptedAt DateTime?
+  displayName String?
+  sourceApplicationId String? @db.Uuid
+  sourceApplication ActivityApplication? @relation(fields: [activityId, sourceApplicationId], references: [activityId, id], onDelete: NoAction, onUpdate: NoAction)
+  joinedAt DateTime @default(now())
+  exitedAt DateTime?
+
+  @@unique([segmentId, userId])
+  @@index([activityId, userId])
+}
+
+model ActivityMutationKey {
+  actorUserId String @db.Uuid
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  key String
+  scope String
+  requestHash String @db.Char(64)
+  activityId String @db.Uuid
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@id([actorUserId, key])
+}
+
+model ActivityEvent {
+  id String @id @default(uuid()) @db.Uuid
+  activityId String @db.Uuid
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  actorUserId String @db.Uuid
+  actor User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  type String
+  revision Int
+  detail Json
+  createdAt DateTime @default(now())
+
+  @@index([activityId, revision])
+}

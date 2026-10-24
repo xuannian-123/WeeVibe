@@ -1,0 +1,4 @@
+// Local operation identifiers are not authentication credentials.
+export function newKey() {
+  return `mini-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}

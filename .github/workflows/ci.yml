@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: weego_ci_only
+          POSTGRES_DB: weego_acceptance_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d weego_acceptance_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      # Disposable service-container fixture only; never a real account credential.
+      DATABASE_URL: postgresql://postgres:weego_ci_only@127.0.0.1:5432/weego_acceptance_ci?schema=public
+      WEEGO_CHECK_API_BASE_URL: http://127.0.0.1:43188
+      WECHAT_APP_SECRET: ''
+      AMAP_WEB_SERVICE_KEY: ''
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - run: npm install --global pnpm@11.15.1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate && pnpm db:validate
+      - run: pnpm typecheck && pnpm test
+      - run: pnpm build:api && pnpm build:mini
+      - run: pnpm db:migrate
+      - name: Start standalone and test real PG transactions
+        shell: bash
+        run: |
+          mkdir -p .working
+          HOSTNAME=127.0.0.1 PORT=43188 node apps/web/.next/standalone/apps/web/server.js > .working/ci-api.log 2>&1 &
+          echo $! > .working/ci-api.pid
+          curl --fail --retry 30 --retry-connrefused --retry-delay 1 http://127.0.0.1:43188/api/v1/ready
+          pnpm check:business-boundaries
+          pnpm check:postgres:prepare
+      - name: Restart PG and standalone, then verify persistence
+        shell: bash
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          previous_api=$(cat .working/ci-api.pid)
+          kill -TERM "$previous_api"
+          for attempt in {1..30}; do
+            if ! kill -0 "$previous_api" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if kill -0 "$previous_api" 2>/dev/null; then echo 'Previous API did not exit'; exit 1; fi
+          docker restart "$POSTGRES_CONTAINER"
+          for attempt in {1..30}; do
+            if docker exec "$POSTGRES_CONTAINER" pg_isready -U postgres -d weego_acceptance_ci; then break; fi
+            sleep 1
+          done
+          docker exec "$POSTGRES_CONTAINER" pg_isready -U postgres -d weego_acceptance_ci
+          HOSTNAME=127.0.0.1 PORT=43188 node apps/web/.next/standalone/apps/web/server.js > .working/ci-api-restart.log 2>&1 &
+          echo $! > .working/ci-api.pid
+          curl --fail --retry 30 --retry-connrefused --retry-delay 1 http://127.0.0.1:43188/api/v1/ready
+          pnpm check:postgres:verify
+      - name: Stop local test API
+        if: always()
+        shell: bash
+        run: |
+          if [ -f .working/ci-api.pid ]; then kill -TERM "$(cat .working/ci-api.pid)" 2>/dev/null || true; fi
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build Linux standalone image
+        run: docker build -f apps/web/Dockerfile -t weego-api:ci .
+      - name: Check image with no secrets configured
+        shell: bash
+        run: |
+          docker run -d --name weego-api-ci -p 127.0.0.1:43189:3000 weego-api:ci
+          curl --fail --retry 30 --retry-connrefused --retry-delay 1 http://127.0.0.1:43189/api/v1/health
+          status=$(curl --silent --output /tmp/weego-ready.json --write-out '%{http_code}' http://127.0.0.1:43189/api/v1/ready)
+          test "$status" = '503'
+      - name: Stop test container
+        if: always()
+        run: docker stop weego-api-ci 2>/dev/null || true

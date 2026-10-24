@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import { createApiClient } from '../packages/api-client/src/index.js';
+const base = 'http://127.0.0.1:43188';
+const client = createApiClient(async request => {
+  const response = await fetch(base + request.path, { method: request.method, headers: request.headers, body: request.body === undefined ? undefined : JSON.stringify(request.body) });
+  return { status: response.status, body: await response.json() };
+});
+const health = await client.health();
+assert.equal(health.service, 'weego-api');
+assert.equal(health.database, 'not_checked');
+const ready = await fetch(base + '/api/v1/ready');
+assert.equal(ready.status, 503);
+assert.equal((await ready.json()).error.code, 'NOT_CONFIGURED');
+const forged = await fetch(base + '/api/v1/me', { headers: { 'x-wx-openid': 'forged-test-only', 'x-wx-appid': 'forged-test-only' } });
+assert.equal(forged.status, 401);
+const claim = await fetch(base + '/api/v1/auth/wechat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ openid: 'forged-test-only' }) });
+assert.equal(claim.status, 400);
+const login = await fetch(base + '/api/v1/auth/wechat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: 'not-a-real-wechat-code' }) });
+assert.equal(login.status, 503);
+assert.equal((await login.json()).error.code, 'NOT_CONFIGURED');
+const mine = await fetch(base + '/api/v1/me/test-record');
+assert.equal(mine.status, 401);
+const bad = await fetch(base + '/api/v1/auth/wechat', { method: 'POST', body: '{' });
+assert.equal(bad.status, 400);
+console.log('PASS: real local Next.js health via shared client; readiness/login honestly unconfigured; forged headers/body and anonymous records rejected (7 HTTP checks). No real WeChat or database call performed.');

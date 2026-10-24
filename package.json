@@ -1,0 +1,31 @@
+{
+  "name": "weego",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "packageManager": "pnpm@11.15.1",
+  "engines": { "node": ">=24.11.0 <25" },
+  "scripts": {
+    "dev:api": "pnpm --filter @weego/web dev",
+    "build:api": "pnpm --filter @weego/web build",
+    "build:mini": "pnpm --filter @weego/miniprogram build",
+    "build": "pnpm build:api && pnpm build:mini",
+    "typecheck": "pnpm --filter @weego/web exec next typegen && pnpm -r typecheck && tsc -p tests/tsconfig.json --noEmit && tsc -p tests/integration/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "db:generate": "node scripts/prisma-check.mjs generate",
+    "db:validate": "node scripts/prisma-check.mjs validate",
+    "db:migrate": "prisma migrate deploy --schema prisma/schema.prisma",
+    "check:local-api": "tsx tests/local-api-check.ts",
+    "check:business-boundaries": "node scripts/check-business-boundaries.mjs",
+    "check:postgres:prepare": "tsx scripts/check-postgres-integration.ts prepare",
+    "check:postgres:verify": "tsx scripts/check-postgres-integration.ts verify"
+  },
+  "devDependencies": {
+    "@prisma/client": "6.19.3",
+    "@types/node": "24.10.1",
+    "prisma": "6.19.3",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vitest": "4.0.18"
+  }
+}

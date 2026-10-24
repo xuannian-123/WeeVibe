@@ -1,0 +1,13 @@
+{
+  "description": "Weego formal Taro baseline, original account; local configuration, not uploaded",
+  "miniprogramRoot": "dist/",
+  "projectname": "weego",
+  "appid": "wxaa06e111e33f6ddd",
+  "setting": {
+    "es6": true,
+    "minified": true,
+    "urlCheck": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.16.2"
+}
