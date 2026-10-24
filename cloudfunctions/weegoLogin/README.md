@@ -1,6 +1,6 @@
 # 专用微信云身份入口
 
-本目录是独立普通事件云函数，负责微信身份到 Weego 会话的接入。业务仍在 Next.js＋PostgreSQL，不读写原盆景库、不替换旧函数、不依赖原 AppSecret。当前代码默认关闭，未部署云端；本机测试使用合成 context 和临时签名密钥。
+本目录是独立普通事件云函数，负责微信身份到 Weego 会话的接入。业务仍在 Next.js＋PostgreSQL，不读写原盆景库、不替换旧函数、不依赖原 AppSecret。源码默认关闭；2026-10-25已在独立演示函数中显式配置，与HTTP云函数内的Next API和独立Neon PG接通。正式开发工具实际点击两次登录及`/me`200通过，业务身份一致且会话更新；双微信真机与持续运行条件另验。本机和CI的合成context结果仍单独记录。
 
 ## 机制与配置
 
@@ -16,7 +16,7 @@
 | API配置 | 对应SPKI DER公钥base64：WEEGO_CLOUD_AUTH_PUBLIC_KEY_B64；不配置函数私钥 |
 | 函数与API | 同一WECHAT_APP_ID、WEEGO_CLOUD_AUTH_ENV_ID、WEEGO_CLOUD_AUTH_KEY_ID及显式WEEGO_CLOUD_AUTH_ENABLED=true |
 | 函数 | WEEGO_API_BASE_URL：实际HTTPS origin，不含路径、账户、查询参数或片段；禁止跳转 |
-| 小程序构建 | TARO_APP_LOGIN_MODE=cloud、TARO_APP_CLOUD_ENV_ID、TARO_APP_CLOUD_LOGIN_FUNCTION及正常业务API的TARO_APP_API_BASE_URL |
+| 小程序构建 | TARO_APP_LOGIN_MODE=cloud、TARO_APP_CLOUD_ENV_ID、TARO_APP_CLOUD_LOGIN_FUNCTION；业务可选TARO_APP_API_TRANSPORT=cloud-http与TARO_APP_CLOUD_API_FUNCTION，此时API_BASE_URL可空；默认https方式仍需TARO_APP_API_BASE_URL |
 
 开发工具来源默认拒绝。独立验证若确需允许，函数和API须共同显式配置WEEGO_CLOUD_AUTH_ALLOW_DEVTOOLS=true，真机验收仍单独进行。客户端默认mode=code；cloud失败不会回退code，也不会由后台错误自动改变身份路线。
 
@@ -54,6 +54,6 @@ fixture生成器在`.working`中写独立测试文件，不修改真实.env或�
 4. 明确保留期后仅清理过期CloudLoginUse和AuthSession，不清理用户/活动；有效证明绝不能提前删除消费记录。部署前落实有界周期清理和权限，不通过手动清空表恢复登录。
 5. 用新的Weego签名密钥，分别安全配置函数私钥/API公钥；固定Ed25519不接受请求选择算法或密钥地址。轮换先协调两端配置与短期登录窗口，不回收旧AppSecret。
 6. 仅部署普通事件函数，不增加HTTP/定时触发；选择平台实际支持且满足Node>=18.15的运行时，真实核对context字段，缺失时失败关闭。不要通过打印整个context/env诊断。
-7. 用两个具体验资格的真实微信普通模式验：身份区分、同微信重登保持user_id、前后台和过期恢复、伪造/错应用/重放拒绝，以及旧盆景服务回归。业务请求仍要合法HTTPS域名，或另验callContainer；仅登录走callFunction不会使业务请求自动免域名配置。
+7. 用两个具体验资格的真实微信普通模式验：身份区分、同微信重登保持user_id、前后台和过期恢复、伪造/错应用/重放拒绝，以及旧盆景服务回归。业务请求需合法HTTPS，或独立验证原生云HTTP等传输；仅登录走callFunction不会使业务请求自动接通。当前已单独通过原生云HTTP的health/ready，不等同手机通过。
 
 微信云托管与腾讯云侧云托管的身份注入能力有差别，不据“能callContainer”直接启用微信头信任。相关官方资料：[实例复用](https://docs.cloudbase.net/cloud-function/instance)、[小程序调用云函数](https://docs.cloudbase.net/recipes/add-cloud-function-wechat-miniprogram)、[云托管小程序接入](https://docs.cloudbase.net/run/develop/access/mini)。
