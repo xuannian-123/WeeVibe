@@ -12,21 +12,16 @@ export default function Index() {
   const [busy, setBusy] = useState(false);
   const active = useRef(false);
   const generation = useRef(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const failures = useRef(0);
-  function stop() { active.current = false; generation.current++; if (timer.current) clearTimeout(timer.current); }
+  function stop() { active.current = false; generation.current++; }
   async function refresh(epoch: number) {
     try {
       const health = await api.health();
       if (!active.current || epoch !== generation.current) return;
-      failures.current = 0;
       setStatus(`真实 API 已响应：${health.server_time}；数据库与身份尚未由健康接口检查`);
     } catch (error) {
       if (!active.current || epoch !== generation.current) return;
-      failures.current++;
       setStatus(error instanceof Error ? error.message : '检测失败');
     }
-    if (active.current && epoch === generation.current) timer.current = setTimeout(() => { void refresh(epoch); }, Math.min(30000, 3000 * 2 ** Math.min(failures.current, 4)));
   }
   useDidShow(() => { stop(); active.current = true; void refresh(generation.current); });
   useDidHide(stop);
@@ -45,6 +40,7 @@ export default function Index() {
   return <View style={{ padding: '24px' }}>
     <Button onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>返回业务首页</Button>
     <Text>Weego 正式工程基础联通</Text>
+    <Button disabled={busy} onClick={() => void run(() => refresh(++generation.current))}>重新检测连接</Button>
     <View><Text>{status}</Text></View>
     <View><Text>{identity}</Text></View>
     <Button disabled={busy} onClick={() => void run(async () => { const user = await establishSession(); setIdentity(`本人业务身份：${user.user_id}`); })}>微信登录／重新建立会话</Button>
