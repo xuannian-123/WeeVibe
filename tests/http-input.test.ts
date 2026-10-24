@@ -30,4 +30,8 @@ describe('bounded JSON reads', () => {
       await expect(readJson(request(raw))).rejects.toMatchObject({ code: 'INVALID_INPUT', message: '请求格式不正确' });
     }
   });
+  it('rejects invalid UTF-8 rather than normalizing bytes before signature verification', async () => {
+    const malformed = new Request('http://local.test', { method: 'POST', body: new Uint8Array([0x7b, 0xff, 0x7d]) });
+    await expect(readJson(malformed)).rejects.toMatchObject({ code: 'INVALID_INPUT', status: 400 });
+  });
 });
