@@ -18,7 +18,7 @@ export function formatTime(raw: string) {
   return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 16).replace('T', ' ') + '（上海）' : '时间待核对';
 }
 export function feeText(fee: ActivityDetail['segments'][number]['fee']) {
-  if (fee.kind === 'unknown' || fee.amount_cents === null) return '费用未知，需人工核实（不是免费）';
+  if (fee.kind === 'unknown' || fee.amount_cents === null) return `费用待确认${fee.note ? `；${fee.note}` : ''}（不是免费）`;
   const units = { per_person: '每人', total: '环节总价', per_hour: '每小时报价' };
   return `参考 ¥${(fee.amount_cents / 100).toFixed(2)}／${units[fee.kind]}${fee.note ? `；${fee.note}` : ''}，非已付款`;
 }

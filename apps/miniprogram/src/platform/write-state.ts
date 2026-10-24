@@ -22,7 +22,7 @@ export function useStoredWrite<I, O>({ storageKey, userId, parse, execute, commi
       if (stored.userId !== actor.current) { pendingRef.current = undefined; setPending(undefined); return; }
       const next = { userId: String(stored.userId), input: parse(stored.input) };
       pendingRef.current = next; setPending(next);
-      setMessage('存在尚未核实的写入。先刷新核对；确认重试时保持原内容及同一幂等键。不会自动重放。');
+      setMessage('上次提交结果还未确认，请先刷新查看。需要重试时会沿用原来的内容，不会自动再次发送。');
     } catch { setBlocked(true); setMessage('无法恢复上次请求，请先核对服务端活动记录，不要重复创建。'); }
   }
   useEffect(() => { setResult(undefined); setMessage(''); restore(); }, [storageKey, userId]);
@@ -48,7 +48,7 @@ export function useStoredWrite<I, O>({ storageKey, userId, parse, execute, commi
         try { Taro.removeStorageSync(storageKey); pendingRef.current = undefined; } catch { if (visible.current) setBlocked(true); }
         if (visible.current && actor.current === userId) setPending(undefined);
       }
-      if (visible.current && actor.current === userId) setMessage(errorText(error) + (uncertain(error) ? ' 原请求已保留，请先刷新核对或使用原幂等键手动重试。' : ' 本次未自动重试，草稿和所选环节保留。'));
+      if (visible.current && actor.current === userId) setMessage(errorText(error) + (uncertain(error) ? ' 原内容已保留，请先刷新核对，再决定是否重试。' : ' 草稿和所选环节已保留。'));
     } finally { lock.current = false; if (visible.current) setBusy(false); }
   }
   return { pending, busy, blocked, result, message, send, resetResult: () => { setResult(undefined); setMessage(''); } };

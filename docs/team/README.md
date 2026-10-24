@@ -4,6 +4,7 @@ Weego采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与�
 
 - [克隆、配置与本地开发](./development.md)
 - [当前架构、已验证内容及后续接通](./architecture.md)
+- [团队接手边界、轻量简版和待办](./handoff.md)
 - [完整业务规则](../11-首版成局加入与补位规则.md)
 - [创建/申请/审批正式接口](../engineering/07-第二轮业务接口交接.md)
 - [小程序简版页面交接](../product/05-第二轮小程序页面实施交接.md)
