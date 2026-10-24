@@ -7,7 +7,7 @@ import { errMsg } from "@/lib/client/api";
 import type { JuActions } from "@/lib/client/useJu";
 import { OrganizerPanel } from "@/components/organizer/OrganizerPanel";
 import { Button, SealLogo, StatusBadge } from "../ui";
-import { Guide, GuideButton, MEMBER_GUIDE, ORGANIZER_GUIDE, useGuide } from "../Guide";
+import { GuideButton, JU_TOURS, Tour, useTour, withRoleTabs } from "../Guide";
 import { toast } from "../toast";
 import { JuHeader } from "./JuHeader";
 import { EntryView } from "./Entry";
@@ -28,7 +28,7 @@ export function TopBar({ status, offline, right }: { status?: string; offline?: 
       <div className="flex items-center gap-2">
         {offline && <span className="text-[12px] text-ink-faint">重连中…</span>}
         {status && <StatusBadge status={status} />}
-        <Link href="/me" className="min-h-10 px-1 py-2 text-[13px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4">
+        <Link href="/me" data-tour="my-ju" className="min-h-10 px-1 py-2 text-[13px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4">
           我的局
         </Link>
         {right}
@@ -117,7 +117,6 @@ export function JuView({
   // 发起人：「我的」= 自己作为成员要做的事；「管理」= 发起人的事。两边分开，投票和拍板不再混在一页
   const [tab, setTab] = useState<"me" | "manage">("me");
   const inbox = useInbox(state, actions, !!me);
-  const guide = useGuide(isAdmin ? "ju-organizer" : "ju-member", ju.status !== "cancelled");
 
   let view: View;
   if (ju.status === "cancelled") view = "cancelled";
@@ -161,6 +160,11 @@ export function JuView({
 
   const panel = isAdmin && adminToken ? <OrganizerPanel state={state} adminToken={adminToken} onState={actions.apply} /> : null;
   const managing = !!panel && tab === "manage";
+  // 指引跟着当前看到的那一屏走：成员各阶段一套，发起人「管理」里按局的状态一套
+  const tourId = managing ? `manage-${ju.status}` : view;
+  const baseSteps = JU_TOURS[tourId] ?? [];
+  const tourSteps = panel && !managing ? withRoleTabs(baseSteps) : baseSteps;
+  const guide = useTour(tourId, tourSteps, baseSteps.length > 0);
 
   return (
     <main className="mx-auto w-full max-w-[480px] overflow-x-clip px-4">
@@ -200,7 +204,7 @@ export function JuView({
         }}
         notices={inbox.notices}
       />
-      <Guide steps={isAdmin ? ORGANIZER_GUIDE : MEMBER_GUIDE} open={guide.open} onClose={guide.close} />
+      <Tour steps={tourSteps} open={guide.open} onClose={guide.close} />
     </main>
   );
 }
@@ -231,7 +235,7 @@ function RoleTabs({ tab, onTab, dot }: { tab: "me" | "manage"; onTab: (t: "me" |
     </button>
   );
   return (
-    <div role="tablist" className="mt-3 flex gap-1 rounded-2xl border-2 border-ink bg-paper-deep p-1">
+    <div role="tablist" data-tour="role-tabs" className="mt-3 flex gap-1 rounded-2xl border-2 border-ink bg-paper-deep p-1">
       {item("me", "我的")}
       {item("manage", "👑 管理")}
     </div>

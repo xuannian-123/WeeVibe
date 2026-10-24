@@ -12,7 +12,7 @@ import { SeedList, SpecPreview, type Draft } from "@/components/launch/SpecPrevi
 import { Advanced, DEFAULT_ADV, deadlineIso, type AdvancedOpts } from "@/components/launch/Advanced";
 import { InviteLinks } from "@/components/launch/InviteLinks";
 import { QrSvg } from "@/components/screen/bits";
-import { Guide, GuideButton, HOME_GUIDE, useGuide } from "@/components/Guide";
+import { GuideButton, HOME_TOUR, Tour, useTour } from "@/components/Guide";
 
 const EXAMPLES = ["周五晚上 8 个人吃火锅，人均 100", "周六下午打羽毛球", "今晚宵夜烧烤"];
 const PARSE_LINES = ["局长正在翻黄历…", "掐指一算，宜聚餐…", "正在数人头…", "正在盘算人均…"];
@@ -24,7 +24,7 @@ function TopBar() {
   // 本地存的局数在客户端才知道，挂载后再读，避免水合不一致
   const [mine, setMine] = useState(0);
   useEffect(() => setMine(store.myJu().length), []);
-  const guide = useGuide("home");
+  const guide = useTour("home", HOME_TOUR);
   return (
     <div className="flex h-14 items-center gap-2.5">
       <SealLogo size={34} />
@@ -34,12 +34,13 @@ function TopBar() {
       </Link>
       <Link
         href="/me"
+        data-tour="my-ju"
         className="pressable min-h-9 rounded-full border-2 border-ink bg-card px-3 py-1.5 text-[13px] font-black shadow-sticker-sm"
       >
         我的局{mine > 0 ? ` · ${mine}` : ""}
       </Link>
       <GuideButton onClick={guide.show} />
-      <Guide steps={HOME_GUIDE} open={guide.open} onClose={guide.close} />
+      <Tour steps={HOME_TOUR} open={guide.open} onClose={guide.close} />
     </div>
   );
 }
@@ -225,7 +226,7 @@ export default function Home() {
       </section>
 
       <section className="sticker p-4">
-        <div className="mb-3 grid grid-cols-2 gap-1 rounded-xl border-2 border-ink bg-paper-deep p-1" role="tablist">
+        <div data-tour="launch-mode" className="mb-3 grid grid-cols-2 gap-1 rounded-xl border-2 border-ink bg-paper-deep p-1" role="tablist">
           {(
             [
               ["text", "💬 说一句话"],
@@ -248,6 +249,7 @@ export default function Home() {
         {mode === "text" ? (
           <>
             <textarea
+              data-tour="launch-input"
               className="field min-h-[96px] resize-none text-[17px] leading-relaxed"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -268,7 +270,7 @@ export default function Home() {
                 </button>
               ))}
             </div>
-            <Button size="lg" className="mt-4 w-full" onClick={() => parseText()} loading={parsing}>
+            <Button size="lg" className="mt-4 w-full" onClick={() => parseText()} loading={parsing} data-tour="launch-go">
               {parsing ? <RotatingText lines={busyLines} /> : "让局长看看 →"}
             </Button>
           </>

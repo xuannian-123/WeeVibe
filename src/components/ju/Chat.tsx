@@ -201,7 +201,7 @@ export function ChatView({
 
   return (
     <div className="pb-40">
-      <div className="mx-auto mb-4 mt-1 flex max-w-[320px] flex-col items-center gap-1.5 text-center">
+      <div data-tour="chat-privacy" className="mx-auto mb-4 mt-1 flex max-w-[320px] flex-col items-center gap-1.5 text-center">
         <LockNote>私聊 · 只有你和局长</LockNote>
         <p className="text-[12.5px] leading-relaxed text-ink-faint">
           预算、门禁、来不来，群里都看不到。局长对外只说结论，而且能证明没说漏。
@@ -263,7 +263,7 @@ export function ChatView({
       <div className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t-2 border-ink bg-paper/95 pt-2 backdrop-blur">
         <div className="mx-auto max-w-[480px] px-3">
           {quick.length > 0 && (
-            <div className="no-scrollbar -mx-3 mb-2 flex gap-2 overflow-x-auto px-3">
+            <div data-tour="chat-quick" className="no-scrollbar -mx-3 mb-2 flex gap-2 overflow-x-auto px-3">
               {quick.map((q) => (
                 <button
                   key={q}
@@ -280,6 +280,7 @@ export function ChatView({
             </div>
           )}
           <form
+            data-tour="chat-input"
             className="flex items-center gap-2"
             onSubmit={(e) => {
               e.preventDefault();

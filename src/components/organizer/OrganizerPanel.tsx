@@ -28,9 +28,9 @@ type Ctx = {
 };
 
 /* ───────── 小积木 ───────── */
-function Card({ title, hint, children, tone = "card" }: { title: React.ReactNode; hint?: React.ReactNode; children: React.ReactNode; tone?: "card" | "gold" }) {
+function Card({ title, hint, children, tone = "card", tour }: { title: React.ReactNode; hint?: React.ReactNode; children: React.ReactNode; tone?: "card" | "gold"; tour?: string }) {
   return (
-    <section className={`rounded-[var(--radius-card)] border-2 border-ink p-3.5 ${tone === "gold" ? "bg-mustard-soft" : "bg-card"}`}>
+    <section data-tour={tour} className={`rounded-[var(--radius-card)] border-2 border-ink p-3.5 ${tone === "gold" ? "bg-mustard-soft" : "bg-card"}`}>
       <div className="mb-2.5 flex items-baseline gap-2">
         <h4 className="text-[16px] font-black">{title}</h4>
         {hint && <span className="ml-auto text-right text-[12px] text-ink-faint">{hint}</span>}
@@ -110,7 +110,7 @@ function Broadcast({ msgs, state }: { msgs: GroupMessages | null; state: JuState
   const fallback = state.ju.announcements.at(-1)?.text;
   const text = msgs?.broadcast || fallback;
   return (
-    <Card title="📣 群公告">
+    <Card title="📣 群公告" tour="org-broadcast">
       {text ? <CopyBlock text={text} label="复制群公告" clamp /> : <p className="text-[14px] text-ink-faint">局长在写…</p>}
     </Card>
   );
@@ -144,7 +144,7 @@ function Collecting({ c, msgs }: { c: Ctx; msgs: GroupMessages | null }) {
         </Card>
       )}
 
-      <Card title="👥 入局进度" hint={counts.waitlist ? `另有 ${counts.waitlist} 人在候补` : undefined}>
+      <Card title="👥 入局进度" tour="org-progress" hint={counts.waitlist ? `另有 ${counts.waitlist} 人在候补` : undefined}>
         <div className="grid grid-cols-3 gap-2 text-center">
           {[
             ["在局里", counts.in],
@@ -177,7 +177,7 @@ function Collecting({ c, msgs }: { c: Ctx; msgs: GroupMessages | null }) {
       </Card>
 
       {tiers.length > 0 && (
-        <Card title="🔗 邀请链接" hint={tiers.length > 1 ? "核心圈先发，空位再放给下一圈" : undefined}>
+        <Card title="🔗 邀请链接" tour="org-invite" hint={tiers.length > 1 ? "核心圈先发，空位再放给下一圈" : undefined}>
           <InviteLinks
             compact
             id={ju.id}
@@ -211,6 +211,7 @@ function Collecting({ c, msgs }: { c: Ctx; msgs: GroupMessages | null }) {
         className="w-full"
         disabled={pending || counts.in < 2}
         loading={busy === "plan"}
+        data-tour="org-plan"
         onClick={run("plan", async () => apply(await api.plan(ju.id, admin)))}
       >
         {busy === "plan" ? <RotatingText lines={PLAN_LINES} /> : "让局长出方案 →"}
@@ -264,10 +265,10 @@ function Voting({ c, msgs }: { c: Ctx; msgs: GroupMessages | null }) {
   if (!plan) return null;
   return (
     <>
-      <Card title="🗳️ 大家在投" hint={<span className="font-num">{voted}/{state.counts.in} 已投 · 过半自动定局</span>}>
+      <Card title="🗳️ 大家在投" tour="org-votes" hint={<span className="font-num">{voted}/{state.counts.in} 已投 · 过半自动定局</span>}>
         <p className="mb-2.5 text-[12.5px] text-ink-faint">你自己投票在“我的”里；这里的拍板不算投票。</p>
         <ul className="space-y-2.5">
-          {plan.proposals.map((p) => {
+          {plan.proposals.map((p, idx) => {
             const n = tally[p.id] ?? 0;
             return (
               <li key={p.id} className={`rounded-xl border-2 p-3 ${p.recommended ? "border-cinnabar bg-cinnabar-soft" : "border-ink bg-paper"}`}>
@@ -280,7 +281,7 @@ function Voting({ c, msgs }: { c: Ctx; msgs: GroupMessages | null }) {
                 <div className="font-num mt-0.5 text-[12px] text-ink-soft">
                   {slotLabel(p.slot)} · {p.attendCount} 人到{p.poi.costPerPerson != null ? ` · 人均 ${p.poi.costPerPerson}` : ""}
                 </div>
-                <Button variant={p.recommended ? "primary" : "secondary"} size="sm" className="mt-2 w-full" onClick={() => setPick(p)}>
+                <Button variant={p.recommended ? "primary" : "secondary"} size="sm" className="mt-2 w-full" onClick={() => setPick(p)} data-tour={idx === 0 ? "org-stamp" : undefined}>
                   不等投票，直接拍板
                 </Button>
               </li>
@@ -299,7 +300,7 @@ function Voting({ c, msgs }: { c: Ctx; msgs: GroupMessages | null }) {
           </Button>
         )}
       </Card>
-      <Card title="🔔 催投票">
+      <Card title="🔔 催投票" tour="org-nudge">
         <Button
           variant="secondary"
           size="sm"
@@ -450,14 +451,14 @@ function Reservation({ c, msgs, setMsgs }: { c: Ctx; msgs: GroupMessages | null;
   // 已经结算了：订位这一步折起来，不占地方
   if (state.ju.settlement) {
     return (
-      <details className="rounded-[var(--radius-card)] border-2 border-ink bg-card p-3.5">
+      <details data-tour="org-reserve" className="rounded-[var(--radius-card)] border-2 border-ink bg-card p-3.5">
         <summary className="min-h-8 cursor-pointer text-[16px] font-black">📞 订位{booked ? " · 已订好" : ""}<span className="ml-2 text-[12px] font-normal text-ink-faint">（再听一遍模拟通话）</span></summary>
         <div className="mt-3">{body}</div>
       </details>
     );
   }
   return (
-    <Card title="📞 订位" hint={booked ? `已订好 · ${tableSize} 位` : "局长替你开口"}>
+    <Card title="📞 订位" tour="org-reserve" hint={booked ? `已订好 · ${tableSize} 位` : "局长替你开口"}>
       {body}
     </Card>
   );
@@ -786,7 +787,7 @@ function Confirmed({ c, msgs, setMsgs }: { c: Ctx; msgs: GroupMessages | null; s
       <Reservation c={c} msgs={msgs} setMsgs={setMsgs} />
       {changes}
       <Broadcast msgs={msgs} state={state} />
-      <details className="rounded-[var(--radius-card)] border-2 border-dashed border-ink-faint px-3.5 py-2">
+      <details data-tour="org-after" className="rounded-[var(--radius-card)] border-2 border-dashed border-ink-faint px-3.5 py-2">
         <summary className="min-h-10 cursor-pointer py-2 text-[15px] font-black text-ink-soft">吃完以后：拍小票分账 · 回顾 · 再约</summary>
         <div className="space-y-3 pb-2 pt-1">{afterTools}</div>
       </details>

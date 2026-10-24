@@ -106,7 +106,7 @@ function MyExperienceBox({ p, state, me }: { p: Proposal; state: JuState; me: Me
     }
   }
   return (
-    <div className="rounded-xl border-2 border-ink bg-mustard-soft p-3">
+    <div className="rounded-xl border-2 border-ink bg-mustard-soft p-3" data-tour="my-exp">
       <div className="mb-2 flex items-center gap-2">
         <Avatar emoji={me.avatar} size={28} />
         <span className="flex-1 text-[15px] font-black">你的体验</span>
@@ -270,10 +270,11 @@ export function PlansView({ state, me, actions }: { state: JuState; me: Member |
 
   return (
     <div className="space-y-4 pb-4">
-      <section className="sticker p-4">
+      <section className="sticker p-4" data-tour="plan-summary">
         <div className="mb-2 flex items-center gap-2">
           <h2 className="flex-1 text-[20px] font-black">局长出方案了</h2>
           <button
+            data-tour="audit-btn"
             type="button"
             onClick={() => setAuditOpen(true)}
             className="pressable inline-flex min-h-9 items-center gap-1 rounded-full border-2 border-ink bg-jade px-3 text-[13px] font-black text-white shadow-sticker-sm"
@@ -300,7 +301,7 @@ export function PlansView({ state, me, actions }: { state: JuState; me: Member |
         </p>
       </section>
 
-      <div role="tablist" className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+      <div role="tablist" data-tour="plan-tabs" className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {proposals.map((p) => {
           const on = p.id === cur.id;
           const n = tally[p.id]?.length ?? 0;
@@ -331,7 +332,7 @@ export function PlansView({ state, me, actions }: { state: JuState; me: Member |
       <AuditSheet state={state} actions={actions} open={auditOpen} onClose={() => setAuditOpen(false)} />
 
       {/* 投票栏 */}
-      <div className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t-2 border-ink bg-paper/95 px-4 pt-2.5 backdrop-blur">
+      <div data-tour="vote-btn" className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t-2 border-ink bg-paper/95 px-4 pt-2.5 backdrop-blur">
         <div className="mx-auto max-w-[480px]">
           <div className="mb-2 flex items-center gap-2 text-[13px] text-ink-soft">
             {voters.length > 0 ? <AvatarStack members={voters} max={5} size={24} /> : null}

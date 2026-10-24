@@ -83,6 +83,7 @@ export function InboxBell({ unread, onClick }: { unread: number; onClick: () => 
     <button
       type="button"
       onClick={onClick}
+      data-tour="inbox"
       aria-label={unread ? `局长的私信，${unread} 条未读` : "局长的私信"}
       className="pressable relative flex size-10 items-center justify-center rounded-full border-2 border-ink bg-card text-[18px] shadow-sticker-sm"
     >

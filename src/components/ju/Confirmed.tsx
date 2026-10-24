@@ -92,7 +92,7 @@ function ItineraryCard({ state, actions, p }: { state: JuState; actions: JuActio
     );
   if (!it) return null;
   return (
-    <section className="sticker overflow-hidden">
+    <section className="sticker overflow-hidden" data-tour="itinerary">
       <div className="flex items-center gap-3 border-b-2 border-ink bg-ink px-4 py-3 text-paper">
         <div className="flex-1">
           <div className="text-[12.5px] font-semibold text-cream-faint">建议出发</div>
@@ -370,7 +370,7 @@ export function ConfirmedView({ state, me, actions }: { state: JuState; me: Memb
   const phase = phaseOf(state, p);
 
   const travel = (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-2 gap-3" data-tour="travel">
       <a href={api.icsUrl(ju.id)} download={`${ju.title}.ics`} className="pressable sticker flex min-h-14 items-center justify-center gap-2 font-bold">
         📅 加入日历
       </a>
@@ -421,7 +421,7 @@ export function ConfirmedView({ state, me, actions }: { state: JuState; me: Memb
 
       {/* 不在当前阶段的功能收起来，需要时还能点开 */}
       {inJu && (
-        <details className="rounded-[var(--radius-card)] border-2 border-dashed border-line px-4 py-2">
+        <details data-tour="more" className="rounded-[var(--radius-card)] border-2 border-dashed border-line px-4 py-2">
           <summary className="min-h-10 cursor-pointer py-2 text-[14px] font-bold text-ink-soft">
             {phase === "after" ? "行程和导航" : "更多：我在路上 · 局后传照片"}
           </summary>

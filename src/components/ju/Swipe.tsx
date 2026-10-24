@@ -173,7 +173,7 @@ export function SwipeView({ state, me, actions }: { state: JuState; me: Member; 
         </div>
       )}
 
-      <div className="relative mx-auto h-[min(64dvh,470px)] w-full select-none">
+      <div data-tour="swipe-card" className="relative mx-auto h-[min(64dvh,470px)] w-full select-none">
         {!deck && !loadErr && (
           <div className="sticker flex h-full flex-col items-center justify-center gap-3 text-ink-soft">
             <Spinner />
@@ -236,7 +236,7 @@ export function SwipeView({ state, me, actions }: { state: JuState; me: Member; 
 
       {cur && !done && (
         <>
-          <div className="mt-5 flex items-center justify-center gap-5">
+          <div data-tour="swipe-btns" className="mt-5 flex items-center justify-center gap-5">
             <button
               type="button"
               aria-label="不想去"
@@ -263,7 +263,7 @@ export function SwipeView({ state, me, actions }: { state: JuState; me: Member; 
             </button>
           </div>
           {hasGuess && (
-            <div className="mt-4 text-center">
+            <div className="mt-4 text-center" data-tour="swipe-guess">
               <button type="button" onClick={acceptGuesses} className="min-h-11 px-3 text-[14px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4">
                 🔮 懒得刷？就按局长猜的来
               </button>

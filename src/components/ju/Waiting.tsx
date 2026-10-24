@@ -82,7 +82,7 @@ export function ProgressCard({ state, meId }: { state: JuState; meId?: string })
     return a.joinedAt.localeCompare(b.joinedAt);
   });
   return (
-    <section className="sticker p-4">
+    <section className="sticker p-4" data-tour="waiting-progress">
       <SectionTitle hint={ju.quorum?.state === "met" ? <span className="font-bold text-jade">✓ 已成局</span> : undefined}>谁说好了</SectionTitle>
       <div className="mb-1 flex items-baseline gap-1.5">
         <span className="font-num text-[34px] font-bold leading-none">{counts.done}</span>
@@ -226,7 +226,7 @@ export function WantsCard({ state, me, actions }: { state: JuState; me: Member; 
   };
 
   return (
-    <section className="sticker p-4">
+    <section className="sticker p-4" data-tour="wants">
       <div className="mb-1 flex items-center gap-2">
         <h3 className="flex-1 text-lg font-black">想认识谁？👀</h3>
         <LockNote>私密</LockNote>

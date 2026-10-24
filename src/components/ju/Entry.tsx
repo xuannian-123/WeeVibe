@@ -136,7 +136,7 @@ export function EntryView({
         </p>
       </div>
 
-      <section className="sticker p-4">
+      <section className="sticker p-4" data-tour="entry-form">
         <div className="mb-3 flex items-center gap-3">
           <Avatar emoji={avatar} size={52} />
           <input
