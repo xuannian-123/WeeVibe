@@ -12,11 +12,12 @@ const standalone = resolve(root, 'apps/web/.next/standalone');
 const output = resolve(root, '.working');
 await mkdir(output, { recursive: true });
 const stage = await mkdtemp(resolve(output, 'scf-api-'));
-const forbidden = path => path.split('/').some(part =>
-  part === '.working' || part === 'outputs' || part === '.git' ||
-  part === 'docs' || part === 'data' || part === 'miniprogram' ||
-  part === '.env' || part.startsWith('.env.') ||
-  /\.(?:pem|key|p12|pfx|log|sqlite(?:3)?)$/i.test(part));
+// Project-private roots are forbidden. Dependency directories such as
+// caniuse-lite/data are runtime inputs, not the project's private data folder.
+const forbidden = path => /^(?:\.working|outputs|\.git|docs|data)(?:\/|$)/.test(path)
+  || /^apps\/miniprogram(?:\/|$)/.test(path)
+  || path.split('/').some(part => part === '.env' || part.startsWith('.env.')
+    || /\.(?:pem|key|p12|pfx|log|sqlite(?:3)?)$/i.test(part));
 
 async function copyRuntime(source, target, boundary, ancestors = new Set()) {
   const actual = await realpath(source);
