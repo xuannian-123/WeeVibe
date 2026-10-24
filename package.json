@@ -7,7 +7,7 @@
   "engines": { "node": ">=24.11.0 <25" },
   "scripts": {
     "dev:api": "pnpm --filter @weego/web dev",
-    "build:api": "pnpm --filter @weego/web build",
+    "build:api": "pnpm --filter @weego/web build && node scripts/check-api-artifact.mjs",
     "build:mini": "pnpm --filter @weego/miniprogram build",
     "build": "pnpm build:api && pnpm build:mini",
     "typecheck": "pnpm --filter @weego/web exec next typegen && pnpm -r typecheck && tsc -p tests/tsconfig.json --noEmit && tsc -p tests/integration/tsconfig.json --noEmit",

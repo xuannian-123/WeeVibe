@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFile, lstat } from 'node:fs/promises';
+import { dirname, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const trace = resolve(root, 'apps/web/.next/server/app/api/v1/ready/route.js.nft.json');
+const artifact = resolve(root, 'apps/web/.next/standalone');
+const files = JSON.parse(await readFile(trace, 'utf8')).files;
+const required = files.filter(path => path.replaceAll('\\', '/').endsWith('/query_compiler_bg.wasm'));
+assert.equal(required.length, 1, 'Ready route must trace the Prisma query compiler WASM');
+const source = resolve(dirname(trace), required[0]);
+const target = resolve(artifact, relative(root, source));
+assert.ok(target.startsWith(artifact + sep), 'Traced runtime must remain inside standalone');
+const stat = await lstat(target);
+assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.size > 0, 'Standalone must contain a real WASM file, not an external link');
+const digest = data => createHash('sha256').update(data).digest('hex');
+assert.equal(digest(await readFile(target)), digest(await readFile(source)), 'Copied WASM must match generated client');
+console.log('PASS standalone includes a real, byte-matching Prisma query compiler WASM. Database connectivity is checked separately.');

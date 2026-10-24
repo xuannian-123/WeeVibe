@@ -83,6 +83,14 @@ jobs:
           echo $! > .working/ci-api.pid
           curl --fail --retry 30 --retry-all-errors --retry-delay 1 --max-time 5 http://127.0.0.1:43188/api/v1/ready
           pnpm check:postgres:verify
+      - name: Diagnose failed standalone
+        if: failure()
+        shell: bash
+        run: |
+          curl --silent --max-time 5 http://127.0.0.1:43188/api/v1/ready || true
+          for log in .working/ci-api.log .working/ci-api-restart.log; do
+            if [ -f "$log" ]; then tail -n 40 "$log"; fi
+          done
       - name: Stop local test API
         if: always()
         shell: bash

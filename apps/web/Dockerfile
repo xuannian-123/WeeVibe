@@ -8,7 +8,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web ./apps/web
 COPY packages/contracts ./packages/contracts
 COPY prisma ./prisma
-COPY scripts/prisma-check.mjs ./scripts/prisma-check.mjs
+COPY scripts/prisma-check.mjs scripts/check-api-artifact.mjs ./scripts/
 RUN pnpm install --frozen-lockfile --filter weego --filter @weego/web...
 RUN pnpm db:generate
 RUN pnpm build:api

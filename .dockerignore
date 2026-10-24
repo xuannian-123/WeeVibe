@@ -14,6 +14,7 @@
 !prisma/**
 !scripts/
 !scripts/prisma-check.mjs
+!scripts/check-api-artifact.mjs
 **/node_modules
 **/node_modules/**
 **/.next
