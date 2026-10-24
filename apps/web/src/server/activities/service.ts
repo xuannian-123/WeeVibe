@@ -6,6 +6,7 @@ import {
 } from '@weego/contracts';
 import { withDb } from '../db';
 import { ServiceError } from '../http';
+import { isRetryableActivityTransactionError } from './transaction-errors';
 import { applicationVisibility, checkJoinOpen, checkManager, checkNotCancelled, checkRevision, checkSelectedSegments, requestFingerprint, segmentCounts, verifyReplay } from './rules';
 
 type Tx = Prisma.TransactionClient;
@@ -80,11 +81,7 @@ async function mutation<T>(action: (tx: Tx) => Promise<T>): Promise<T> {
       catch (error) {
         // A unique-key race must roll back the WHOLE operation, then re-read the
         // idempotency winner or current seats. Never continue a failed transaction.
-        const retryable = error instanceof Prisma.PrismaClientKnownRequestError && (
-          ['P2034', 'P2002'].includes(error.code)
-          || (error.code === 'P2010' && ['40001', '40P01'].includes(String(error.meta?.code)))
-        );
-        if (retryable) {
+        if (isRetryableActivityTransactionError(error)) {
           if (attempt < 2) continue;
           throw new ServiceError('CONCURRENT_MODIFICATION', 409, '其他成员正在更新活动，请刷新后重试');
         }
