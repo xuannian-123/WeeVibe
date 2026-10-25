@@ -40,3 +40,4 @@ export * from './activities';
 export * from './venues';
 export * from './ai';
 export * from './limits';
+export * from './cloud-http';

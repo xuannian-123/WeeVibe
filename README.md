@@ -29,7 +29,7 @@ pnpm build:mini
 - 高德：服务端搜索、附近及步行接口和共享客户端；小程序选择器待接。
 - AI：严格结构化契约及纯函数约束校验；供应商、真实模型与确认应用待接。
 
-当前已通过174项离线测试、类型检查与小程序构建。Linux上的真实临时PG、重启、容器和SCF打包已有独立检查。Neon Free PostgreSQL与现有CloudBase中的HTTP云函数已接通，继续运行同一Next.js API；正式微信开发工具的真实云身份与业务调用已通过，上一临时预览的单手机打开及登录由用户确认。当前新界面、两微信、冷启动及完整流程分别验收，详见[当前架构与证据](docs/team/architecture.md)。[CI](https://github.com/xuannian-123/weego/actions)中的身份仍为fixture，不混记为真实微信结果。
+当前已通过192项离线测试、类型检查与小程序构建。Linux上的真实临时PG、重启、容器和SCF打包已有独立检查。Neon Free PostgreSQL与现有CloudBase中的HTTP云函数已接通，继续运行同一Next.js API；正式微信开发工具的真实云身份与业务调用已通过，上一临时预览的单手机打开及登录由用户确认。当前新界面、两微信、冷启动及完整流程分别验收，详见[当前架构与证据](docs/team/architecture.md)。[CI](https://github.com/xuannian-123/weego/actions)中的身份仍为fixture，不混记为真实微信结果。
 
 ## 规则与协作
 

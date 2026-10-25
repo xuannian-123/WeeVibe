@@ -7,5 +7,5 @@ export function POST(request: Request) {
   return handle(async () => {
     const { identity, proof } = await verifyCloudLoginRequest(request);
     return issueCloudSession(identity, proof);
-  });
+  }, request);
 }

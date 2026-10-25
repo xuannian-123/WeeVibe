@@ -41,6 +41,13 @@ export function positiveInteger(value: string) {
   return number;
 }
 
+export function createTimingIssue(input: CreateActivityInput, now: number): string | undefined {
+  for (const segment of input.segments.filter(s => input.participating_segment_refs.includes(s.client_ref))) {
+    if (now >= Date.parse(segment.starts_at)) return `“${segment.name}”的开始时间已过，请修改日期和时间后再发起。`;
+    if (now >= Date.parse(segment.deadline_at)) return `“${segment.name}”的报名截止时间已过，请修改截止时间后再发起。`;
+  }
+}
+
 export function buildCreateInput(form: ActivityForm, key: string): CreateActivityInput {
   const segments = form.segments.map((s, i) => {
     try {

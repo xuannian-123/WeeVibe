@@ -7,5 +7,5 @@ export function POST(request: Request) {
   return handle(async () => {
     const actor = await requireActor(request);
     return createActivity(actor, await parseBody(request, createActivityInputSchema));
-  });
+  }, request);
 }

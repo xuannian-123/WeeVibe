@@ -8,5 +8,5 @@ export function GET(request: Request, context: { params: Promise<{ activityId: s
     const { activityId } = await context.params;
     const id = parseActivityId(activityId);
     return getActivity(id, await optionalActor(request));
-  });
+  }, request);
 }

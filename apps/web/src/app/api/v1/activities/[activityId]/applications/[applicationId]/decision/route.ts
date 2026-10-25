@@ -8,5 +8,5 @@ export function POST(request: Request, context: { params: Promise<{ activityId: 
     const actor = await requireActor(request);
     const { activityId, applicationId } = await context.params;
     return decideApplication(parseActivityId(activityId), parseActivityId(applicationId), actor, await parseBody(request, decideApplicationInputSchema));
-  });
+  }, request);
 }

@@ -8,6 +8,11 @@ const id = '00000000-0000-4000-8000-000000000001';
 const applicationId = '00000000-0000-4000-8000-000000000002';
 afterEach(() => vi.unstubAllEnvs());
 describe('actual route functions, no HTTP server, real login or database', () => {
+  it('keeps authorization checks when cloud HTTP requests opt into response envelopes', async () => {
+    const response = await create(new Request('http://localhost/api/v1/activities', { method: 'POST', headers: { 'X-Weego-Response-Envelope': '1', 'x-wx-openid': 'forged', 'Content-Type': 'application/json' }, body: '{}' }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ transport: 'weego.http.v1', status: 401, body: { error: { code: 'UNAUTHENTICATED' } } });
+  });
   it('does not let forged platform headers or manager JSON create an activity', async () => {
     const response = await create(new Request('http://localhost/api/v1/activities', { method: 'POST', headers: { 'x-wx-openid': 'forged', 'Content-Type': 'application/json' }, body: JSON.stringify({ current_manager_id: id }) }));
     expect(response.status).toBe(401);

@@ -8,6 +8,7 @@ const platform = vi.hoisted(() => ({
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro/index.js', () => ({ default: platform }));
 import { api, establishSession } from '../apps/miniprogram/src/platform/api';
 import { callCloudHTTP } from '../apps/miniprogram/src/platform/cloud-http';
+import { uncertain } from '../apps/miniprogram/src/platform/write-policy';
 
 const token = randomBytes(32).toString('base64url');
 const user = { user_id: randomUUID() };
@@ -57,7 +58,7 @@ describe('explicit native cloud HTTP transport (mock platform only)', () => {
     expect(await api.me()).toEqual(user);
     expect(platform.cloud.callHTTPFunction).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
       name: 'fixtureApi', config: { env: 'fixture-env' }, method: 'get', path: '/api/v1/me',
-      header: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, timeout: 10000
+      header: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'X-Weego-Response-Envelope': '1' }, timeout: 10000
     }));
     expect(platform.request).not.toHaveBeenCalled();
   });
@@ -82,6 +83,33 @@ describe('explicit native cloud HTTP transport (mock platform only)', () => {
     platform.cloud.callHTTPFunction.mockImplementation(options => options.fail(new Error('private provider fixture')));
     await expect(api.me()).rejects.toMatchObject({ code: 'NETWORK_ERROR', status: 0 });
     expect(platform.request).not.toHaveBeenCalled(); expect(platform.cloud.callFunction).not.toHaveBeenCalled();
+  });
+  it('decodes an explicit business rejection so the original request can be corrected', async () => {
+    respond(200, { transport: 'weego.http.v1', status: 409, body: { error: { code: 'SEGMENT_APPLICATION_CLOSED', message: '已截止' }, request_id: randomUUID() } });
+    const error = await api.getActivity(randomUUID()).catch(e => e);
+    expect(error).toMatchObject({ code: 'SEGMENT_APPLICATION_CLOSED', status: 409 });
+    expect(uncertain(error)).toBe(false);
+  });
+  it('retains uncertain writes for service failures and SDK errors without a verified response', async () => {
+    respond(200, JSON.stringify({ transport: 'weego.http.v1', status: 503, body: { error: { code: 'DATABASE_UNAVAILABLE', message: '不可用' }, request_id: randomUUID() } }));
+    expect(uncertain(await api.me().catch(e => e))).toBe(true);
+    platform.cloud.callHTTPFunction.mockImplementation(options => options.fail({ errCode: 400, errMsg: 'SDK discarded the response body' }));
+    const error = await api.me().catch(e => e);
+    expect(error).toMatchObject({ code: 'NETWORK_ERROR', status: 0 });
+    expect(uncertain(error)).toBe(true);
+  });
+  it('rejects malformed or ambiguous transport envelopes rather than clearing pending writes', async () => {
+    for (const body of [
+      { transport: 'other', status: 409, body: {} },
+      { transport: 'weego.http.v1', status: 600, body: {} },
+      { transport: 'weego.http.v1', status: 409 },
+      { transport: 'weego.http.v1', status: 409, body: {}, extra: true }
+    ]) {
+      respond(200, body);
+      const error = await api.me().catch(e => e);
+      expect(error).toMatchObject({ code: 'INVALID_RESPONSE' });
+      expect(uncertain(error)).toBe(true);
+    }
   });
   it('fails before contacting login if the selected transport is incomplete or unsupported', async () => {
     for (const name of ['__WEEGO_CLOUD_ENV_ID__', '__WEEGO_CLOUD_API_FUNCTION__']) {

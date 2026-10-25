@@ -10,5 +10,5 @@ export function createVenueHandler(operation: keyof Provider, identity: Identity
     const user = await identity.authenticate(request.headers.get('authorization'));
     const input = await readJson(request);
     return provider[operation](user.user_id, input);
-  });
+  }, request);
 }
