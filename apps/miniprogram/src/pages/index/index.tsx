@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Taro from '@tarojs/taro';
 import { Text, View } from '@tarojs/components';
+import { BRAND_NAME } from '../../brand';
 import { activityIdSchema } from '@weego/contracts';
 import { api } from '../../platform/api';
 import { errorText, requireUser, useLogin, usePageRead } from '../../platform/page-state';
@@ -28,7 +29,7 @@ export default function Home() {
   const signedIn = !!read.data && !read.error;
   return <View className="screen home-screen">
     <View className="home-hero">
-      <Text className="home-wordmark">WEEGO</Text>
+      <Text className="home-wordmark">{BRAND_NAME}</Text>
       <Text className="home-title">一起出发，把局组起来。</Text>
       <Text className="home-subtitle">把一起做的事排好，让朋友按想参加的环节加入。</Text>
       <Action variant="primary" onClick={() => { void Taro.navigateTo({ url: '/pages/editor/index' }); }}>发起活动</Action>

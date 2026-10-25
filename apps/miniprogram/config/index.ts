@@ -5,7 +5,7 @@ if (!['code', 'cloud'].includes(loginMode)) throw new Error('TARO_APP_LOGIN_MODE
 const apiTransport = process.env.TARO_APP_API_TRANSPORT ?? 'https';
 if (!['https', 'cloud-http'].includes(apiTransport)) throw new Error('TARO_APP_API_TRANSPORT must be https or cloud-http');
 export default defineConfig<'webpack5'>({
-  projectName: 'weego', date: '2026-10-24', designWidth: 750,
+  projectName: 'WeeVibe', date: '2026-10-24', designWidth: 750,
   sourceRoot: 'src', outputRoot: 'dist', framework: 'react', compiler: 'webpack5',
   cache: { enable: false },
   defineConstants: {

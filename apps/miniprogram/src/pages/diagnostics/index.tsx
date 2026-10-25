@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import Taro, { useDidShow, useDidHide, useUnload } from '@tarojs/taro';
 import { Button, Input, Text, View } from '@tarojs/components';
 import { ApiClientError } from '@weego/api-client';
+import { BRAND_NAME } from '../../brand';
 import { api, establishSession, forgetSession, getToken } from '../../platform/api';
 
 export default function Index() {
@@ -39,7 +40,7 @@ export default function Index() {
   }
   return <View style={{ padding: '24px' }}>
     <Button onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>返回业务首页</Button>
-    <Text>WEEGO 正式工程基础联通</Text>
+    <Text>{BRAND_NAME} 正式工程基础联通</Text>
     <Button disabled={busy} onClick={() => void run(() => refresh(++generation.current))}>重新检测连接</Button>
     <View><Text>{status}</Text></View>
     <View><Text>{identity}</Text></View>

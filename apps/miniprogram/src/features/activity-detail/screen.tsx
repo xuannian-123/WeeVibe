@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro';
 import { Text, View } from '@tarojs/components';
+import { BRAND_NAME } from '../../brand';
 import { Action, Notice, Panel } from '../../components/ui';
 import { ApprovalPanel, MyParticipationPanel, ApplicationForm } from '../applications/panels';
 import { InvitationPanel } from '../invitations';
@@ -14,7 +15,7 @@ export default function ActivityDetailScreen() {
   if (!id) return <View className="screen activity-page"><Panel title="没有找到这个活动"><Notice>活动入口不完整，请向朋友重新获取邀请。</Notice><Action onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>返回首页</Action></Panel></View>;
   return <View className="screen activity-page">
     <View className="activity-hero">
-      <Text className="activity-eyebrow">WEEGO · 一起出发</Text>
+      <Text className="activity-eyebrow">{BRAND_NAME} · 一起出发</Text>
       <Text className="activity-title">{detail?.name ?? '活动详情'}</Text>
       {detail && <View className="activity-badges">
         <Text className={`activity-badge ${detail.cancelled_at ? 'activity-badge-muted' : ''}`}>{detail.cancelled_at ? '已取消' : detail.formation_status === 'confirmed' ? '主环节已成局' : '待确认成局'}</Text>

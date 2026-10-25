@@ -23,7 +23,7 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - run: npm install --global pnpm@11.15.1
-      - run: pnpm install --frozen-lockfile --filter weego --filter @weego/web...
+      - run: pnpm install --frozen-lockfile --filter weevibe --filter @weego/web...
       - run: pnpm db:generate
       - run: pnpm build:api
       - run: node scripts/package-api-scf.mjs

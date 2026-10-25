@@ -1,7 +1,7 @@
 {
-  "description": "WEEGO formal Taro baseline, original account; local configuration, not uploaded",
+  "description": "WeeVibe formal Taro baseline; WeChat account name managed separately",
   "miniprogramRoot": "dist/",
-  "projectname": "weego",
+  "projectname": "WeeVibe",
   "appid": "wxaa06e111e33f6ddd",
   "setting": {
     "es6": true,

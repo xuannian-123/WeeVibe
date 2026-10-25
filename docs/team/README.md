@@ -1,7 +1,8 @@
 # 团队开发入口
 
-WEEGO采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与共享Zod契约。管理者与参与者共用客户端，业务身份与管理权限分开。
+WeeVibe采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与共享Zod契约。管理者与参与者共用客户端，业务身份与管理权限分开。
 
+- [品牌、微信账号名与兼容标识](./branding.md)
 - [克隆、配置与本地开发](./development.md)
 - [当前架构、已验证内容及后续接通](./architecture.md)
 - [团队接手边界、轻量简版和待办](./handoff.md)
@@ -38,4 +39,4 @@ WEEGO采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与�
 
 已有源码、离线通过、真实本机PG通过、云端通过与真机通过分别记录。当前Issue开放不表示没有代码，也不能因编译通过就关闭任务。
 
-2026-10-25用户更正项目名为WEEGO，并明确授权推进双微信验收和原小程序账号改名；后台提交与审核结果另记，不能把界面名称修改当作账号已改名。付费、旧Secret重置、体验版替换或正式发布仍按各自授权边界执行。
+2026-10-25用户最终明确项目及小程序内部品牌为WeeVibe，微信账号名另外申请，不能把界面名称修改当作微信账号已改名。账号名具体状态见[名称说明](./branding.md)。付费、旧Secret重置、体验版替换或正式发布仍按各自授权边界执行。

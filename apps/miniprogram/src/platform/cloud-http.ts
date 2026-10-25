@@ -24,7 +24,7 @@ function nativeCloud(): NativeCloudHTTP {
   const init = cloud.init as (options: { env: string }) => unknown;
   return {
     initialize: env => {
-      // A saved Weego session survives restarts; the native cloud SDK does not.
+      // A saved WeeVibe session survives restarts; the native cloud SDK does not.
       // Initialize before the first business request, independently of login.
       if (initializedClouds.get(cloud) === env) return;
       Reflect.apply(init, cloud, [{ env }]);

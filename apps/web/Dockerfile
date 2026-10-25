@@ -10,7 +10,7 @@ COPY packages/contracts ./packages/contracts
 COPY cloudfunctions/weegoLogin/proof.cjs cloudfunctions/weegoLogin/proof.d.cts ./cloudfunctions/weegoLogin/
 COPY prisma ./prisma
 COPY scripts/prisma-check.mjs scripts/check-api-artifact.mjs ./scripts/
-RUN pnpm install --frozen-lockfile --filter weego --filter @weego/web...
+RUN pnpm install --frozen-lockfile --filter weevibe --filter @weego/web...
 RUN pnpm db:generate
 RUN pnpm build:api
 RUN mkdir -p apps/web/public
