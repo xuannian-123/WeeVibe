@@ -4,6 +4,8 @@
 
 第一批前端已提取activity-create、activity-detail、applications、invitations；后端现有创建、申请/审批、活动读取也已按用例拆分，service.ts保留兼容汇总导出。此次只调整代码归属，不增加业务功能，也不代表12张任务已经完成。下表区分现有入口与后续建议，不为未实施功能创建空文件。
 
+本轮 WG-02/WG-07 新增：activity-create/ai-create.tsx、ai-form.ts、venue-picker.tsx，以及 server/ai/creation.ts、creation-handler.ts 和 `/api/v1/ai/creation-draft`。复用现有地点接口和创建确认流程，独立演示API及开发工具真实生成/填表/选点/预览已通过，手机试用继续；详见[接入说明](./ai-map-creation.md)。
+
 直接入口：[创建流程](../../apps/miniprogram/src/features/activity-create/index.tsx)、[创建表单](../../apps/miniprogram/src/features/activity-create/activity-editor.tsx)、[详情控制器](../../apps/miniprogram/src/features/activity-detail/use-activity-detail.ts)、[报名/审批状态](../../apps/miniprogram/src/features/applications/use-applications.ts)、[报名/审批面板](../../apps/miniprogram/src/features/applications/panels.tsx)、[邀请入口](../../apps/miniprogram/src/features/invitations/index.tsx)。
 
 后端入口：[创建用例](../../apps/web/src/server/activities/create.ts)、[申请/审批用例](../../apps/web/src/server/activities/applications.ts)、[活动读取与权限投影](../../apps/web/src/server/activities/snapshot.ts)、[兼容服务入口](../../apps/web/src/server/activities/service.ts)。
@@ -16,7 +18,7 @@
 | WG-04 成局/退出/补位 | 后续formation、participation模块 | 后续活动用例，复用共享规则/事务 | 新增前先明确接口与详情挂载点，不复制整页 |
 | WG-05 变更/重接受 | 后续arrangement-change，复用可用表单组件 | 后续活动变更/接受用例、版本和席位记录 | 与创建/参加/成局约定影响范围，共享模型先协调 |
 | WG-06 管理交接 | 后续handover模块，详情挂载 | 后续交接用例和当前管理归属 | 与权限、取消/参加状态协调，原子切换 |
-| WG-07 AI | 后续ai模块，入口待团队收敛 | server/ai、providers、contracts/ai | 密钥仅服务端；确认应用与活动事务共同设计 |
+| WG-07 AI | activity-create/ai-create、ai-form；后续文案及协调模块待接 | server/ai、providers、contracts/ai与ai-creation | 创建草稿先审阅再填表；后续协调确认应用与活动事务共同设计 |
 | WG-08 分享卡 | 后续share-card，复用行程展示数据 | 仅确需服务端二维码/生成时增加相应接口 | 与邀请路径/权限边界统一 |
 | WG-09 待办 | 后续todos，首页挂载 | 后续有权限的聚合查询 | 与各状态产生方约定契约，不各造业务状态 |
 | WG-10 再约 | 后续rebook，复用activity-create | 后续草稿生成/现有创建流程 | 新日期、同意、成员及核实状态不盲目复制 |

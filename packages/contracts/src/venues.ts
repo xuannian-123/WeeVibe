@@ -39,6 +39,8 @@ export const venueListSchema = z.object({
   source: venueSourceSchema, venues: z.array(venueSchema), excluded_count: z.number().int().nonnegative(),
   pagination: z.literal(false),
 });
+export const venueSelectionSchema = venueSchema.pick({ name: true, address: true, location: true, source: true });
+export type VenueSelection = z.infer<typeof venueSelectionSchema>;
 export const venueWalkResultSchema = z.object({
   source: venueSourceSchema, origin: gcj02Schema, destination: gcj02Schema,
   route: z.object({ distance_m: z.number().nonnegative(), duration_seconds: z.number().nonnegative(),

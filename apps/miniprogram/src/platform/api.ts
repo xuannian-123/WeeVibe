@@ -30,7 +30,7 @@ const transport: Transport = async request => {
   if (__WEEVIBE_API_TRANSPORT__ === 'cloud-http') return callCloudHTTP(request, __WEEVIBE_CLOUD_ENV_ID__, __WEEVIBE_CLOUD_API_FUNCTION__);
   const base = __WEEVIBE_API_BASE_URL__.replace(/\/$/, '');
   try {
-    const response = await Taro.request({ url: base + request.path, method: request.method, header: request.headers, data: request.body, timeout: 10000 });
+    const response = await Taro.request({ url: base + request.path, method: request.method, header: request.headers, data: request.body, timeout: request.timeoutMs ?? 10000 });
     return { status: response.statusCode, body: response.data };
   } catch { throw new ApiClientError('NETWORK_ERROR', '网络请求未完成，请检查服务地址与网络', 0); }
 };

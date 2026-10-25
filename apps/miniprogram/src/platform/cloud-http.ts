@@ -49,7 +49,7 @@ export async function callCloudHTTP(request: TransportRequest, env: string, name
       cloud.callHTTPFunction({
         name, config: { env }, path: request.path,
         method: request.method.toLowerCase() as 'get' | 'post' | 'put',
-        header: { ...request.headers, [CLOUD_HTTP_ENVELOPE_HEADER]: CLOUD_HTTP_ENVELOPE_VERSION }, data: request.body, timeout: 10000,
+        header: { ...request.headers, [CLOUD_HTTP_ENVELOPE_HEADER]: CLOUD_HTTP_ENVELOPE_VERSION }, data: request.body, timeout: request.timeoutMs ?? 10000,
         success: resolve, fail: reject
       });
     });

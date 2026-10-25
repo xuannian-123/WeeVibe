@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Button, Checkbox, CheckboxGroup, Label, Picker, Radio, RadioGroup, Text, View } from '@tarojs/components';
 import { Action, Field, Panel } from '../../components/ui';
 import { emptySegment, feeOptions, segmentName, typeOptions, type ActivityForm, type SegmentForm } from './form';
+import { AiCreate } from './ai-create';
+import { VenuePicker } from './venue-picker';
 import './activity-editor.css';
 
 export function ActivityEditor({ value, onChange, disabled }: { value: ActivityForm; onChange: (value: ActivityForm) => void; disabled: boolean }) {
@@ -22,6 +24,7 @@ export function ActivityEditor({ value, onChange, disabled }: { value: ActivityF
       </Picker>
     </View></View>;
   return <View>
+    <AiCreate value={value} onApply={onChange} disabled={disabled} />
     <Panel title="这次想一起做什么？">
       <Field label="活动名称" value={value.name} disabled={disabled} onChange={name => onChange({ ...value, name })} placeholder="例如：周末打球，再一起吃饭" />
       <Text className="caption">先约一件事也可以。有后续安排时，再添加环节。</Text>
@@ -34,7 +37,8 @@ export function ActivityEditor({ value, onChange, disabled }: { value: ActivityF
         {dateTime(s, 'startDate', 'startTime', '什么时候开始')}
         {dateTime(s, 'endDate', 'endTime', '预计什么时候结束')}
         <Text className="caption">结束默认同一天；跨天时可点日期修改。时间均为北京时间。</Text>
-        <Field label="在哪里集合" value={s.place} disabled={disabled} onChange={place => changeSegment(s.ref, { place })} placeholder="填写大家能找到的场地或集合点" />
+        <Field label="在哪里集合" value={s.place} disabled={disabled} onChange={place => changeSegment(s.ref, { place, venue: undefined })} placeholder="填写大家能找到的场地或集合点" />
+        <VenuePicker segment={s} disabled={disabled} onSelect={venue => changeSegment(s.ref, { place: venue.name, address: venue.address ?? '', venue })} />
         <View className="form-pair">
           <Field label="至少几人成行" value={s.minimum} numeric disabled={disabled} onChange={minimum => changeSegment(s.ref, { minimum })} placeholder="人数" />
           <Field label="最多多少人" value={s.capacity} numeric disabled={disabled} onChange={capacity => changeSegment(s.ref, { capacity })} placeholder="人数" />
@@ -49,7 +53,7 @@ export function ActivityEditor({ value, onChange, disabled }: { value: ActivityF
           <Text className="field-label">活动类型（可选）</Text>
           <Picker mode="selector" range={typeOptions.map(t => t.label)} value={Math.max(0, typeOptions.findIndex(t => t.value === s.type))} disabled={disabled}
             onChange={e => changeSegment(s.ref, { type: typeOptions[Number(e.detail.value)].value })}><Button className="picker-trigger" disabled={disabled}>{typeOptions.find(t => t.value === s.type)?.label}</Button></Picker>
-          <Field label="详细地址（可选）" value={s.address} disabled={disabled} onChange={address => changeSegment(s.ref, { address })} placeholder="楼层、场地号或集合说明" />
+          <Field label="详细地址（可选）" value={s.address} disabled={disabled} onChange={address => changeSegment(s.ref, { address, venue: undefined })} placeholder="楼层、场地号或集合说明" />
           <Text className="field-label">参考费用</Text>
           <Picker mode="selector" range={feeOptions.map(f => f.label)} value={Math.max(0, feeOptions.findIndex(f => f.value === s.feeUnit))} disabled={disabled}
             onChange={e => changeSegment(s.ref, { feeUnit: feeOptions[Number(e.detail.value)].value })}><Button className="picker-trigger" disabled={disabled}>{feeOptions.find(f => f.value === s.feeUnit)?.label}</Button></Picker>
