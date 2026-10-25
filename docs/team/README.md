@@ -1,6 +1,6 @@
 # 团队开发入口
 
-Weego采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与共享Zod契约。管理者与参与者共用客户端，业务身份与管理权限分开。
+WEEGO采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与共享Zod契约。管理者与参与者共用客户端，业务身份与管理权限分开。
 
 - [克隆、配置与本地开发](./development.md)
 - [当前架构、已验证内容及后续接通](./architecture.md)
@@ -9,6 +9,7 @@ Weego采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与�
 - [共享界面与交互规范](./frontend-guide.md)
 - [12张任务的代码入口与修改边界](./task-map.md)
 - [后续改进、子任务与新增任务怎样归类](./task-workflow.md)
+- [双微信实际验收步骤与记录](./two-wechat-acceptance.md)
 - [完整业务规则](../11-首版成局加入与补位规则.md)
 - [创建/申请/审批正式接口](../engineering/07-第二轮业务接口交接.md)
 - [小程序简版页面交接](../product/05-第二轮小程序页面实施交接.md)
@@ -35,3 +36,5 @@ Weego采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与�
 | [WG-12](https://github.com/xuannian-123/weego/issues/12) | 现场正式界面和试用改进 |
 
 已有源码、离线通过、真实本机PG通过、云端通过与真机通过分别记录。当前Issue开放不表示没有代码，也不能因编译通过就关闭任务。
+
+2026-10-25用户更正项目名为WEEGO，并明确授权推进双微信验收和原小程序账号改名；后台提交与审核结果另记，不能把界面名称修改当作账号已改名。付费、旧Secret重置、体验版替换或正式发布仍按各自授权边界执行。

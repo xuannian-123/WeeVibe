@@ -17,6 +17,6 @@ export function useActivityDetail() {
   const userId = detail?.viewer.user_id ?? undefined;
   const fresh = !!detail && !read.error && !read.loading;
   const applications = useApplications({ id, detail, fresh, refresh: read.refresh });
-  useShareAppMessage(() => ({ title: detail?.name ?? 'Weego 活动', path: id ? `/pages/activity/index?id=${encodeURIComponent(id)}` : '/pages/index/index' }));
+  useShareAppMessage(() => ({ title: detail?.name ?? 'WEEGO 活动', path: id ? `/pages/activity/index?id=${encodeURIComponent(id)}` : '/pages/index/index' }));
   return { id, detail, userId, read, login, applications, showMore, setShowMore };
 }
