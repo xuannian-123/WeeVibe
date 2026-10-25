@@ -23,4 +23,4 @@ it('validates shared sessions without dynamic code in the mini-program runtime',
     console.log('validated-without-dynamic-code');
   `], { encoding: 'utf8', timeout: 20000 });
   expect(result.trim()).toBe('validated-without-dynamic-code');
-});
+}, 25000); // The isolated child already has a 20-second execution bound.

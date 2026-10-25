@@ -1,0 +1,5 @@
+.review-segment { padding: 22px 0; border-bottom: 1px solid #e8eee5; }
+.review-segment:first-child { padding-top: 4px; }
+.review-title { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; font-weight: 600; font-size: 30px; margin-bottom: 16px; }
+.review-badge { color: #3d7750; background: #eef5e9; border-radius: 8px; font-size: 22px; padding: 4px 12px; font-weight: 400; }
+.review-line { display: block; font-size: 27px; line-height: 1.7; margin-bottom: 12px; }
