@@ -1,6 +1,6 @@
 # 功能认领、代码分区与界面一致性方案
 
-2026-10-25。此页区分已完成的第一批前端分区与后续建议，不固定五人的个人岗位。
+2026-10-25。此页区分已完成的第一批前后端分区与后续建议，不固定五人的个人岗位。代码拆分不增加业务功能，也不代表12张任务已全部完成。
 
 ## 功能负责人推进什么
 
@@ -23,16 +23,29 @@ WG-01侧重工程/身份/部署，WG-11侧重联调与验收，WG-12侧重整体
 | packages/api-client | 前端调用接口的统一客户端 |
 | prisma | 共享数据模型和顺序迁移 |
 
-创建和详情路由已改为薄入口，实际逻辑分别在features/activity-create和features/activity-detail；报名/审批独立到features/applications，分享入口到features/invitations。旧组件、表单和CSS入口保留兼容。活动后端用例仍集中在server/activities/service.ts，公共UI仍主要在components/ui.tsx；后端功能拆分尚未执行。
+创建和详情路由已改为薄入口，实际逻辑分别在features/activity-create和features/activity-detail；报名/审批独立到features/applications，分享入口到features/invitations。旧组件、表单和CSS入口保留兼容。公共UI仍主要在components/ui.tsx。
+
+活动后端已按现有用例拆分，仍属于同一Next服务和PG库；路由可继续通过service.ts的兼容导出调用。当前实际文件如下：
+
+| 活动后端文件 | 当前职责与协作边界 |
+|---|---|
+| [service.ts](../../apps/web/src/server/activities/service.ts) | 汇总导出原有服务函数，保持调用路径兼容；不放新的功能实现 |
+| [create.ts](../../apps/web/src/server/activities/create.ts) | WG-02现有创建用例 |
+| [applications.ts](../../apps/web/src/server/activities/applications.ts) | WG-03现有申请和审批用例 |
+| [snapshot.ts](../../apps/web/src/server/activities/snapshot.ts) | 活动读取与按当前身份生成可见数据；涉及多个功能时共同协调 |
+| [state.ts](../../apps/web/src/server/activities/state.ts) | 共用Tx类型、活动加载与父活动锁 |
+| [mutation.ts](../../apps/web/src/server/activities/mutation.ts) | 统一Serializable事务及最多3次整笔尝试（含首次），不在失败事务内继续写入 |
+| [idempotency.ts](../../apps/web/src/server/activities/idempotency.ts) | 共用重放检查与操作键写入 |
+| [rules.ts](../../apps/web/src/server/activities/rules.ts)、[transaction-errors.ts](../../apps/web/src/server/activities/transaction-errors.ts)、[transport.ts](../../apps/web/src/server/activities/transport.ts) | 保留原有规则、可重试错误识别和HTTP处理能力 |
 
 ## 建议逐步提取的功能边界
 
-前端activity-create、activity-detail、applications、invitations已提取；下表其它功能目录及后端细分文件仍是建议目标。已有代码边用边拆，不为每张卡预建空目录。
+前端activity-create、activity-detail、applications、invitations与上表列出的后端文件已提取；下表其它功能目录仍是建议目标。已有代码边用边拆，不为每张卡预建空目录或空业务模块。
 
 | 任务 | 前端功能模块建议 | 后端用例归属建议 |
 |---|---|---|
-| WG-02 创建/地点填写 | features/activity-create，复用当前editor与activity-editor | server/activities/create；地点查询复用providers/amap |
-| WG-03 邀请/申请/审批/名单 | features/applications、features/invitations | server/activities/applications、invitations |
+| WG-02 创建/地点填写 | features/activity-create，复用当前editor与activity-editor | 已有[create.ts](../../apps/web/src/server/activities/create.ts)；地点查询复用providers/amap |
+| WG-03 邀请/申请/审批/名单 | features/applications、features/invitations | 已有[applications.ts](../../apps/web/src/server/activities/applications.ts)；邀请归因和名单未实现部分另按明确后的规则补用例 |
 | WG-04 成局/退出/补位 | features/formation、features/participation | server/activities/formation、participation |
 | WG-05 安排变更/重新接受 | features/arrangement-change | server/activities/arrangement-change |
 | WG-06 管理交接 | features/handover | server/activities/handover |
@@ -43,7 +56,7 @@ WG-01侧重工程/身份/部署，WG-11侧重联调与验收，WG-12侧重整体
 
 页面负责组合这些模块。例如详情页挂载行程、本人申请、管理审批和交接模块；各模块维护自身交互，不各造一份活动真相、登录逻辑或业务接口。
 
-服务端仍为同一Next服务和PG库。锁活动、核当前权限/版本、容量判断、幂等和完整事务是共享能力；拆用例时继续复用，不能每个模块复制一套规则或各自提交半笔多段审批。路由、API客户端与共享契约按用例协同演进。
+锁活动、核当前权限/版本、容量判断、幂等和完整事务仍是共享能力。各用例复用state/mutation/idempotency及原有规则，不能每个模块复制一套保护或各自提交半笔多段审批。路由、API客户端与共享契约按用例协同演进。
 
 ## 前端怎样保持一致
 
@@ -62,6 +75,7 @@ WG-01侧重工程/身份/部署，WG-11侧重联调与验收，WG-12侧重整体
 - 公共UI、全局样式、路由和平台登录/网络/生命周期。
 - packages/contracts、packages/api-client的公共入口。
 - Prisma schema/迁移、依赖/锁文件、根配置与CI。
+- 活动后端state/mutation/idempotency等共享保护、snapshot的可见数据投影，以及rules/transaction-errors/transport；service.ts兼容导出的新增或调整也先通知调用方。
 
 任务认领时在Issue说明准备改哪些文件、依赖哪些接口、需要谁协助。如果两个功能都要改详情页，先让一个人提取对应模块，约定挂载接口，再分支并行；不要让两个人分别重写整页。契约、模型和迁移通过小改动先对齐，已有迁移不原地重写。
 
