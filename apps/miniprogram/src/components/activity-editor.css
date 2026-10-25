@@ -1,9 +1,1 @@
-.date-time-row { display: flex; gap: 16px; }
-.date-time-row > picker:first-child { flex: 1.6; min-width: 0; }
-.date-time-row > picker:last-child { flex: 1; min-width: 0; }
-.picker-trigger { box-sizing: border-box; width: 100%; background: #f5f7f3; border: 1px solid #e5ebe3; color: #304e3c; font-size: 27px; font-weight: 400; line-height: 2.8; border-radius: 14px; padding: 0 16px; text-align: left; }
-.form-pair { display: flex; gap: 20px; }
-.form-pair > .field, .form-pair > button { flex: 1; min-width: 0; }
-.setting-summary { display: flex; flex-wrap: wrap; gap: 12px 24px; color: #6d7f6e; font-size: 24px; padding: 16px 0 6px; }
-.settings-toggle { background: transparent; color: #53765b; font-size: 26px; padding: 12px 0 0; text-align: left; font-weight: 400; line-height: 2; }
-.expanded-settings { border-top: 1px solid #e7ede4; margin-top: 20px; padding-top: 24px; }
+@import '../features/activity-create/activity-editor.css';
