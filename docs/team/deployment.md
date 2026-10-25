@@ -2,6 +2,8 @@
 
 更新：2026-10-25。现有CloudBase环境内已新建独立HTTP函数运行Next.js API，数据库为新建Neon Free PostgreSQL；另建普通登录函数，不依赖旧AppSecret。未开通Run、升级套餐或启用超限按量，没有覆盖旧函数、旧数据库、旧路由、体验版或线上版。此为有限演示部署，真机验收和持续运行条件尚未完成。
 
+本轮增量：独立演示函数已更新AI创建草稿接口，并合并四项AI/高德服务端配置，保留原运行设置和所有原环境变量；原生云HTTP及开发工具真实生成、确认填表、两段选点与创建预览通过。新临时预览已生成，手机试用待反馈；未替换体验版或正式发布。部署版本、ZIP校验、回退备份与证据见[接入记录](./ai-map-creation.md)。
+
 ## 已接通与尚待验证
 
 - Linux standalone ZIP已在真实HTTP函数运行，HTTPS及正式微信开发工具的原生`wx.cloud.callHTTPFunction`均返回health200、ready200；基础库3.16.2、urlCheck=true。
