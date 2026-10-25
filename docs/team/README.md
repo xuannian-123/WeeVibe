@@ -33,7 +33,7 @@ WEEGO采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与�
 | [WG-08](https://github.com/xuannian-123/weego/issues/8) | 图片分享卡 |
 | [WG-09](https://github.com/xuannian-123/weego/issues/9) | 应用内待办 |
 | [WG-10](https://github.com/xuannian-123/weego/issues/10) | 再约新活动 |
-| [WG-11](https://github.com/xuannian-123/weego/issues/11) | 多设备联调及验收 |
+| [WG-11](https://github.com/xuannian-123/weego/issues/11) | 联调及赛前验收 |
 | [WG-12](https://github.com/xuannian-123/weego/issues/12) | 现场正式界面和试用改进 |
 
 已有源码、离线通过、真实本机PG通过、云端通过与真机通过分别记录。当前Issue开放不表示没有代码，也不能因编译通过就关闭任务。

@@ -81,4 +81,4 @@ verify核对PG启动时间实际改变及记录保持一致。脚本只在验收
 
 ## 容器构建
 
-从仓库根运行docker build -f apps/web/Dockerfile -t weego-api:local .。镜像在Linux重新构建standalone，不复制Windows产物；运行时注入服务端配置，镜像不自动迁移数据库。默认3000端口，健康探测不证明业务就绪。当前HTTP云函数承载同一standalone，双机及完整验收通过前不关闭相应Issue。
+从仓库根运行docker build -f apps/web/Dockerfile -t weego-api:local .。镜像在Linux重新构建standalone，不复制Windows产物；运行时注入服务端配置，镜像不自动迁移数据库。默认3000端口，健康探测不证明业务就绪。当前HTTP云函数承载同一standalone，按各任务完成标准验收后关闭相应Issue；本轮不要求双手机。
