@@ -1,4 +1,4 @@
-import type { ApplyToActivityInput, DecideApplicationInput } from '@weego/contracts';
+import type { ApplyToActivityInput, DecideApplicationInput } from '@weevibe/contracts';
 import { ServiceError } from '../http';
 import { mutation } from './mutation';
 import { replay, remember } from './idempotency';

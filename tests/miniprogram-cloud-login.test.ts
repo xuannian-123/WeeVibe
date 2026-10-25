@@ -11,14 +11,14 @@ import { establishSession, api } from '../apps/miniprogram/src/platform/api';
 const session = () => ({ token: randomBytes(32).toString('base64url'), expires_at: new Date(Date.now() + 86400000).toISOString(), user: { user_id: randomUUID() } });
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubGlobal('__WEEGO_API_TRANSPORT__', 'https'); vi.stubGlobal('__WEEGO_CLOUD_API_FUNCTION__', '');
-  vi.stubGlobal('__WEEGO_LOGIN_MODE__', 'cloud'); vi.stubGlobal('__WEEGO_API_BASE_URL__', 'https://api.example.invalid');
-  vi.stubGlobal('__WEEGO_CLOUD_ENV_ID__', 'fixture-env'); vi.stubGlobal('__WEEGO_CLOUD_LOGIN_FUNCTION__', 'fixtureLogin');
+  vi.stubGlobal('__WEEVIBE_API_TRANSPORT__', 'https'); vi.stubGlobal('__WEEVIBE_CLOUD_API_FUNCTION__', '');
+  vi.stubGlobal('__WEEVIBE_LOGIN_MODE__', 'cloud'); vi.stubGlobal('__WEEVIBE_API_BASE_URL__', 'https://api.example.invalid');
+  vi.stubGlobal('__WEEVIBE_CLOUD_ENV_ID__', 'fixture-env'); vi.stubGlobal('__WEEVIBE_CLOUD_LOGIN_FUNCTION__', 'fixtureLogin');
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe('mini-program explicit cloud login adapter (mock platform only)', () => {
-  it('stores only the Weego session and uses the same bearer business API', async () => {
+  it('stores only the WeeVibe session and uses the same bearer business API', async () => {
     const issued = session();
     platform.cloud.callFunction.mockResolvedValue({ result: issued });
     expect(await establishSession()).toEqual(issued.user);
@@ -36,10 +36,10 @@ describe('mini-program explicit cloud login adapter (mock platform only)', () =>
     expect(platform.login).not.toHaveBeenCalled(); expect(platform.request).not.toHaveBeenCalled(); expect(platform.setStorageSync).not.toHaveBeenCalled();
   });
   it('rejects missing configuration before contacting the platform', async () => {
-    for (const name of ['__WEEGO_CLOUD_ENV_ID__', '__WEEGO_CLOUD_LOGIN_FUNCTION__', '__WEEGO_API_BASE_URL__']) {
+    for (const name of ['__WEEVIBE_CLOUD_ENV_ID__', '__WEEVIBE_CLOUD_LOGIN_FUNCTION__', '__WEEVIBE_API_BASE_URL__']) {
       vi.stubGlobal(name, '');
       await expect(establishSession()).rejects.toMatchObject({ code: 'NOT_CONFIGURED' });
-      vi.stubGlobal('__WEEGO_CLOUD_ENV_ID__', 'fixture-env'); vi.stubGlobal('__WEEGO_CLOUD_LOGIN_FUNCTION__', 'fixtureLogin'); vi.stubGlobal('__WEEGO_API_BASE_URL__', 'https://api.example.invalid');
+      vi.stubGlobal('__WEEVIBE_CLOUD_ENV_ID__', 'fixture-env'); vi.stubGlobal('__WEEVIBE_CLOUD_LOGIN_FUNCTION__', 'fixtureLogin'); vi.stubGlobal('__WEEVIBE_API_BASE_URL__', 'https://api.example.invalid');
     }
     expect(platform.cloud.callFunction).not.toHaveBeenCalled(); expect(platform.login).not.toHaveBeenCalled();
   });
@@ -53,7 +53,7 @@ describe('mini-program explicit cloud login adapter (mock platform only)', () =>
     expect(platform.setStorageSync).not.toHaveBeenCalled(); expect(platform.login).not.toHaveBeenCalled();
   });
   it('retains the explicit code route for deployments with the original server-side verifier', async () => {
-    vi.stubGlobal('__WEEGO_LOGIN_MODE__', 'code');
+    vi.stubGlobal('__WEEVIBE_LOGIN_MODE__', 'code');
     const issued = session(); platform.login.mockResolvedValue({ code: 'fixture-code' });
     platform.request.mockResolvedValue({ statusCode: 200, data: issued });
     expect(await establishSession()).toEqual(issued.user);

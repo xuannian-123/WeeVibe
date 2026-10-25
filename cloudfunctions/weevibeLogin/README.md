@@ -25,20 +25,20 @@
 Node24，根工程按团队指南安装；本函数不属于pnpm workspace，需要独立锁定安装：
 
 ```text
-npm ci --prefix cloudfunctions/weegoLogin --ignore-scripts --no-audit --no-fund
+npm ci --prefix cloudfunctions/weevibeLogin --ignore-scripts --no-audit --no-fund
 pnpm db:generate
 pnpm typecheck
 pnpm test
 pnpm build:api
 ```
 
-在已核对的本机weego_acceptance_专用PG中应用全部迁移，显式给API及检查进程同一DATABASE_URL。生成**仅测试用**配置，不输出密钥：
+在已核对的本机weevibe_acceptance_专用PG中应用全部迁移，显式给API及检查进程同一DATABASE_URL。生成**仅测试用**配置，不输出密钥：
 
 ```text
 node scripts/prepare-cloud-identity-fixture.mjs --fixture-only
 # 另一个专用终端，已设置正确验收DATABASE_URL及HOSTNAME/PORT：
 node --env-file=.working/cloud-identity-api.fixture.env apps/web/.next/standalone/apps/web/server.js
-# 检查终端，同一验收DATABASE_URL，WEEGO_CHECK_API_BASE_URL指向本机API：
+# 检查终端，同一验收DATABASE_URL，WEEVIBE_CHECK_API_BASE_URL指向本机API：
 node --env-file=.working/cloud-identity-test.fixture.env --import tsx scripts/check-cloud-identity-integration.ts
 ```
 

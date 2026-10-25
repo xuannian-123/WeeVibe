@@ -1,5 +1,5 @@
 import { Text, View } from '@tarojs/components';
-import type { ActivityDetail } from '@weego/contracts';
+import type { ActivityDetail } from '@weevibe/contracts';
 import { feeText, formatTime } from '../../platform/activities';
 
 export function Itinerary({ detail }: { detail: ActivityDetail }) {

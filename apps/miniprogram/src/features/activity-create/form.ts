@@ -1,5 +1,5 @@
-import { createActivityInputSchema, type CreateActivityInput } from '@weego/contracts';
-import { ACTIVITY_JSON_MAX_BYTES } from '@weego/contracts/src/limits';
+import { createActivityInputSchema, type CreateActivityInput } from '@weevibe/contracts';
+import { ACTIVITY_JSON_MAX_BYTES } from '@weevibe/contracts/src/limits';
 import { newKey } from '../../platform/local-id';
 
 // UI-only editable text. Network fields/types come exclusively from shared contracts.

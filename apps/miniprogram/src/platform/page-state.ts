@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import Taro, { useDidHide, useDidShow, useUnload } from '@tarojs/taro';
-import { ApiClientError } from '@weego/api-client';
+import { ApiClientError } from '@weevibe/api-client';
 import { api, establishSession, forgetSession, getToken } from './api';
 
 export function errorText(error: unknown): string {

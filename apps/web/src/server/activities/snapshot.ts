@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { activityDetailSchema, activityFeeSchema, activityLocationSchema, type ActivityDetail } from '@weego/contracts';
+import { activityDetailSchema, activityFeeSchema, activityLocationSchema, type ActivityDetail } from '@weevibe/contracts';
 import { withDb } from '../db';
 import { ServiceError } from '../http';
 import { loadActivity, type Tx } from './state';

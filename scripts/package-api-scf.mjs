@@ -62,7 +62,7 @@ const bootstrap = await readFile(resolve(root, 'scripts/scf_bootstrap'), 'utf8')
 assert.ok(!bootstrap.includes('\r'), 'scf_bootstrap must have LF line endings');
 await writeFile(resolve(stage, 'scf_bootstrap'), bootstrap);
 await chmod(resolve(stage, 'scf_bootstrap'), 0o755);
-const archive = resolve(output, 'weego-api-scf.zip');
+const archive = resolve(output, 'weevibe-api-scf.zip');
 // zip -FS synchronizes an existing archive, so stale entries cannot survive reruns.
 execFileSync('zip', ['-q', '-r', '-y', '-FS', archive, '.'], { cwd: stage, stdio: 'inherit' });
 const bytes = await readFile(archive);

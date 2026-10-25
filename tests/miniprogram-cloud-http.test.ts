@@ -18,12 +18,12 @@ function respond(statusCode: number, data: unknown) {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubGlobal('wx', { cloud: platform.cloud });
-  vi.stubGlobal('__WEEGO_API_TRANSPORT__', 'cloud-http');
-  vi.stubGlobal('__WEEGO_API_BASE_URL__', '');
-  vi.stubGlobal('__WEEGO_CLOUD_ENV_ID__', 'fixture-env');
-  vi.stubGlobal('__WEEGO_CLOUD_API_FUNCTION__', 'fixtureApi');
-  vi.stubGlobal('__WEEGO_CLOUD_LOGIN_FUNCTION__', 'fixtureLogin');
-  vi.stubGlobal('__WEEGO_LOGIN_MODE__', 'cloud');
+  vi.stubGlobal('__WEEVIBE_API_TRANSPORT__', 'cloud-http');
+  vi.stubGlobal('__WEEVIBE_API_BASE_URL__', '');
+  vi.stubGlobal('__WEEVIBE_CLOUD_ENV_ID__', 'fixture-env');
+  vi.stubGlobal('__WEEVIBE_CLOUD_API_FUNCTION__', 'fixtureApi');
+  vi.stubGlobal('__WEEVIBE_CLOUD_LOGIN_FUNCTION__', 'fixtureLogin');
+  vi.stubGlobal('__WEEVIBE_LOGIN_MODE__', 'cloud');
   platform.getStorageSync.mockReturnValue(token);
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -53,7 +53,7 @@ describe('explicit native cloud HTTP transport (mock platform only)', () => {
     expect(cloud.init).toHaveBeenCalledTimes(2);
     expect(platform.request).not.toHaveBeenCalled();
   });
-  it('uses fixed function/environment and forwards the Weego bearer, method and path', async () => {
+  it('uses fixed function/environment and forwards the WeeVibe bearer, method and path', async () => {
     respond(200, user);
     expect(await api.me()).toEqual(user);
     expect(platform.cloud.callHTTPFunction).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
@@ -68,7 +68,7 @@ describe('explicit native cloud HTTP transport (mock platform only)', () => {
     await api.putTestRecord('fixture-value');
     expect(platform.cloud.callHTTPFunction).toHaveBeenCalledWith(expect.objectContaining({ method: 'put', data: { value: 'fixture-value' } }));
   });
-  it('allows cloud login without an HTTPS base and stores only the Weego session', async () => {
+  it('allows cloud login without an HTTPS base and stores only the WeeVibe session', async () => {
     platform.cloud.callFunction.mockResolvedValue({ result: { token, user, expires_at: new Date(Date.now() + 60000).toISOString() } });
     expect(await establishSession()).toEqual(user);
     expect(platform.setStorageSync).toHaveBeenCalledExactlyOnceWith('weego_session_v1', token);
@@ -112,10 +112,10 @@ describe('explicit native cloud HTTP transport (mock platform only)', () => {
     }
   });
   it('fails before contacting login if the selected transport is incomplete or unsupported', async () => {
-    for (const name of ['__WEEGO_CLOUD_ENV_ID__', '__WEEGO_CLOUD_API_FUNCTION__']) {
+    for (const name of ['__WEEVIBE_CLOUD_ENV_ID__', '__WEEVIBE_CLOUD_API_FUNCTION__']) {
       vi.stubGlobal(name, '');
       await expect(establishSession()).rejects.toMatchObject({ code: 'NOT_CONFIGURED' });
-      vi.stubGlobal('__WEEGO_CLOUD_ENV_ID__', 'fixture-env'); vi.stubGlobal('__WEEGO_CLOUD_API_FUNCTION__', 'fixtureApi');
+      vi.stubGlobal('__WEEVIBE_CLOUD_ENV_ID__', 'fixture-env'); vi.stubGlobal('__WEEVIBE_CLOUD_API_FUNCTION__', 'fixtureApi');
     }
     vi.stubGlobal('wx', { cloud: {} });
     await expect(establishSession()).rejects.toMatchObject({ code: 'NOT_CONFIGURED' });

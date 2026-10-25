@@ -1,4 +1,4 @@
-import { ApiClientError } from '@weego/api-client';
+import { ApiClientError } from '@weevibe/api-client';
 
 // A retry may be rejected BEFORE its idempotency record is read (for example,
 // after the previous response was lost and the session expired). Keep that key.

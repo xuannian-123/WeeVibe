@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useRouter, useShareAppMessage } from '@tarojs/taro';
-import { activityIdSchema } from '@weego/contracts';
+import { activityIdSchema } from '@weevibe/contracts';
 import { BRAND_NAME } from '../../brand';
 import { api } from '../../platform/api';
 import { useLogin, usePageRead } from '../../platform/page-state';

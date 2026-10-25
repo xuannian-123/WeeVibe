@@ -16,9 +16,9 @@
 !scripts/prisma-check.mjs
 !scripts/check-api-artifact.mjs
 !cloudfunctions/
-!cloudfunctions/weegoLogin/
-!cloudfunctions/weegoLogin/proof.cjs
-!cloudfunctions/weegoLogin/proof.d.cts
+!cloudfunctions/weevibeLogin/
+!cloudfunctions/weevibeLogin/proof.cjs
+!cloudfunctions/weevibeLogin/proof.d.cts
 **/node_modules
 **/node_modules/**
 **/.next

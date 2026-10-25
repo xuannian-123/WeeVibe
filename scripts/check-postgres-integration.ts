@@ -28,10 +28,10 @@ function requireTargets() {
   assert.ok(['postgres:', 'postgresql:'].includes(target.protocol));
   assert.ok(['localhost', '127.0.0.1'].includes(target.hostname));
   const database = decodeURIComponent(target.pathname.slice(1));
-  assert.match(database, /^weego_acceptance_[a-z0-9_]+$/);
+  assert.match(database, /^(?:weevibe|weego)_acceptance_[a-z0-9_]+$/);
   assert.ok(!target.hash);
   for (const [key, value] of target.searchParams) assert.ok(key === 'schema' && value === 'public', 'Unexpected connection override');
-  const api = new URL(process.env.WEEGO_CHECK_API_BASE_URL ?? 'http://127.0.0.1:43188');
+  const api = new URL(process.env.WEEVIBE_CHECK_API_BASE_URL ?? 'http://127.0.0.1:43188');
   assert.ok(['http:', 'https:'].includes(api.protocol) && ['localhost', '127.0.0.1'].includes(api.hostname));
   assert.ok(!api.username && !api.password && !api.search && !api.hash && api.pathname === '/');
   return { database, api };
@@ -164,7 +164,7 @@ async function prepare(database: string, api: URL) {
     rollback = detail(await manage(path(rollback.activity_id)));
     const decision = { idempotency_key: key(), expected_revision: rollback.revision, decision: 'approve' };
     const suffix = randomBytes(8).toString('hex');
-    const trigger = `weego_acceptance_trigger_${suffix}`, fn = `weego_acceptance_function_${suffix}`, seq = `weego_acceptance_seq_${suffix}`;
+    const trigger = `weevibe_acceptance_trigger_${suffix}`, fn = `weevibe_acceptance_function_${suffix}`, seq = `weevibe_acceptance_seq_${suffix}`;
     // All identifiers are generated hex; UUID literals come from validated DB/API fixtures.
     assert.match(rollback.activity_id, /^[a-f0-9-]{36}$/); assert.match(alice.id, /^[a-f0-9-]{36}$/);
     let createdSequence = false, createdFunction = false, createdTrigger = false;

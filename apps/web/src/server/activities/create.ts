@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CreateActivityInput } from '@weego/contracts';
+import type { CreateActivityInput } from '@weevibe/contracts';
 import { mutation } from './mutation';
 import { replay, remember } from './idempotency';
 import { activitySnapshot } from './snapshot';

@@ -2,8 +2,8 @@ import { createRequire } from 'node:module';
 import { generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const protocol = createRequire(import.meta.url)('../cloudfunctions/weegoLogin/proof.cjs') as typeof import('../cloudfunctions/weegoLogin/proof.cjs');
-const { createLoginHandler } = createRequire(import.meta.url)('../cloudfunctions/weegoLogin/index.js') as {
+const protocol = createRequire(import.meta.url)('../cloudfunctions/weevibeLogin/proof.cjs') as typeof import('../cloudfunctions/weevibeLogin/proof.cjs');
+const { createLoginHandler } = createRequire(import.meta.url)('../cloudfunctions/weevibeLogin/index.js') as {
   createLoginHandler(options?: { env?: NodeJS.ProcessEnv; request?: typeof fetch; now?: () => number }): (event: unknown, context: unknown) => Promise<unknown>;
 };
 const pair = generateKeyPairSync('ed25519');
@@ -143,21 +143,21 @@ function platformContext(overrides: Record<string, unknown> = {}, legacy = false
   };
 }
 const sessionFixture = () => ({ token: randomBytes(32).toString('base64url'), expires_at: new Date(now + 3_600_000).toISOString(), user: { user_id: randomUUID() } });
-const functionSettings = { ...settings, WEEGO_API_BASE_URL: 'https://api.weego.example' };
+const functionSettings = { ...settings, WEEGO_API_BASE_URL: 'https://api.weevibe.example' };
 function fixtureFunction(reply: unknown = sessionFixture(), status = 200, env: NodeJS.ProcessEnv = functionSettings) {
   const request = vi.fn<typeof fetch>(async () => new Response(JSON.stringify(reply), { status, headers: { 'content-type': 'application/json' } }));
   return { request, handler: createLoginHandler({ env, request, now: () => now }) };
 }
 
 describe('ordinary cloud-function trust boundary using the installed SDK context parser', () => {
-  it.each([false, true])('parses only the current platform context (legacy=%s) and returns only Weego session data', async legacy => {
+  it.each([false, true])('parses only the current platform context (legacy=%s) and returns only WeeVibe session data', async legacy => {
     const reply = sessionFixture();
     const { handler, request } = fixtureFunction(reply);
     const result = await handler({ open_id: 'forged-event-user', url: 'https://attacker.example' }, platformContext({}, legacy));
     expect(result).toEqual(reply);
     expect(request).toHaveBeenCalledTimes(1);
     const [url, options] = request.mock.calls[0];
-    expect(url).toBe('https://api.weego.example/api/v1/auth/cloud-wechat');
+    expect(url).toBe('https://api.weevibe.example/api/v1/auth/cloud-wechat');
     expect(options).toMatchObject({ method: 'POST', redirect: 'error', cache: 'no-store' });
     const signature = (options!.headers as Record<string, string>)['x-weego-cloud-signature'];
     expect(protocol.verifySignedProof(options!.body as string, signature, verifier, now).identity.openId).toBe(identity.openId);
@@ -199,9 +199,9 @@ describe('ordinary cloud-function trust boundary using the installed SDK context
     expect(request).not.toHaveBeenCalled();
   });
   it.each([
-    'http://api.weego.example', 'https://localhost', 'https://127.0.0.1', 'https://[::1]',
-    'https://account:password@api.weego.example', 'https://api.weego.example/other-path',
-    'https://api.weego.example?target=other', 'https://api.weego.example:8443',
+    'http://api.weevibe.example', 'https://localhost', 'https://127.0.0.1', 'https://[::1]',
+    'https://account:password@api.weevibe.example', 'https://api.weevibe.example/other-path',
+    'https://api.weevibe.example?target=other', 'https://api.weevibe.example:8443',
   ])('rejects unsafe upstream configuration %s before sending identity', async base => {
     const { handler, request } = fixtureFunction(sessionFixture(), 200, { ...functionSettings, WEEGO_API_BASE_URL: base });
     const result = await handler({}, platformContext()) as { error: { code: string } };

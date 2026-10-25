@@ -1,5 +1,5 @@
 import { Checkbox, CheckboxGroup, Label, Text, View } from '@tarojs/components';
-import type { ActivityDetail } from '@weego/contracts';
+import type { ActivityDetail } from '@weevibe/contracts';
 import type { useLogin } from '../../platform/page-state';
 import { feeText } from '../../platform/activities';
 import { Action, Field, Notice, Panel } from '../../components/ui';

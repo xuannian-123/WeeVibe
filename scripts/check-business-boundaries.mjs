@@ -1,7 +1,7 @@
 // Real local HTTP checks for auth boundaries only; no fake login or provider calls.
 import assert from 'node:assert/strict';
 
-const base = process.env.WEEGO_CHECK_API_BASE_URL ?? 'http://127.0.0.1:43188';
+const base = process.env.WEEVIBE_CHECK_API_BASE_URL ?? 'http://127.0.0.1:43188';
 const url = new URL(base);
 if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) {
   throw new Error('This check only targets a local server.');

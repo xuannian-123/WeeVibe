@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Taro from '@tarojs/taro';
 import { Text, View } from '@tarojs/components';
 import { BRAND_NAME } from '../../brand';
-import { activityIdSchema } from '@weego/contracts';
+import { activityIdSchema } from '@weevibe/contracts';
 import { api } from '../../platform/api';
 import { errorText, requireUser, useLogin, usePageRead } from '../../platform/page-state';
 import { recentActivities } from '../../platform/activities';

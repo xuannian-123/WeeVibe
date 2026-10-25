@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import Taro, { useDidShow, useDidHide, useUnload } from '@tarojs/taro';
 import { Button, Input, Text, View } from '@tarojs/components';
-import { ApiClientError } from '@weego/api-client';
+import { ApiClientError } from '@weevibe/api-client';
 import { BRAND_NAME } from '../../brand';
 import { api, establishSession, forgetSession, getToken } from '../../platform/api';
 

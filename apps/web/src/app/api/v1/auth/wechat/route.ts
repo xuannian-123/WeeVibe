@@ -1,4 +1,4 @@
-import { loginRequestSchema } from '@weego/contracts';
+import { loginRequestSchema } from '@weevibe/contracts';
 import { identityService } from '../../../../../server/auth';
 import { handle, readJson, ServiceError } from '../../../../../server/http';
 export const runtime = 'nodejs';

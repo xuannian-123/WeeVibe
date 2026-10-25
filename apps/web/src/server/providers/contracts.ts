@@ -1,6 +1,6 @@
 // Structured provider boundary. Validate against a trusted snapshot before display;
 // a provider response never authorizes a write or marks a reservation as complete.
-import type { AiSnapshot, AiCreationDraft, AiInvitation, AiCoordinationProposal } from '@weego/contracts/src/ai';
+import type { AiSnapshot, AiCreationDraft, AiInvitation, AiCoordinationProposal } from '@weevibe/contracts/src/ai';
 import type { createAmapProvider } from './amap';
 export interface ModelProvider {
   activityDraft(input: { text: string; timezone: string; selectedDate: string; sourceRevision: number }): Promise<AiCreationDraft>;
