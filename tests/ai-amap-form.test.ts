@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formFromAiDraft } from '../apps/miniprogram/src/features/activity-create/ai-form';
+import { formFromAiDraft, hasActivityDraftEdits } from '../apps/miniprogram/src/features/activity-create/ai-form';
 import { buildCreateInput, emptyForm, isActivityForm, selectedVenueUrl } from '../apps/miniprogram/src/features/activity-create/form';
 import type { AiCreationDraft, VenueSelection } from '../packages/contracts/src';
 
@@ -11,6 +11,15 @@ function filledForm() {
   return form;
 }
 describe('AI and AMap editable form integration', () => {
+  it('requires replacement confirmation for any existing draft field, not only basic fields', () => {
+    expect(hasActivityDraftEdits(emptyForm())).toBe(false);
+    for (const field of ['endTime', 'endDate', 'deadlineTime', 'deadlineDate', 'address', 'amount', 'feeNote', 'requirements'] as const) {
+      const form = emptyForm(); form.segments[0][field] = '已填';
+      expect(hasActivityDraftEdits(form)).toBe(true);
+    }
+    const form = emptyForm(); form.attending = [form.segments[0].ref];
+    expect(hasActivityDraftEdits(form)).toBe(true);
+  });
   it('preserves chosen coordinates in a public source URL without adding credentials or changing fees', () => {
     const form = filledForm(); const input = buildCreateInput(form, 'fixture-create-map');
     expect(input.segments[0].location.source_url).toContain('121.451445,31.227973');

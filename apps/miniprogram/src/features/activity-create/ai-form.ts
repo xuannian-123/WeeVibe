@@ -1,6 +1,12 @@
 import type { AiCreationDraft } from '@weevibe/contracts';
 import { emptySegment, type ActivityForm } from './form';
 
+export function hasActivityDraftEdits(form: ActivityForm): boolean {
+  return !!form.name || form.attending.length > 0 || form.segments.length > 1 || form.segments.some(segment =>
+    segment.type !== 'custom' || segment.feeUnit !== 'unknown' || Object.entries(segment).some(([key, value]) =>
+      !['ref', 'type', 'feeUnit'].includes(key) && value !== undefined && value !== ''));
+}
+
 function dateTime(value: string | null) {
   if (!value) return { date: '', time: '' };
   const local = new Date(Date.parse(value) + 8 * 3600000).toISOString();

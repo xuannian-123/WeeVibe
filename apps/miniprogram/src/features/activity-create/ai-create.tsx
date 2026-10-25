@@ -5,7 +5,7 @@ import type { AiCreateResponse } from '@weevibe/contracts';
 import { api } from '../../platform/api';
 import { Action, Notice, Panel } from '../../components/ui';
 import { formatTime } from '../../platform/activities';
-import { aiMissingSummary, formFromAiDraft } from './ai-form';
+import { aiMissingSummary, formFromAiDraft, hasActivityDraftEdits } from './ai-form';
 import type { ActivityForm } from './form';
 
 export function AiCreate({ value, disabled, onApply }: { value: ActivityForm; disabled: boolean; onApply: (form: ActivityForm) => void }) {
@@ -30,7 +30,7 @@ export function AiCreate({ value, disabled, onApply }: { value: ActivityForm; di
   async function apply() {
     if (!result || disabled) return;
     const revision = sequence.current;
-    const hasEdits = !!value.name || value.segments.length > 1 || value.segments.some(s => !!(s.name || s.place || s.startDate || s.startTime || s.minimum || s.capacity));
+    const hasEdits = hasActivityDraftEdits(value);
     if (hasEdits) {
       const answer = await Taro.showModal({ title: '用 AI 草稿替换当前安排？', content: '会替换当前活动名称和各段安排，并清空本人参加勾选。你的称呼会保留；确认后仍可修改。', confirmText: '替换安排' });
       if (!answer.confirm) return;
