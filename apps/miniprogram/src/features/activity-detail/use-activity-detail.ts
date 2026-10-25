@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useRouter, useShareAppMessage } from '@tarojs/taro';
 import { activityIdSchema } from '@weego/contracts';
+import { BRAND_NAME } from '../../brand';
 import { api } from '../../platform/api';
 import { useLogin, usePageRead } from '../../platform/page-state';
 import { rememberActivity } from '../../platform/activities';
@@ -17,6 +18,6 @@ export function useActivityDetail() {
   const userId = detail?.viewer.user_id ?? undefined;
   const fresh = !!detail && !read.error && !read.loading;
   const applications = useApplications({ id, detail, fresh, refresh: read.refresh });
-  useShareAppMessage(() => ({ title: detail?.name ?? 'WEEGO 活动', path: id ? `/pages/activity/index?id=${encodeURIComponent(id)}` : '/pages/index/index' }));
+  useShareAppMessage(() => ({ title: detail?.name ?? `${BRAND_NAME} 活动`, path: id ? `/pages/activity/index?id=${encodeURIComponent(id)}` : '/pages/index/index' }));
   return { id, detail, userId, read, login, applications, showMore, setShowMore };
 }

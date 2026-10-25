@@ -4,6 +4,7 @@
 
 ## 统一入口
 
+- 项目内显示品牌统一为WeeVibe，使用[brand.ts](../../apps/miniprogram/src/brand.ts)的BRAND_NAME；微信账号全名“即聚行”由平台单独审核，不用它替换页面内产品品牌。完整约定见[名称说明](./branding.md)。
 - 公共组件：[components/ui.tsx](../../apps/miniprogram/src/components/ui.tsx)。按钮使用Action，输入使用Field，信息分组使用Panel，提示使用Notice。
 - 公共样式：[app.css](../../apps/miniprogram/src/app.css)。颜色、字号、间距、圆角及通用状态在这里共同维护。
 - 请求与身份：[platform/api.ts](../../apps/miniprogram/src/platform/api.ts)，通过共享api-client调用，不在功能内另外建立身份或接口客户端。

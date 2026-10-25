@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Taro from '@tarojs/taro';
 import { Text, View } from '@tarojs/components';
 import { activityIdSchema, createActivityInputSchema, type CreateActivityInput } from '@weego/contracts';
+import { BRAND_NAME } from '../../brand';
 import { api } from '../../platform/api';
 import { newKey, readSaved, requireUser, save, useLogin, usePageRead } from '../../platform/page-state';
 import { buildCreateInput, createTimingIssue, emptyForm, isActivityForm, type ActivityForm } from './form';
@@ -58,7 +59,7 @@ export default function Editor() {
     catch { setValidation('暂时无法开始新活动，请先查看已创建的活动。'); }
   }
   if (completedId && !write.pending) return <View className="screen">
-    <View className="page-intro"><Text className="page-eyebrow">WEEGO / 一起出发</Text><Text className="page-title">这场活动已发起</Text><Text className="page-subtitle">安排已保存，可以进入详情邀请朋友。</Text></View>
+    <View className="page-intro"><Text className="page-eyebrow">{BRAND_NAME} / 一起出发</Text><Text className="page-title">这场活动已发起</Text><Text className="page-subtitle">安排已保存，可以进入详情邀请朋友。</Text></View>
     <Panel title="接下来，一起把人约齐">
       <Notice tone="success">服务端已确认保存。达到人数后，仍需你核实安排并确认成局。</Notice>
       <Action variant="primary" onClick={() => { void Taro.redirectTo({ url: `/pages/activity/index?id=${encodeURIComponent(completedId)}` }); }}>查看活动</Action>
@@ -68,7 +69,7 @@ export default function Editor() {
     <Action variant="text" onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>回到首页</Action>
   </View>;
   return <View className="screen">
-    <View className="page-intro"><Text className="page-eyebrow">WEEGO / 发起活动</Text><Text className="page-title">{write.pending ? '先核对上次发起' : preview ? '发出前，再看一眼' : '约一次见面'}</Text><Text className="page-subtitle">{write.pending ? '下面是上次提交的原安排，日期和内容完整保留。' : preview ? '时间、人数和你的参加选择，都以这里为准。' : '把时间、地点和人数说清楚，剩下的一起商量。'}</Text></View>
+    <View className="page-intro"><Text className="page-eyebrow">{BRAND_NAME} / 发起活动</Text><Text className="page-title">{write.pending ? '先核对上次发起' : preview ? '发出前，再看一眼' : '约一次见面'}</Text><Text className="page-subtitle">{write.pending ? '下面是上次提交的原安排，日期和内容完整保留。' : preview ? '时间、人数和你的参加选择，都以这里为准。' : '把时间、地点和人数说清楚，剩下的一起商量。'}</Text></View>
     {(!userId || identity.error || login.error) && <Panel title="先确认你的微信身份">
       {identity.loading && <Notice>正在确认本人身份……</Notice>}
       {identity.error && <Notice tone="error">{identity.error}</Notice>}{login.error && <Notice tone="error">{login.error}</Notice>}

@@ -9,7 +9,7 @@ declare const __WEEGO_LOGIN_MODE__: 'code' | 'cloud';
 declare const __WEEGO_CLOUD_ENV_ID__: string;
 declare const __WEEGO_CLOUD_LOGIN_FUNCTION__: string;
 const sessionKey = 'weego_session_v1';
-// Stores only the Weego bearer session, never wx.login code, OpenID or session_key.
+// Stores only the WeeVibe bearer session, never wx.login code, OpenID or session_key.
 export function getToken(): string | undefined {
   const value: unknown = Taro.getStorageSync(sessionKey);
   return typeof value === 'string' && value ? value : undefined;

@@ -26,7 +26,7 @@ typecheck会先执行Next typegen，生成新克隆缺少的.next路由类型，
 
 | 变量 | 用途 |
 |---|---|
-| DATABASE_URL | 独立WEEGO PG，开发与验收分库 |
+| DATABASE_URL | 独立WeeVibe PG，开发与验收分库 |
 | WECHAT_APP_ID | 与原账号项目配置一致的公开AppID |
 | WECHAT_APP_SECRET | 普通code交换方式需要；仅服务端，不擅自重置原密钥 |
 | WEEGO_CLOUD_AUTH_* | 可选云身份适配，默认关闭；API只配置公钥，函数私钥不注入API或小程序 |
@@ -38,7 +38,7 @@ Next从apps/web读取.env.local；Prisma CLI需进程中同一正确DATABASE_URL
 
 ## 小程序构建与开发工具
 
-pnpm build:mini后在微信开发者工具导入apps/miniprogram。project.config.json使用原账号公开AppID、保持urlCheck=true；成员需具备实际开发/体验资格。微信平台资格、WEEGO业务身份和当前活动管理权是三层不同检查。
+pnpm build:mini后在微信开发者工具导入apps/miniprogram。project.config.json使用原账号公开AppID、保持urlCheck=true；成员需具备实际开发/体验资格。微信平台资格、WeeVibe业务身份和当前活动管理权是三层不同检查。
 
 TARO_APP_API_BASE_URL是小程序构建时公开HTTPS地址，需在构建进程设置；它不会从后端.env.local自动注入。不要把AppSecret、PG或高德密钥交给客户端。未配置API时编译仍可通过，页面会显示未配置；手机上的localhost不能指向开发者电脑。
 
