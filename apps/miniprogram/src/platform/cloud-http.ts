@@ -1,4 +1,5 @@
 import { ApiClientError, type TransportRequest } from '@weego/api-client';
+import { CLOUD_HTTP_ENVELOPE_HEADER, CLOUD_HTTP_ENVELOPE_VERSION, cloudHttpEnvelopeSchema } from '@weego/contracts';
 
 type CloudHTTPOptions = {
   name: string; config: { env: string }; path: string;
@@ -48,7 +49,7 @@ export async function callCloudHTTP(request: TransportRequest, env: string, name
       cloud.callHTTPFunction({
         name, config: { env }, path: request.path,
         method: request.method.toLowerCase() as 'get' | 'post' | 'put',
-        header: request.headers, data: request.body, timeout: 10000,
+        header: { ...request.headers, [CLOUD_HTTP_ENVELOPE_HEADER]: CLOUD_HTTP_ENVELOPE_VERSION }, data: request.body, timeout: 10000,
         success: resolve, fail: reject
       });
     });
@@ -60,6 +61,11 @@ export async function callCloudHTTP(request: TransportRequest, env: string, name
   if (typeof body === 'string') {
     try { body = JSON.parse(body) as unknown; }
     catch { throw new ApiClientError('INVALID_RESPONSE', '云 HTTP 响应无法验证', result.statusCode); }
+  }
+  if (isRecord(body) && 'transport' in body) {
+    const envelope = cloudHttpEnvelopeSchema.safeParse(body);
+    if (result.statusCode !== 200 || !envelope.success) throw new ApiClientError('INVALID_RESPONSE', '云 HTTP 响应无法验证', result.statusCode);
+    return { status: envelope.data.status, body: envelope.data.body };
   }
   return { status: result.statusCode, body };
 }

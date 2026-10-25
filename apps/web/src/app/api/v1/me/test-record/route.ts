@@ -9,7 +9,7 @@ export function GET(request: Request) {
     const user = await identityService.authenticate(request.headers.get('authorization'));
     const record = await withDb(db => db.userTestRecord.findUnique({ where: { userId: user.user_id } }));
     return { value: record?.value ?? null, updated_at: record?.updatedAt.toISOString() ?? null };
-  });
+  }, request);
 }
 export function PUT(request: Request) {
   return handle(async () => {
@@ -18,5 +18,5 @@ export function PUT(request: Request) {
     if (!input.success) throw new ServiceError('INVALID_INPUT', 400, '测试记录仅允许不超过200字的文本');
     const record = await withDb(db => db.userTestRecord.upsert({ where: { userId: user.user_id }, create: { userId: user.user_id, value: input.data.value }, update: { value: input.data.value } }));
     return { value: record.value, updated_at: record.updatedAt.toISOString() };
-  });
+  }, request);
 }

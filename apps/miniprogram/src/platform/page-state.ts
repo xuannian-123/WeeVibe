@@ -12,7 +12,7 @@ export function errorText(error: unknown): string {
     NOT_FOUND: '未找到活动或无法访问，请核对活动入口。体验成员资格由微信平台单独检查。',
     CAPACITY_FULL: '所选环节名额已变化，本次组合未获批准，请刷新核对。',
     APPLICATION_CLOSED: '所选环节已有报名截止或开始，请刷新查看逐段状态。',
-    SEGMENT_APPLICATION_CLOSED: '所选环节已截止、开始或取消，本次组合不能新加入。',
+    SEGMENT_APPLICATION_CLOSED: '所选环节已截止、开始或取消，请核对日期和时间。',
     ALREADY_JOINED: '所选环节已有本人席位，请只选择本次新增环节。',
     APPLICATION_ALREADY_PENDING: '所选环节已有本人待处理申请，请刷新核对。',
     APPLICATION_ALREADY_DECIDED: '该申请已被处理，请刷新查看实际结果。',

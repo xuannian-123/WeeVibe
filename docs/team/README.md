@@ -10,6 +10,7 @@ WEEGO采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与�
 - [12张任务的代码入口与修改边界](./task-map.md)
 - [后续改进、子任务与新增任务怎样归类](./task-workflow.md)
 - [双微信实际验收步骤与记录](./two-wechat-acceptance.md)
+- [创建失败与原请求恢复](./create-recovery.md)
 - [完整业务规则](../11-首版成局加入与补位规则.md)
 - [创建/申请/审批正式接口](../engineering/07-第二轮业务接口交接.md)
 - [小程序简版页面交接](../product/05-第二轮小程序页面实施交接.md)
