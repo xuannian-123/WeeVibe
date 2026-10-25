@@ -1,7 +1,7 @@
 import { generateKeyPairSync, randomBytes, randomUUID } from 'node:crypto';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { createLoginHandler } from '../cloudfunctions/weegoLogin/index.js';
-import { readVerifierConfig, verifySignedProof } from '../cloudfunctions/weegoLogin/proof.cjs';
+import { createLoginHandler } from '../cloudfunctions/weevibeLogin/index.js';
+import { readVerifierConfig, verifySignedProof } from '../cloudfunctions/weevibeLogin/proof.cjs';
 
 const { privateKey, publicKey } = generateKeyPairSync('ed25519');
 const fixture = {

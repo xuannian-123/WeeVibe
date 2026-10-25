@@ -1,7 +1,7 @@
 {
-  "name": "@weego/api-client", "version": "0.0.1", "private": true,
+  "name": "@weevibe/api-client", "version": "0.0.1", "private": true,
   "type": "module",
   "main": "./src/index.ts", "types": "./src/index.ts",
   "scripts": { "typecheck": "tsc --noEmit" },
-  "dependencies": { "@weego/contracts": "workspace:*" }
+  "dependencies": { "@weevibe/contracts": "workspace:*" }
 }

@@ -56,10 +56,10 @@ importers:
       '@tarojs/taro':
         specifier: 4.3.1
         version: 4.3.1(8ff72eca09619e6d38b6679c122eb930)
-      '@weego/api-client':
+      '@weevibe/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
-      '@weego/contracts':
+      '@weevibe/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       react:
@@ -108,7 +108,7 @@ importers:
       '@prisma/client':
         specifier: 6.19.3
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
-      '@weego/contracts':
+      '@weevibe/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       next:
@@ -133,7 +133,7 @@ importers:
 
   packages/api-client:
     dependencies:
-      '@weego/contracts':
+      '@weevibe/contracts':
         specifier: workspace:*
         version: link:../contracts
 

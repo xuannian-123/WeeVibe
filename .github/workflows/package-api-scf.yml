@@ -23,17 +23,17 @@ jobs:
           node-version: '24'
           package-manager-cache: false
       - run: npm install --global pnpm@11.15.1
-      - run: pnpm install --frozen-lockfile --filter weevibe --filter @weego/web...
+      - run: pnpm install --frozen-lockfile --filter weevibe --filter @weevibe/web...
       - run: pnpm db:generate
       - run: pnpm build:api
       - run: node scripts/package-api-scf.mjs
       - name: Bound temporary artifact storage
-        run: test "$(stat -c%s .working/weego-api-scf.zip)" -le 104857600
+        run: test "$(stat -c%s .working/weevibe-api-scf.zip)" -le 104857600
       - name: Smoke test the extracted Linux zip without secrets
         shell: bash
         run: |
           mkdir -p .working/scf-smoke
-          unzip -q .working/weego-api-scf.zip -d .working/scf-smoke
+          unzip -q .working/weevibe-api-scf.zip -d .working/scf-smoke
           test -x .working/scf-smoke/scf_bootstrap
           # Extraction must preserve internal pnpm links and every link target.
           node --input-type=module <<'NODE'
@@ -70,8 +70,8 @@ jobs:
       - name: Upload only the Linux runtime zip
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: weego-api-scf-${{ github.sha }}
-          path: .working/weego-api-scf.zip
+          name: weevibe-api-scf-${{ github.sha }}
+          path: .working/weevibe-api-scf.zip
           if-no-files-found: error
           retention-days: 1
           compression-level: 0

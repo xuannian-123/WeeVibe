@@ -1,5 +1,5 @@
-import { activityIdSchema } from '@weego/contracts';
-import { ACTIVITY_JSON_MAX_BYTES } from '@weego/contracts/src/limits';
+import { activityIdSchema } from '@weevibe/contracts';
+import { ACTIVITY_JSON_MAX_BYTES } from '@weevibe/contracts/src/limits';
 import { identityService } from '../auth';
 import { readJson, ServiceError } from '../http';
 

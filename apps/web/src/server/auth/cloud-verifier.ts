@@ -1,4 +1,4 @@
-import { CloudProofError, LOGIN_PATH, MAX_PROOF_BYTES, readVerifierConfig, verifySignedProof } from '../../../../../cloudfunctions/weegoLogin/proof.cjs';
+import { CloudProofError, LOGIN_PATH, MAX_PROOF_BYTES, readVerifierConfig, verifySignedProof } from '../../../../../cloudfunctions/weevibeLogin/proof.cjs';
 import { readText, ServiceError } from '../http';
 
 export async function verifyCloudLoginRequest(request: Request) {

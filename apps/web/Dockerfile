@@ -1,4 +1,4 @@
-# Build from repository root: docker build -f apps/web/Dockerfile -t weego-api:local .
+# Build from repository root: docker build -f apps/web/Dockerfile -t weevibe-api:local .
 # Prepared locally; Linux image build has not yet been executed on this machine.
 FROM node:24-bookworm-slim AS builder
 WORKDIR /app
@@ -7,10 +7,10 @@ RUN npm install --global pnpm@11.15.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web ./apps/web
 COPY packages/contracts ./packages/contracts
-COPY cloudfunctions/weegoLogin/proof.cjs cloudfunctions/weegoLogin/proof.d.cts ./cloudfunctions/weegoLogin/
+COPY cloudfunctions/weevibeLogin/proof.cjs cloudfunctions/weevibeLogin/proof.d.cts ./cloudfunctions/weevibeLogin/
 COPY prisma ./prisma
 COPY scripts/prisma-check.mjs scripts/check-api-artifact.mjs ./scripts/
-RUN pnpm install --frozen-lockfile --filter weevibe --filter @weego/web...
+RUN pnpm install --frozen-lockfile --filter weevibe --filter @weevibe/web...
 RUN pnpm db:generate
 RUN pnpm build:api
 RUN mkdir -p apps/web/public

@@ -1,5 +1,5 @@
 import { Text, View } from '@tarojs/components';
-import type { ActivityDetail } from '@weego/contracts';
+import type { ActivityDetail } from '@weevibe/contracts';
 import type { useLogin } from '../../platform/page-state';
 import { formatTime } from '../../platform/activities';
 import { Action, Panel } from '../../components/ui';

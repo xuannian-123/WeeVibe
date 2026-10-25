@@ -1,13 +1,13 @@
 import Taro from '@tarojs/taro';
-import { createApiClient, ApiClientError, type Transport } from '@weego/api-client';
-import { apiErrorSchema, sessionSchema } from '@weego/contracts';
+import { createApiClient, ApiClientError, type Transport } from '@weevibe/api-client';
+import { apiErrorSchema, sessionSchema } from '@weevibe/contracts';
 import { assertCloudHTTPAvailable, callCloudHTTP } from './cloud-http';
-declare const __WEEGO_API_BASE_URL__: string;
-declare const __WEEGO_API_TRANSPORT__: 'https' | 'cloud-http';
-declare const __WEEGO_CLOUD_API_FUNCTION__: string;
-declare const __WEEGO_LOGIN_MODE__: 'code' | 'cloud';
-declare const __WEEGO_CLOUD_ENV_ID__: string;
-declare const __WEEGO_CLOUD_LOGIN_FUNCTION__: string;
+declare const __WEEVIBE_API_BASE_URL__: string;
+declare const __WEEVIBE_API_TRANSPORT__: 'https' | 'cloud-http';
+declare const __WEEVIBE_CLOUD_API_FUNCTION__: string;
+declare const __WEEVIBE_LOGIN_MODE__: 'code' | 'cloud';
+declare const __WEEVIBE_CLOUD_ENV_ID__: string;
+declare const __WEEVIBE_CLOUD_LOGIN_FUNCTION__: string;
 const sessionKey = 'weego_session_v1';
 // Stores only the WeeVibe bearer session, never wx.login code, OpenID or session_key.
 export function getToken(): string | undefined {
@@ -16,19 +16,19 @@ export function getToken(): string | undefined {
 }
 export function forgetSession() { Taro.removeStorageSync(sessionKey); }
 function assertTransportConfigured() {
-  if (__WEEGO_API_TRANSPORT__ === 'cloud-http') {
-    if (!__WEEGO_CLOUD_ENV_ID__ || !__WEEGO_CLOUD_API_FUNCTION__) throw new ApiClientError('NOT_CONFIGURED', '尚未配置云 HTTP 业务接口', 0);
+  if (__WEEVIBE_API_TRANSPORT__ === 'cloud-http') {
+    if (!__WEEVIBE_CLOUD_ENV_ID__ || !__WEEVIBE_CLOUD_API_FUNCTION__) throw new ApiClientError('NOT_CONFIGURED', '尚未配置云 HTTP 业务接口', 0);
     assertCloudHTTPAvailable();
   } else {
-    const base = __WEEGO_API_BASE_URL__.replace(/\/$/, '');
+    const base = __WEEVIBE_API_BASE_URL__.replace(/\/$/, '');
     if (!base) throw new ApiClientError('NOT_CONFIGURED', '尚未配置正式 API 地址', 0);
     if (!/^https:\/\//.test(base) && process.env.NODE_ENV === 'production') throw new ApiClientError('NOT_CONFIGURED', '正式 API 必须使用 HTTPS', 0);
   }
 }
 const transport: Transport = async request => {
   assertTransportConfigured();
-  if (__WEEGO_API_TRANSPORT__ === 'cloud-http') return callCloudHTTP(request, __WEEGO_CLOUD_ENV_ID__, __WEEGO_CLOUD_API_FUNCTION__);
-  const base = __WEEGO_API_BASE_URL__.replace(/\/$/, '');
+  if (__WEEVIBE_API_TRANSPORT__ === 'cloud-http') return callCloudHTTP(request, __WEEVIBE_CLOUD_ENV_ID__, __WEEVIBE_CLOUD_API_FUNCTION__);
+  const base = __WEEVIBE_API_BASE_URL__.replace(/\/$/, '');
   try {
     const response = await Taro.request({ url: base + request.path, method: request.method, header: request.headers, data: request.body, timeout: 10000 });
     return { status: response.statusCode, body: response.data };
@@ -36,15 +36,15 @@ const transport: Transport = async request => {
 };
 export const api = createApiClient(transport, getToken);
 export async function establishSession() {
-  if (__WEEGO_LOGIN_MODE__ === 'cloud') {
-    if (!__WEEGO_CLOUD_ENV_ID__ || !__WEEGO_CLOUD_LOGIN_FUNCTION__) {
+  if (__WEEVIBE_LOGIN_MODE__ === 'cloud') {
+    if (!__WEEVIBE_CLOUD_ENV_ID__ || !__WEEVIBE_CLOUD_LOGIN_FUNCTION__) {
       throw new ApiClientError('NOT_CONFIGURED', '尚未配置云登录及业务 API 地址', 0);
     }
     assertTransportConfigured();
     let result: unknown;
     try {
-      Taro.cloud.init({ env: __WEEGO_CLOUD_ENV_ID__ });
-      const response = await Taro.cloud.callFunction({ name: __WEEGO_CLOUD_LOGIN_FUNCTION__, data: {}, config: { env: __WEEGO_CLOUD_ENV_ID__ } });
+      Taro.cloud.init({ env: __WEEVIBE_CLOUD_ENV_ID__ });
+      const response = await Taro.cloud.callFunction({ name: __WEEVIBE_CLOUD_LOGIN_FUNCTION__, data: {}, config: { env: __WEEVIBE_CLOUD_ENV_ID__ } });
       result = response.result;
     } catch { throw new ApiClientError('NETWORK_ERROR', '微信云登录未完成，请稍后重试', 0); }
     const error = apiErrorSchema.safeParse(result);

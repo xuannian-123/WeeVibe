@@ -5,11 +5,11 @@ Node24（至少24.11且小于25）、pnpm11.15.1，具体依赖以锁文件为�
 ## 不依赖外部账号的检查
 
 ```text
-git clone https://github.com/xuannian-123/weego.git
-cd weego
+git clone https://github.com/xuannian-123/WeeVibe.git
+cd WeeVibe
 npm install --global pnpm@11.15.1
 pnpm install --frozen-lockfile
-npm ci --prefix cloudfunctions/weegoLogin --ignore-scripts --no-audit --no-fund
+npm ci --prefix cloudfunctions/weevibeLogin --ignore-scripts --no-audit --no-fund
 pnpm db:generate
 pnpm db:validate
 pnpm typecheck
@@ -34,7 +34,7 @@ typecheck会先执行Next typegen，生成新克隆缺少的.next路由类型，
 
 Next从apps/web读取.env.local；Prisma CLI需进程中同一正确DATABASE_URL，不能假设复制根.env.local就会同时配置二者。先核对目标专用库，再执行pnpm db:migrate；这是真实DDL写入，不是离线检查。
 
-随后pnpm dev:api监听127.0.0.1:43188。/api/v1/health只证明进程存活，/api/v1/ready检查PG，不证明微信身份。普通code交换缺Secret、云身份入口缺签名配置或业务缺数据库时应明确失败，不用样例冒充成功。可选云登录的独立安装、配置和部署条件见[云身份接入说明](../../cloudfunctions/weegoLogin/README.md)。
+随后pnpm dev:api监听127.0.0.1:43188。/api/v1/health只证明进程存活，/api/v1/ready检查PG，不证明微信身份。普通code交换缺Secret、云身份入口缺签名配置或业务缺数据库时应明确失败，不用样例冒充成功。可选云登录的独立安装、配置和部署条件见[云身份接入说明](../../cloudfunctions/weevibeLogin/README.md)。
 
 ## 小程序构建与开发工具
 
@@ -65,10 +65,10 @@ TARO_APP_API_BASE_URL是小程序构建时公开HTTPS地址，需在构建进程
 
 ## 显式真实PG集成
 
-准备两个隔离库：日常开发库与名称以weego_acceptance_开头的本机验收库。脚本拒绝其他库名及远程目标。对验收库应用全部迁移，并用同一验收URL启动API；脚本通过真实HTTP和PG操作检查，播种的用户/会话都是fixture。
+准备两个隔离库：日常开发库与名称以weevibe_acceptance_开头的本机验收库。脚本拒绝其他库名及远程目标。对验收库应用全部迁移，并用同一验收URL启动API；脚本通过真实HTTP和PG操作检查，播种的用户/会话都是fixture。
 
 ```text
-# 在专用终端安全设置DATABASE_URL和WEEGO_CHECK_API_BASE_URL后：
+# 在专用终端安全设置DATABASE_URL和WEEVIBE_CHECK_API_BASE_URL后：
 pnpm db:migrate
 pnpm check:postgres:prepare
 # 正常停止API/PG，重启同一PG，再以同一验收库重启API：
@@ -81,4 +81,4 @@ verify核对PG启动时间实际改变及记录保持一致。脚本只在验收
 
 ## 容器构建
 
-从仓库根运行docker build -f apps/web/Dockerfile -t weego-api:local .。镜像在Linux重新构建standalone，不复制Windows产物；运行时注入服务端配置，镜像不自动迁移数据库。默认3000端口，健康探测不证明业务就绪。当前HTTP云函数承载同一standalone，按各任务完成标准验收后关闭相应Issue；本轮不要求双手机。
+从仓库根运行docker build -f apps/web/Dockerfile -t weevibe-api:local .。镜像在Linux重新构建standalone，不复制Windows产物；运行时注入服务端配置，镜像不自动迁移数据库。默认3000端口，健康探测不证明业务就绪。当前HTTP云函数承载同一standalone，按各任务完成标准验收后关闭相应Issue；本轮不要求双手机。

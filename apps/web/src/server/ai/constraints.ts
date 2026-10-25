@@ -1,7 +1,7 @@
 import {
   aiSnapshotSchema, aiCoordinationProposalSchema, aiCreationDraftSchema, aiInvitationSchema,
   type AiSnapshot, type AiCoordinationProposal
-} from '@weego/contracts/src/ai';
+} from '@weevibe/contracts/src/ai';
 
 export type AiValidationIssue = { code: string; path: string };
 export type AiValidationResult<T> =

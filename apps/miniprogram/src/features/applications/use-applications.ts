@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { activityIdSchema, applyToActivityInputSchema, decideApplicationInputSchema, type ActivityDetail, type DecideApplicationInput } from '@weego/contracts';
+import { activityIdSchema, applyToActivityInputSchema, decideApplicationInputSchema, type ActivityDetail, type DecideApplicationInput } from '@weevibe/contracts';
 import { api } from '../../platform/api';
 import { newKey } from '../../platform/page-state';
 import { rememberActivity } from '../../platform/activities';

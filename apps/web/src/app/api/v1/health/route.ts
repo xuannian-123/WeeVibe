@@ -1,4 +1,4 @@
-import { healthSchema } from '@weego/contracts';
+import { healthSchema } from '@weevibe/contracts';
 import { ok } from '../../../../server/http';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

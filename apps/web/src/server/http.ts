@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import type { ErrorCode } from '@weego/contracts';
-import { CLOUD_HTTP_ENVELOPE_HEADER, CLOUD_HTTP_ENVELOPE_VERSION } from '@weego/contracts';
+import type { ErrorCode } from '@weevibe/contracts';
+import { CLOUD_HTTP_ENVELOPE_HEADER, CLOUD_HTTP_ENVELOPE_VERSION } from '@weevibe/contracts';
 export class ServiceError extends Error {
   constructor(public readonly code: ErrorCode, public readonly status: number, message: string) { super(message); }
 }

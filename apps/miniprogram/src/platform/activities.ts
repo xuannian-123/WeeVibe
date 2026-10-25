@@ -1,5 +1,5 @@
 import Taro from '@tarojs/taro';
-import { activityIdSchema, type ActivityDetail } from '@weego/contracts';
+import { activityIdSchema, type ActivityDetail } from '@weevibe/contracts';
 export { buildCreateInput } from './activity-form';
 
 export type RecentActivity = { id: string; name: string };

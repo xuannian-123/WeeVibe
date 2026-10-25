@@ -1,5 +1,5 @@
-import { ApiClientError, type TransportRequest } from '@weego/api-client';
-import { CLOUD_HTTP_ENVELOPE_HEADER, CLOUD_HTTP_ENVELOPE_VERSION, cloudHttpEnvelopeSchema } from '@weego/contracts';
+import { ApiClientError, type TransportRequest } from '@weevibe/api-client';
+import { CLOUD_HTTP_ENVELOPE_HEADER, CLOUD_HTTP_ENVELOPE_VERSION, cloudHttpEnvelopeSchema } from '@weevibe/contracts';
 
 type CloudHTTPOptions = {
   name: string; config: { env: string }; path: string;

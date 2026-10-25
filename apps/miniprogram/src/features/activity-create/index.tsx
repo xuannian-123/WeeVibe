@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import Taro from '@tarojs/taro';
 import { Text, View } from '@tarojs/components';
-import { activityIdSchema, createActivityInputSchema, type CreateActivityInput } from '@weego/contracts';
+import { activityIdSchema, createActivityInputSchema, type CreateActivityInput } from '@weevibe/contracts';
 import { BRAND_NAME } from '../../brand';
 import { api } from '../../platform/api';
 import { newKey, readSaved, requireUser, save, useLogin, usePageRead } from '../../platform/page-state';

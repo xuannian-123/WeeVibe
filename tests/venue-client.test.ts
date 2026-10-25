@@ -3,7 +3,7 @@ import { createApiClient, type Transport } from '../packages/api-client/src';
 
 describe('venue client integration (offline transport)', () => {
   const source = { provider: 'amap', checked_at: '2026-10-24T00:00:00Z', source_api: 'https://restapi.amap.com/v5/place/text' };
-  it('uses the authenticated Weego API and validates sourced empty results', async () => {
+  it('uses the authenticated WeeVibe API and validates sourced empty results', async () => {
     const transport = vi.fn<Transport>(async () => ({ status: 200, body: { source, venues: [], excluded_count: 0, pagination: false } }));
     const result = await createApiClient(transport, () => 'fixture-session').searchVenues({ keyword: '羽毛球', region: '上海' });
     expect(result.venues).toEqual([]);

@@ -1,7 +1,7 @@
-import { apiErrorSchema, healthSchema, sessionSchema, userSchema, testRecordInputSchema, testRecordSchema, activityIdSchema, activityDetailSchema, createActivityInputSchema, applyToActivityInputSchema, decideApplicationInputSchema, type CreateActivityInput, type ApplyToActivityInput, type DecideApplicationInput } from '@weego/contracts';
+import { apiErrorSchema, healthSchema, sessionSchema, userSchema, testRecordInputSchema, testRecordSchema, activityIdSchema, activityDetailSchema, createActivityInputSchema, applyToActivityInputSchema, decideApplicationInputSchema, type CreateActivityInput, type ApplyToActivityInput, type DecideApplicationInput } from '@weevibe/contracts';
 
 import { venueSearchSchema, venueNearbySchema, venueWalkSchema, venueListSchema, venueWalkResultSchema,
-  type VenueSearchInput, type VenueNearbyInput, type VenueWalkInput } from '@weego/contracts';
+  type VenueSearchInput, type VenueNearbyInput, type VenueWalkInput } from '@weevibe/contracts';
 
 export type TransportRequest = { method: 'GET' | 'POST' | 'PUT'; path: string; headers: Record<string, string>; body?: unknown };
 export type Transport = (request: TransportRequest) => Promise<{ status: number; body: unknown }>;

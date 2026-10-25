@@ -3,7 +3,7 @@ import path from 'node:path';
 const config: NextConfig = {
   output: 'standalone',
   outputFileTracingRoot: path.resolve(__dirname, '../..'),
-  transpilePackages: ['@weego/contracts'],
+  transpilePackages: ['@weevibe/contracts'],
   poweredByHeader: false,
   // Generated Prisma client loads this WASM through a computed fs path; NFT
   // traces the JS loader but needs an explicit include for the runtime file.

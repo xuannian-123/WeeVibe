@@ -1,4 +1,4 @@
-import { testRecordInputSchema } from '@weego/contracts';
+import { testRecordInputSchema } from '@weevibe/contracts';
 import { identityService } from '../../../../../server/auth';
 import { withDb } from '../../../../../server/db';
 import { handle, readJson, ServiceError } from '../../../../../server/http';

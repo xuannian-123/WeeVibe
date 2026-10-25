@@ -12,7 +12,7 @@ const root = resolve(import.meta.dirname, '..');
 const resultPath = resolve(root, '.working/cloud-identity-integration-result.json');
 type Database = ReturnType<(typeof import('../apps/web/src/server/db'))['getDb']>;
 type Store = (typeof import('../apps/web/src/server/auth/cloud-store'))['issueCloudSession'];
-type Protocol = typeof import('../cloudfunctions/weegoLogin/proof.cjs');
+type Protocol = typeof import('../cloudfunctions/weevibeLogin/proof.cjs');
 type Envelope = { body: string; signature: string };
 let db: Database | undefined;
 let current = 'target_and_fixture_guard';
@@ -24,10 +24,10 @@ function targets() {
   assert.ok(['postgres:', 'postgresql:'].includes(target.protocol));
   assert.ok(['localhost', '127.0.0.1'].includes(target.hostname));
   const database = decodeURIComponent(target.pathname.slice(1));
-  assert.match(database, /^weego_acceptance_[a-z0-9_]+$/);
+  assert.match(database, /^(?:weevibe|weego)_acceptance_[a-z0-9_]+$/);
   assert.ok(!target.hash);
   for (const [name, value] of target.searchParams) assert.ok(name === 'schema' && value === 'public');
-  const api = new URL(process.env.WEEGO_CHECK_API_BASE_URL ?? 'http://127.0.0.1:43188');
+  const api = new URL(process.env.WEEVIBE_CHECK_API_BASE_URL ?? 'http://127.0.0.1:43188');
   assert.ok(['http:', 'https:'].includes(api.protocol) && ['localhost', '127.0.0.1'].includes(api.hostname));
   assert.ok(!api.username && !api.password && !api.search && !api.hash && api.pathname === '/');
   assert.equal(process.env.WECHAT_APP_ID, 'wx1111111111111111', 'Fixture AppID required');
@@ -112,7 +112,7 @@ async function run(database: string, api: URL, issue: Store, protocol: Protocol)
   await check('actual_function_sdk_context_signer_http_pg_session_fixture_chain', async () => {
     // This is the REAL function module and its installed SDK parser. Only its
     // transport is injected: production still requires a fixed public HTTPS URL.
-    const { createLoginHandler } = createRequire(import.meta.url)(resolve(root, 'cloudfunctions/weegoLogin/index.js')) as typeof import('../cloudfunctions/weegoLogin/index');
+    const { createLoginHandler } = createRequire(import.meta.url)(resolve(root, 'cloudfunctions/weevibeLogin/index.js')) as typeof import('../cloudfunctions/weevibeLogin/index');
     const openA = identity(), openB = identity(), forwarded: string[] = [];
     let requestCalls = 0;
     const fixedHttpsEndpoint = 'https://api.example.invalid/api/v1/auth/cloud-wechat';
@@ -253,7 +253,7 @@ async function main() {
   const { database, api } = targets();
   await mkdir(resolve(root, '.working'), { recursive: true });
   const require = createRequire(import.meta.url);
-  const protocol = require(resolve(root, 'cloudfunctions/weegoLogin/proof.cjs')) as Protocol;
+  const protocol = require(resolve(root, 'cloudfunctions/weevibeLogin/proof.cjs')) as Protocol;
   const { getDb } = require(resolve(root, 'apps/web/src/server/db.ts')) as typeof import('../apps/web/src/server/db');
   const { issueCloudSession } = require(resolve(root, 'apps/web/src/server/auth/cloud-store.ts')) as typeof import('../apps/web/src/server/auth/cloud-store');
   db = getDb(); await run(database, api, issueCloudSession, protocol);

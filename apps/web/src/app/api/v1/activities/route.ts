@@ -1,4 +1,4 @@
-import { createActivityInputSchema } from '@weego/contracts';
+import { createActivityInputSchema } from '@weevibe/contracts';
 import { handle } from '../../../../server/http';
 import { createActivity } from '../../../../server/activities/service';
 import { parseBody, requireActor } from '../../../../server/activities/transport';

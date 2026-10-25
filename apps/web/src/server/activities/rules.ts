@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ApplyToActivityInput, CreateActivityInput } from '@weego/contracts';
+import type { ApplyToActivityInput, CreateActivityInput } from '@weevibe/contracts';
 import { ServiceError } from '../http';
 
 export type SegmentRuleState = {
