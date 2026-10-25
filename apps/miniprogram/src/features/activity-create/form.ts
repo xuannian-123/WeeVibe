@@ -1,4 +1,4 @@
-import { createActivityInputSchema, type CreateActivityInput } from '@weevibe/contracts';
+import { createActivityInputSchema, venueSelectionSchema, type CreateActivityInput, type VenueSelection } from '@weevibe/contracts';
 import { ACTIVITY_JSON_MAX_BYTES } from '@weevibe/contracts/src/limits';
 import { newKey } from '../../platform/local-id';
 
@@ -7,6 +7,7 @@ export type SegmentForm = {
   ref: string; type: string; name: string; startDate: string; startTime: string; endDate: string; endTime: string;
   deadlineDate: string; deadlineTime: string; place: string; address: string; amount: string; feeUnit: string;
   feeNote: string; requirements: string; minimum: string; capacity: string;
+  venue?: VenueSelection;
 };
 export type ActivityForm = { name: string; nickname: string; mainRef: string; attending: string[]; segments: SegmentForm[] };
 export const typeOptions = [
@@ -56,7 +57,7 @@ export function buildCreateInput(form: ActivityForm, key: string): CreateActivit
         starts_at: shanghaiTime(s.startDate, s.startTime), ends_at: shanghaiTime(s.endDate || s.startDate, s.endTime),
         deadline_at: followsStart ? shanghaiTime(s.startDate, s.startTime) : shanghaiTime(s.deadlineDate, s.deadlineTime),
         minimum_participants: positiveInteger(s.minimum), capacity: positiveInteger(s.capacity),
-        location: { name: s.place.trim(), address: s.address.trim() || null, source_url: null },
+        location: { name: s.place.trim(), address: s.address.trim() || null, source_url: selectedVenueUrl(s) },
         fee: { kind: s.feeUnit, amount_cents: s.feeUnit === 'unknown' ? null : moneyCents(s.amount), currency: 'CNY', note: s.feeNote.trim() },
         requirements: s.requirements.trim() };
     } catch (error) { throw new Error(`环节 ${i + 1}：${error instanceof Error ? error.message : '请核对字段'}`); }
@@ -84,5 +85,12 @@ export function isActivityForm(value: unknown): value is ActivityForm {
   const form = value as Partial<ActivityForm>;
   if (typeof form.name !== 'string' || typeof form.nickname !== 'string' || typeof form.mainRef !== 'string' || !Array.isArray(form.attending) || !form.attending.every(v => typeof v === 'string') || !Array.isArray(form.segments) || !form.segments.length) return false;
   const fields: (keyof SegmentForm)[] = ['ref', 'type', 'name', 'startDate', 'startTime', 'endDate', 'endTime', 'deadlineDate', 'deadlineTime', 'place', 'address', 'amount', 'feeUnit', 'feeNote', 'requirements', 'minimum', 'capacity'];
-  return form.segments.every(s => !!s && typeof s === 'object' && fields.every(field => typeof s[field] === 'string'));
+  return form.segments.every(s => !!s && typeof s === 'object' && fields.every(field => typeof s[field] === 'string') && (s.venue === undefined || venueSelectionSchema.safeParse(s.venue).success));
+}
+
+export function selectedVenueUrl(segment: SegmentForm): string | null {
+  const venue = venueSelectionSchema.safeParse(segment.venue);
+  if (!venue.success || segment.place !== venue.data.name || segment.address !== (venue.data.address ?? '')) return null;
+  const { longitude, latitude } = venue.data.location;
+  return `https://uri.amap.com/marker?position=${longitude},${latitude}&name=${encodeURIComponent(venue.data.name)}&coordinate=gaode&callnative=0`;
 }

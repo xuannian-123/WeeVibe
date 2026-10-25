@@ -4,6 +4,8 @@
 
 第一批前端已提取activity-create、activity-detail、applications、invitations；后端现有创建、申请/审批、活动读取也已按用例拆分，service.ts保留兼容汇总导出。此次只调整代码归属，不增加业务功能，也不代表12张任务已经完成。下表区分现有入口与后续建议，不为未实施功能创建空文件。
 
+本轮 WG-02/WG-07 本地新增：activity-create/ai-create.tsx、ai-form.ts、venue-picker.tsx，以及 server/ai/creation.ts、creation-handler.ts 和 `/api/v1/ai/creation-draft`。复用现有地点接口和创建确认流程，真实模型配置与新流程实际验收待完成；详见[接入说明](./ai-map-creation.md)。
+
 直接入口：[创建流程](../../apps/miniprogram/src/features/activity-create/index.tsx)、[创建表单](../../apps/miniprogram/src/features/activity-create/activity-editor.tsx)、[详情控制器](../../apps/miniprogram/src/features/activity-detail/use-activity-detail.ts)、[报名/审批状态](../../apps/miniprogram/src/features/applications/use-applications.ts)、[报名/审批面板](../../apps/miniprogram/src/features/applications/panels.tsx)、[邀请入口](../../apps/miniprogram/src/features/invitations/index.tsx)。
 
 后端入口：[创建用例](../../apps/web/src/server/activities/create.ts)、[申请/审批用例](../../apps/web/src/server/activities/applications.ts)、[活动读取与权限投影](../../apps/web/src/server/activities/snapshot.ts)、[兼容服务入口](../../apps/web/src/server/activities/service.ts)。

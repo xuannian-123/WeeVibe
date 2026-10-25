@@ -89,7 +89,7 @@ export default function Editor() {
         <Notice>{displayedPlan.participating_segment_refs.length ? `你参加：${displayedPlan.segments.filter(s => displayedPlan.participating_segment_refs.includes(s.client_ref)).map(s => s.name).join('、')}` : '你只负责组织，不占参加名额。'}</Notice>
         <Text className="caption">发起后朋友可申请加入，由你审批。发布不代表已成局或已预订。</Text>
       </Panel>
-    </View> : <ActivityEditor value={form} onChange={setForm} disabled={disabled || !userId || !!identity.error} />}
+    </View> : <ActivityEditor key={userId ?? 'guest'} value={form} onChange={setForm} disabled={disabled || !userId || loadedFor !== userId || !!identity.error} />}
     {validation && <Notice tone="error">{validation}</Notice>}
     {write.message && <Notice tone="error">{write.message}</Notice>}
     {write.pending && <Panel title="上次创建结果待核对">

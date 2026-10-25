@@ -31,6 +31,9 @@ typecheck会先执行Next typegen，生成新克隆缺少的.next路由类型，
 | WECHAT_APP_SECRET | 普通code交换方式需要；仅服务端，不擅自重置原密钥 |
 | WEEGO_CLOUD_AUTH_* | 可选云身份适配，默认关闭；API只配置公钥，函数私钥不注入API或小程序 |
 | AMAP_WEB_SERVICE_KEY | 可选地图查询密钥，缺少时地点可手填 |
+| AI_CHAT_COMPLETIONS_URL | 模型JSON聊天接口完整HTTPS地址，建议 `https://api.deepseek.com/chat/completions` |
+| AI_MODEL | 建议首轮 `deepseek-flash`，DeepSeek请求使用非思考模式 |
+| AI_API_KEY | 仅服务端保存的模型密钥；未配置时保留手动创建 |
 
 Next从apps/web读取.env.local；Prisma CLI需进程中同一正确DATABASE_URL，不能假设复制根.env.local就会同时配置二者。先核对目标专用库，再执行pnpm db:migrate；这是真实DDL写入，不是离线检查。
 

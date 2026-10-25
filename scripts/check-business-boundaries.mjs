@@ -14,6 +14,7 @@ const paths = [
   '/api/v1/venues/search',
   '/api/v1/venues/nearby',
   '/api/v1/venues/walk',
+  '/api/v1/ai/creation-draft',
 ];
 for (const path of paths) {
   const response = await fetch(new URL(path, base), {

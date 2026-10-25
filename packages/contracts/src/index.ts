@@ -39,5 +39,6 @@ export type AiDraft = z.infer<typeof aiDraftSchema>;
 export * from './activities';
 export * from './venues';
 export * from './ai';
+export * from './ai-creation';
 export * from './limits';
 export * from './cloud-http';
