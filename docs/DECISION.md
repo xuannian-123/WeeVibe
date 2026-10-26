@@ -432,6 +432,20 @@ type MyDecision = {                      // 只给本人
 
 ---
 
+### 实现状态（2026-10-26）
+
+| 步骤 | 状态 | 说明 |
+|---|---|---|
+| 1 需求模型 + 理解 | ✅ | `planner/needs.ts`、私聊抽取、硬约束回问；理解测试集 58 句，规则版 / 真实大模型都是 58/58 |
+| 2 满意度 + 三级准则 | ✅ | `experience.ts`、`plan.ts` 的 `decisionCompare`；leximin 容差定为 1（见第 4 节）；决策基准集 `decision.test.ts` |
+| 3 外部因素 | ✅ | `planner/external.ts`；高德营业时间 / 楼层 / 天气，已用真实数据核对 |
+| 4 决定书 + 输出 | ✅ | `src/lib/decision.ts`；群公告、决定卡、"你跟局长说的"、发起人待办 |
+| 5 极端情况 | ✅ R1/R2（以 selfTime / waiveSoft 两种问题实现）、R6 · 🟡 R3/R4 只做成给发起人的建议 · ❌ R5 拆成两段 | `planner/repair.ts`、`server/negotiate.ts`；问题代价含"让人让多少"（现场跑出来的修正） |
+| 6 提醒 | ✅ | `after/reminders.ts`；一键切到备案 `POST /api/ju/:id/fallback` |
+| 7 路演 | ✅ | `docs/pitch/` 按 v5 重写；演示用 `scene=conflict` + "替演示朋友回答" |
+
+还没做：R5（拆成两段）、"品类交给局长定"、末班车时间的专门询问（目前靠门禁 / 想几点前结束覆盖）、更细的天气源。
+
 ## 13. 待拍板的问题
 
 1. **保底线定多少**：50 分是拍脑袋的数，需要用基准集调。
