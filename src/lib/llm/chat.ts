@@ -6,7 +6,9 @@ import type { ChatAsk, ChatPatch, ChatReply, ChatWidget, DayAvailability, DietTa
 import { NUM_RE_SRC, parseCnNumber } from "./cn-number";
 import { callLlmJson, currentProvider } from "./provider";
 import { ruleParseDiet } from "./rules";
-import { llmChatJsonSchema, llmChatSchema } from "./schemas";
+import { budgetStrengthOf, extractNeeds, type ExtractedNeed } from "../planner/needs";
+import { llmChatJsonSchema, llmChatSchema, type llmNeedSchema } from "./schemas";
+import type { z } from "zod";
 import { addDays, dowLabel, fromMinutes, isoDowOf, pad, shanghaiNow, toMinutes } from "./time";
 
 export type ChatCtx = {
@@ -68,6 +70,7 @@ export function lookupPlace(text: string): Place | undefined {
 const AUTOFILL_RE = /都行|都可以|随便|你定|你来定|你看着办|看着办|听你的|你安排|无所谓|都ok/i;
 const NO_RSVP_RE =
   /来不了|不来了|我不来|这次不来|去不了|不去了|我不去|这次不去|没空去|不参加|参加不了|下次吧|下次再约|这次算了|这次不行|这次就不|这次先不|先不来|鸽了|缺席/;
+const CONDITIONAL_RE = /如果|要是|假如|万一|再(远|贵|晚|早)|太(远|贵|晚|早|吵)(的话)?.{0,3}就|超过.{0,6}就|不然.{0,2}就/;
 const YES_RE = /^(来|去|能|可以|行|好|冲|没问题|ok|当然|必须|yes|嗯|对|是|没错|肯定|一定)/i;
 const AFFIRM_RE = /^(对|是|嗯|没错|还是|对的|是的|yes|ok|好|老样子|一样|照旧|没变)/i;
 const NOTHING_RE = /^(没有了?|没了|无|就这些|没啥了?|没什么了?|暂时没有|暂时没了|ok|好的?|不用了?|没事|啥也没有|nope|no)$/i;
@@ -263,7 +266,9 @@ export function ruleExtract(text: string, ctx: ChatCtx, pending: ChatStep | unde
   if (!s) return patch;
 
   // rsvp
-  if (NO_RSVP_RE.test(s) || (pending === "rsvp" && /^(不来|不去|没空|不行|来不了|去不了|算了|不了)/.test(s))) {
+  // "再远我就不去了""要是太贵就不来了"是条件，不是拒绝：条件句不算 rsvp=no
+  const conditional = CONDITIONAL_RE.test(s);
+  if ((NO_RSVP_RE.test(s) && !conditional) || (pending === "rsvp" && /^(不来|不去|没空|不行|来不了|去不了|算了|不了)/.test(s))) {
     patch.rsvp = "no";
     return patch;
   }
@@ -306,6 +311,12 @@ export function ruleExtract(text: string, ctx: ChatCtx, pending: ChatStep | unde
   const skip = ruleSkipItems(t);
   if (skip.length) billFacts.skipItems = skip;
   if (Object.keys(billFacts).length) patch.billFacts = billFacts;
+
+  // v5：能算的其他需求（通勤、安静、清淡、不想去的品类…）+ 预算有多在意
+  const needs = extractNeeds(t);
+  if (needs.length) patch.needs = needs;
+  const bs = budgetStrengthOf(t);
+  if (bs) patch.budgetStrength = bs;
 
   // 备注：“还有什么想让局长知道的”这一问的回答，或者话里有明显的约束
   // “还有什么”这一问的回答记成备注；但回答的其实是预算 / 忌口 / 时间 / 地点时，已经进了对应字段，不再重复记
@@ -463,7 +474,8 @@ function ackFor(patch: ChatPatch, ctx: ChatCtx): string[] {
   if (patch.budgetMax) out.push(`人均 ${patch.budgetMax} 以内，收到。这个数只有我知道。`);
   if (patch.billFacts?.noAlcohol) out.push("不喝酒记下了，到时候酒水不算你的。");
   else if (patch.billFacts?.skipItems?.length) out.push(`${patch.billFacts.skipItems.join("、")}不吃，记下了，分账时不算你的。`);
-  if (patch.note && !patch.billFacts?.noAlcohol && !patch.budgetMax) {
+  if (patch.needs?.length) out.push(`记下了：${patch.needs.map((n) => n.text).join("；")}。排方案时会算进去，对外不会说是谁。`);
+  else if (patch.note && !patch.billFacts?.noAlcohol && !patch.budgetMax) {
     out.push(POOR_RE.test(patch.note) ? "懂，月底谁不紧呢，这个我心里有数。" : "这个我记着，排方案时会考虑，对外不会说是谁。");
   }
   return out;
@@ -664,12 +676,37 @@ function isNewNote(note: string, ctx: ChatCtx): boolean {
   return grams.length === 0 || seen / grams.length < 0.6;
 }
 
+/** 大模型的一条需求 → 校验 + 转成 NeedRule；参数不全的丢掉 */
+export function toNeed(x: z.infer<typeof llmNeedSchema> | null): ExtractedNeed | undefined {
+  if (!x) return undefined;
+  const words = (x.words ?? []).map((w) => w.trim()).filter(Boolean).slice(0, 6);
+  let rule: ExtractedNeed["rule"];
+  switch (x.type) {
+    case "maxCommute":
+      if (!x.minutes) return undefined;
+      rule = { t: "maxCommute", minutes: Math.round(x.minutes) };
+      break;
+    case "leaveBy":
+      if (!x.at) return undefined;
+      rule = { t: "leaveBy", at: x.at };
+      break;
+    case "avoidCategory":
+    case "preferCategory":
+      if (!words.length) return undefined;
+      rule = { t: x.type, words };
+      break;
+    default:
+      rule = { t: x.type };
+  }
+  return { dim: x.dim, kind: x.kind, strength: x.strength, rule, text: x.text.slice(0, 40) };
+}
+
 /** 合并 LLM 抽取结果：规则抽到的优先，LLM 补规则没抽到的；全部做合法性校验 */
 function mergePatch(rule: ChatPatch, llm: ReturnType<typeof llmChatSchema.parse>, ctx: ChatCtx, text: string): ChatPatch {
   const out: ChatPatch = { ...rule };
   if (!out.rsvp && llm.rsvp) {
     // LLM 说不来时要有否定词撑着，避免把“周五不行”当成整局不来
-    if (llm.rsvp === "yes" || /不|没|算了|下次|鸽/.test(text)) out.rsvp = llm.rsvp;
+    if (llm.rsvp === "yes" || (/不|没|算了|下次|鸽/.test(text) && !CONDITIONAL_RE.test(strip(text)))) out.rsvp = llm.rsvp;
   }
   if (out.rsvp === "no") return { rsvp: "no" };
   if (!out.location && llm.placeName) {
@@ -700,6 +737,26 @@ function mergePatch(rule: ChatPatch, llm: ReturnType<typeof llmChatSchema.parse>
   const skip = Array.from(new Set([...(out.billFacts?.skipItems ?? []), ...(llm.skipItems ?? [])])).slice(0, 10);
   if (noAlcohol || skip.length) out.billFacts = { ...(noAlcohol ? { noAlcohol: true } : {}), ...(skip.length ? { skipItems: skip } : {}) };
   if (llm.wantsAutofill && !out.wantsAutofill && AUTOFILL_RE.test(text)) out.wantsAutofill = true;
+  // v5 需求：规则抽到的为准，大模型补规则没抽到的（同一维度同一类规则只留一条）
+  // 去重按规则类型：腿伤（body）和"别太远"（travel）都是通勤上限，只能算一次，不然同一件事扣两遍分
+  const indifferent = /也行|都行|无所谓|随便|都可以|不挑/.test(text);
+  const llmNeeds = (llm.needs ?? [])
+    .map(toNeed)
+    .filter((n): n is ExtractedNeed => !!n)
+    // "唱歌也行，不唱也行"不是想去：说了无所谓的话，不收大模型推断的偏好
+    .filter((n) => !(indifferent && n.rule.t === "preferCategory"));
+  if (llmNeeds.length) {
+    const key = (n: ExtractedNeed) => (n.rule.t === "custom" ? `custom|${n.text}` : n.rule.t);
+    const have = new Set((out.needs ?? []).map(key));
+    const extra: ExtractedNeed[] = [];
+    for (const n of llmNeeds) {
+      if (have.has(key(n))) continue;
+      have.add(key(n));
+      extra.push(n);
+    }
+    if (extra.length) out.needs = [...(out.needs ?? []), ...extra];
+  }
+  if (out.budgetStrength === undefined && llm.budgetStrength && /钱|价|贵|预算|人均|紧|穷|省|月底/.test(text)) out.budgetStrength = llm.budgetStrength;
   return out;
 }
 
@@ -728,6 +785,8 @@ export async function chatTurn(ctx: ChatCtx): Promise<ChatResult> {
       "4. 1–3 句，≤80 字，口语，像微信私聊；不用列表，最多一个表情。",
       "隐私：对方告诉你的任何事（预算、门禁、忌口、不想去、手头紧）都只有你知道，对外只说聚合结论；可以让对方放心这一点。不要编造人名，不要提任何其他成员的情况，不要承诺具体店名或价格。",
       "askStep 填你这条回复最后问的那一项（必须是【还缺的信息】里的）；没有提问就填 null。",
+      "needs：对方这句话里新说的、时间 / 预算数字 / 忌口之外、能落到规则的需求（路上别太久→maxCommute、想安静→quiet、不喝酒→noAlcohol、怕冷怕晒→indoor、清淡→lightFood、怕排队→noQueue、想早点结束→leaveBy、不想去 X→avoidCategory、想去 X→preferCategory，落不到规则的用 custom）。kind 只有对方明确说必须 / 绝对 / 最多 / 不然不去时才填 hard。门禁、末班车写进 availability.homeBy，不写进 needs。没有就给 null。",
+      "budgetStrength：对方暗示手头紧填 3，说价格无所谓填 1，没提给 null。",
       "note 只写对方这句话里新冒出来的约束，之前已经记过的不要再写。抽取字段：只抽对方这句话里明确说了的，没说的给 null。availability 只能用候选日期，按每个候选日期一条；“6 点半下班”→ from 18:30；“11 点前回宿舍”→ homeBy 23:00。说“都行 / 随便 / 你定”→ wantsAutofill=true。暗示性的约束（手头紧、在减肥、想早点走）写进 note。",
       `现在是 ${sh.ymd}（${dowLabel(sh.isoDow)}）${pad(sh.hour)}:${pad(sh.minute)}。`,
       `这次的局：「${ctx.ju.title}」，${ctx.ju.spec.category}，${ctx.ju.spec.city}${ctx.ju.organizerName ? `，${ctx.ju.organizerName} 发起` : ""}；候选日期：${ctx.ju.spec.dates.map((d) => `${d}(${dowLabel(isoDowOf(d))})`).join("、")}；开始时间 ${ctx.ju.spec.earliest}–${ctx.ju.spec.latest}，大约 ${ctx.ju.spec.durationMinutes} 分钟。`,
@@ -744,7 +803,8 @@ export async function chatTurn(ctx: ChatCtx): Promise<ChatResult> {
     ]
       .filter(Boolean)
       .join("\n\n");
-    const raw = await callLlmJson({ system, user, schema: llmChatJsonSchema, maxTokens: 700 });
+    // v5 的输出结构多了 needs：700 token 会被截断成半截 JSON
+    const raw = await callLlmJson({ system, user, schema: llmChatJsonSchema, maxTokens: 1200 });
     const out = llmChatSchema.parse(raw);
     const patch = mergePatch(rulePatch, out, ctx, text);
     const composed = composeRule(ctx, patch, h);

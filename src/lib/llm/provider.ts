@@ -78,8 +78,11 @@ export async function callLlmJson(req: LlmRequest): Promise<unknown> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), req.timeoutMs ?? (hasImages ? LLM_VISION_TIMEOUT_MS : LLM_TIMEOUT_MS));
   try {
-    const text =
-      provider === "claude" ? await callClaude(req, images, ctrl.signal) : await callOpenAi(req, images, ctrl.signal);
+    const call = () => (provider === "claude" ? callClaude(req, images, ctrl.signal) : callOpenAi(req, images, ctrl.signal));
+    let text = await call();
+    // DeepSeek 的 JSON 模式偶尔返回空白内容（官方文档里的已知现象）：同一个请求重试一次（仍在同一个超时里）
+    if (!text.trim()) text = await call();
+    if (!text.trim()) throw new Error("llm empty response");
     return extractJson(text);
   } finally {
     clearTimeout(timer);
@@ -168,9 +171,8 @@ async function callOpenAi(req: LlmRequest, images: ParsedImage[], signal: AbortS
   });
   if (!res.ok) throw new Error(`llm http ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
-  const text = data.choices?.[0]?.message?.content ?? "";
-  if (!text) throw new Error("llm empty response");
-  return text;
+  // 空内容交给 callLlmJson 处理（会重试一次）
+  return data.choices?.[0]?.message?.content ?? "";
 }
 
 /** 容忍 ```json 代码块、前后废话 */

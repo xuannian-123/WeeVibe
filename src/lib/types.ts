@@ -140,6 +140,62 @@ export type MemberPrivate = {
   clicked?: string[];
   /** #20 双方都选了"聊得来"的人（后端算出） */
   clickMatches?: string[];
+  // ---- v5 决策：需求模型（docs/DECISION.md 第 2 节） ----
+  /** 私聊 / 组件抽出来的其他需求（时间、预算、忌口仍在各自的字段里，needsOf 会把它们合成一张完整清单） */
+  needs?: Need[];
+  /** 预算有多在意：1 随口一提 / 2 在意（默认）/ 3 很在意（"手头紧"） */
+  budgetStrength?: NeedStrength;
+  /** 局长正在等本人确认的一条硬约束（大模型从自然语言里推断的，确认前按硬约束算，保护本人） */
+  pendingConfirm?: PendingConfirm;
+  /** 本人确认过的硬约束 key（如 "homeBy"、"diet:清真"、need id） */
+  confirmed?: string[];
+};
+
+// ---------------------------------------------------------------- v5 需求模型
+
+export type NeedDim = "time" | "travel" | "money" | "food" | "activity" | "ambience" | "people" | "body" | "join";
+export type NeedStrength = 1 | 2 | 3;
+
+/** 能算的需求规则。算不了的用 custom：照样记下给本人看，但如实说"局长没法算进去" */
+export type NeedRule =
+  | { t: "maxCommute"; minutes: number }
+  | { t: "leaveBy"; at: string }
+  | { t: "avoidCategory"; words: string[] }
+  | { t: "preferCategory"; words: string[] }
+  | { t: "quiet" }
+  | { t: "noAlcohol" }
+  | { t: "indoor" }
+  | { t: "lightFood" }
+  | { t: "noQueue" }
+  | { t: "custom" };
+
+export type Need = {
+  id: string;
+  dim: NeedDim;
+  kind: "hard" | "soft";
+  strength: NeedStrength;
+  rule: NeedRule;
+  /** 局长复述的一句话，如"单程不超过 30 分钟" */
+  text: string;
+  /** 原话（只在本人视图） */
+  evidence?: string;
+  source: "chat" | "widget" | "screenshot" | "swipe" | "profile" | "negotiation";
+  at: string;
+};
+
+export type PendingConfirm = {
+  /** "homeBy" | "diet:清真" | need id */
+  key: string;
+  /** 局长的确认问句里复述的内容，如"23:00 前必须回去" */
+  text: string;
+  at: string;
+};
+
+/** 某条需求在某个方案里的结果（只给本人） */
+export type NeedResult = {
+  text: string;
+  result: "met" | "partial" | "unmet" | "unknown" | "noted";
+  detail?: string;
 };
 
 /** v4 #17 我和 TA 熟不熟：0 不认识 / 1 见过几次 / 2 挺熟 */
@@ -215,6 +271,8 @@ export type Poi = LatLng & {
   photoUrl?: string;
   /** 营业时间原文，如 "11:00-22:00" */
   openTime?: string;
+  /** v5：是否在室内（高德有楼层信息 = 在楼里；公园 / 景区 / 露营 = 户外；不知道就不填） */
+  indoor?: boolean;
 };
 
 /**
@@ -246,6 +304,10 @@ export type MyExperience = {
   utility: number;
   /** 如 "人均 118，超出你说的 80" "你刷卡点了超想去" */
   notes: string[];
+  /** v5：你跟局长说的每一条需求，在这个方案里怎么样了 */
+  needs?: NeedResult[];
+  /** v5：这个方案有没有照顾到你（能来 + 硬约束都满足 + 满意度不低于保底线） */
+  cared?: boolean;
 };
 
 /** #9 方案的定位标签，保证 2-3 个方案彼此有实质差异 */
@@ -638,6 +700,10 @@ export type ChatPatch = Partial<Pick<Member, "location" | "name">> & {
   billFacts?: BillFacts;
   /** #6 用户说"都行 / 随便 / 你定"：让局长按档案预填 */
   wantsAutofill?: boolean;
+  /** v5：抽出来的其他需求（还没有 id / 时间戳，入库时补） */
+  needs?: Omit<Need, "id" | "at" | "source">[];
+  /** v5：预算有多在意 */
+  budgetStrength?: NeedStrength;
 };
 
 /** 跨局公平账本的一笔（#10） */

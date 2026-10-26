@@ -28,6 +28,7 @@ import {
   recomputeMatches,
   setMemberStatus,
 } from "./ju-core";
+import { materializeNeeds } from "../planner/needs";
 import { getProfile, learnFromMember, saveProfile } from "./profile";
 import type { ChatBody, JoinInput } from "./schemas";
 import { prefillKnow } from "./social";
@@ -98,6 +99,15 @@ export function applyPatch(ctx: MutateCtx, me: Member, patch: ChatPatch, profile
     planInputChanged = true;
   }
   if (patch.billFacts) p.billFacts = { ...p.billFacts, ...patch.billFacts };
+  // v5 需求模型
+  if (patch.needs?.length) {
+    p.needs = materializeNeeds(p.needs ?? [], patch.needs, "chat", now.toISOString());
+    planInputChanged = true;
+  }
+  if (patch.budgetStrength && patch.budgetStrength !== p.budgetStrength) {
+    p.budgetStrength = patch.budgetStrength;
+    planInputChanged = true;
+  }
   if (patch.wantsAutofill) planInputChanged = autofillMember(ju, me, profile) || planInputChanged;
 
   if (patch.rsvp) {
@@ -232,6 +242,56 @@ export async function join(
   };
 }
 
+// ---------------------------------------------------------------- 硬约束回问确认（docs/DECISION.md 2.4）
+
+const CONFIRM_YES_RE = /^(对|是|嗯|必须|一定|是的|没错|对的|确定|yes|ok|好)/i;
+const CONFIRM_NO_RE = /^(不是|不用|没那么|尽量|最好|不一定|也不一定|不算|晚点也行|可以晚|不必)/;
+const HARD_DIET: DietTag[] = ["清真", "素食"];
+
+/** 这一轮从自然语言里新冒出来的硬约束（只取第一条，一次只问一件事） */
+function hardToConfirm(me: Member, patch: ChatPatch): { key: string; text: string } | undefined {
+  const p = me.private!;
+  const done = new Set(p.confirmed ?? []);
+  const homeBy = Object.values(patch.availability ?? {}).find((a) => a?.homeBy)?.homeBy;
+  if (homeBy && !done.has("homeBy")) return { key: "homeBy", text: `${homeBy} 前必须回去` };
+  const diet = (patch.dietTags ?? []).find((t) => HARD_DIET.includes(t) && !done.has(`diet:${t}`));
+  if (diet) return { key: `diet:${diet}`, text: `只能吃${diet}的店` };
+  for (const n of patch.needs ?? []) {
+    if (n.kind !== "hard") continue;
+    const stored = (p.needs ?? []).find((x) => x.dim === n.dim && JSON.stringify(x.rule) === JSON.stringify(n.rule));
+    if (stored && !done.has(stored.id)) return { key: stored.id, text: stored.text };
+  }
+  return undefined;
+}
+
+/** 回答了确认问题：确认 → 记进 confirmed；否认 → 降成软偏好。返回给本人的一句话，没回答返回 undefined */
+function resolveConfirm(me: Member, text: string, now: Date): string | undefined {
+  const p = me.private!;
+  const pc = p.pendingConfirm;
+  if (!pc) return undefined;
+  const t = text.trim();
+  const yes = CONFIRM_YES_RE.test(t);
+  const no = CONFIRM_NO_RE.test(t);
+  if (!yes && !no) return undefined;
+  delete p.pendingConfirm;
+  if (yes && !no) {
+    p.confirmed = [...new Set([...(p.confirmed ?? []), pc.key])];
+    return `好，「${pc.text}」我当成硬性的，方案一定照顾到。`;
+  }
+  if (pc.key === "homeBy") {
+    const at = Object.values(p.availability).find((a) => a.homeBy)?.homeBy;
+    for (const a of Object.values(p.availability)) delete a.homeBy;
+    if (at) p.needs = materializeNeeds(p.needs ?? [], [{ dim: "time", kind: "soft", strength: 2, rule: { t: "leaveBy", at }, text: `想 ${at} 前结束` }], "chat", now.toISOString());
+  } else if (pc.key.startsWith("diet:")) {
+    const tag = pc.key.slice(5) as DietTag;
+    p.dietTags = p.dietTags.filter((x) => x !== tag);
+    p.needs = materializeNeeds(p.needs ?? [], [{ dim: "food", kind: "soft", strength: 2, rule: { t: "custom" }, text: `尽量${tag}` }], "chat", now.toISOString());
+  } else {
+    p.needs = (p.needs ?? []).map((n) => (n.id === pc.key ? { ...n, kind: "soft" as const, strength: 3 as const } : n));
+  }
+  return `明白，「${pc.text}」我按"尽量"来排，不会因为它把你排除在外。`;
+}
+
 // ---------------------------------------------------------------- chat
 
 const WIDGET_KEYS = ["rsvp", "location", "availability", "dietTags", "budgetMax", "wantsAutofill"] as const;
@@ -260,24 +320,27 @@ export async function chat(juId: string, token: string, body: ChatBody): Promise
   const text = body.text?.trim() || describeWidget(widget, scheduleBlocks);
   if (!text) throw new HttpError(400, "说点什么吧");
 
-  // 1) 锁内：先应用组件提交的结构化数据，记下"我"这一句
+  // 1) 锁内：先应用组件提交的结构化数据，记下"我"这一句；如果是在回答硬约束确认，先处理掉
   const s1 = await mutateJu(juId, (ctx) => {
     const me = requireMe(ctx, token);
     const profile = profileOf(me);
     applyPatch(ctx, me, widget, profile);
+    const confirmAck = body.text ? resolveConfirm(me, body.text, ctx.now) : undefined;
+    if (confirmAck && me.intake === "done" && me.status === "in") markChanged(ctx.ju, ctx.priv, me.id);
     me.private!.chat.push({ role: "me", text: text.slice(0, 500), at: ctx.now.toISOString() });
-    return { ju: structuredClone(ctx.ju), me: structuredClone(me), profile, quorumPending: quorumHidden(ctx.ju), now: ctx.now };
+    return { ju: structuredClone(ctx.ju), me: structuredClone(me), profile, quorumPending: quorumHidden(ctx.ju), now: ctx.now, confirmAck };
   });
 
-  // 2) 锁外：私聊一轮
-  const r = await chatTurn({
+  // 2) 锁外：私聊一轮。刚回答完确认问题时，这句"对 / 不是"不再当成新内容，局长直接接着问下一项
+  const r0 = await chatTurn({
     ju: s1.ju,
     me: s1.me,
     ...(s1.profile ? { profile: s1.profile } : {}),
-    userText: text,
+    userText: s1.confirmAck ? "" : text,
     quorumPending: s1.quorumPending,
     now: s1.now,
   });
+  const r = s1.confirmAck ? { ...r0, reply: `${s1.confirmAck}${r0.reply}`, patch: {} } : r0;
 
   // 3) 锁内：应用抽取结果（组件已经给了的字段以组件为准），记下局长的回复，推进入局阶段
   return mutateJu(juId, (ctx) => {
@@ -285,10 +348,18 @@ export async function chat(juId: string, token: string, body: ChatBody): Promise
     const patch: ChatPatch = { ...(r.patch ?? {}) };
     for (const k of WIDGET_KEYS) if (widget[k] !== undefined) delete patch[k];
     applyPatch(ctx, me, patch, s1.profile);
-    me.private!.chat.push({ role: "juzhang", text: r.reply, at: ctx.now.toISOString(), ...(r.ask ? { ask: r.ask } : {}) });
+    // 从自然语言里推断出硬约束（门禁 / 清真 / "最多一小时"）：先回问确认，这一轮不往下问。
+    // 确认之前按硬约束算——把门禁当软偏好可能把人排到门禁之后，那比多问一句糟得多
+    const hard = body.text && !r.done ? hardToConfirm(me, patch) : undefined;
+    let out = { reply: r.reply, widget: r.widget, quickReplies: r.quickReplies, done: r.done, ask: r.ask };
+    if (hard) {
+      me.private!.pendingConfirm = { ...hard, at: ctx.now.toISOString() };
+      out = { reply: `收到。确认一下：${hard.text}，是硬性的吗？`, widget: null, quickReplies: ["对，必须", "不是，尽量就行"], done: false, ask: undefined };
+    }
+    me.private!.chat.push({ role: "juzhang", text: out.reply, at: ctx.now.toISOString(), ...(out.ask ? { ask: out.ask } : {}) });
     if (me.private!.chat.length > 200) me.private!.chat.splice(0, me.private!.chat.length - 200);
-    if (r.done && me.intake === "chatting" && me.private!.rsvp !== "no") me.intake = "swiping";
-    return { reply: r.reply, widget: r.widget, quickReplies: r.quickReplies, done: r.done, me: selfMember(me) };
+    if (out.done && me.intake === "chatting" && me.private!.rsvp !== "no") me.intake = "swiping";
+    return { reply: out.reply, widget: out.widget, quickReplies: out.quickReplies, done: out.done, me: selfMember(me) };
   });
 }
 

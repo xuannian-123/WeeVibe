@@ -203,6 +203,21 @@ export const llmReceiptJsonSchema = {
 
 // ---------------------------------------------------------------- 私聊
 
+export const NEED_DIMS = ["time", "travel", "money", "food", "activity", "ambience", "people", "body", "join"] as const;
+export const NEED_TYPES = ["maxCommute", "leaveBy", "avoidCategory", "preferCategory", "quiet", "noAlcohol", "indoor", "lightFood", "noQueue", "custom"] as const;
+
+/** 大模型抽出的一条需求（扁平，方便结构化输出），由 chat.ts 的 toNeed 校验后转成 NeedRule */
+export const llmNeedSchema = z.object({
+  dim: z.enum(NEED_DIMS),
+  kind: z.enum(["hard", "soft"]),
+  strength: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  type: z.enum(NEED_TYPES),
+  minutes: z.number().min(5).max(240).nullable().optional(),
+  at: hhmm.nullable().optional(),
+  words: z.array(z.string().trim().min(1).max(8)).max(6).nullable().optional(),
+  text: z.string().trim().min(1).max(40),
+});
+
 const CHAT_ASKS = ["rsvp", "location", "time", "diet", "budget", "notes", "swipe"] as const;
 
 export const llmChatSchema = z.object({
@@ -213,14 +228,21 @@ export const llmChatSchema = z.object({
   placeName: nullToUndef(z.string().trim().max(30)),
   /** 用户说的时间安排：每个候选日期一条 */
   availability: nullToUndef(
-    z.array(
-      z.object({
-        date: ymd,
-        // 模型偶尔给 null / 非法时间：这一条丢掉，不让整轮回复作废（mergePatch 里过滤）
-        from: hhmm.nullable().optional().catch(undefined),
-        homeBy: hhmm.nullable().optional().catch(undefined),
-        pref: z.enum(["best", "ok", "meh"]).catch("ok"),
-      }),
+    // 模型偶尔按日期给成对象 { "2030-11-01": {...} }：转成数组再校验，不让整轮作废
+    z.preprocess(
+      (v) =>
+        v && typeof v === "object" && !Array.isArray(v)
+          ? Object.entries(v as Record<string, object>).map(([date, a]) => ({ date, ...(a && typeof a === "object" ? a : {}) }))
+          : v,
+      z.array(
+        z.object({
+          date: ymd,
+          // 模型偶尔给 null / 非法时间：这一条丢掉，不让整轮回复作废（mergePatch 里过滤）
+          from: hhmm.nullable().optional().catch(undefined),
+          homeBy: hhmm.nullable().optional().catch(undefined),
+          pref: z.enum(["best", "ok", "meh"]).catch("ok"),
+        }),
+      ),
     ),
   ),
   dietTags: nullToUndef(z.array(z.enum(DIET_TAGS))),
@@ -229,6 +251,10 @@ export const llmChatSchema = z.object({
   noAlcohol: nullToUndef(z.boolean()),
   skipItems: nullToUndef(z.array(z.string().trim().min(1).max(12)).max(10)),
   wantsAutofill: nullToUndef(z.boolean()),
+  /** v5：能算的其他需求（单条不合法就丢掉这一条，不让整轮作废） */
+  needs: nullToUndef(z.array(llmNeedSchema.nullable().catch(null)).max(8)),
+  /** v5：预算有多在意（手头紧 = 3） */
+  budgetStrength: nullToUndef(z.union([z.literal(1), z.literal(2), z.literal(3)]).catch(2)),
 });
 
 const nullable = (t: Record<string, unknown>) => ({ anyOf: [t, { type: "null" }] });
@@ -238,7 +264,7 @@ export const llmChatJsonSchema = {
   additionalProperties: false,
   required: [
     "reply", "askStep", "rsvp", "placeName", "availability", "dietTags", "budgetMax", "note", "noAlcohol", "skipItems",
-    "wantsAutofill",
+    "wantsAutofill", "needs", "budgetStrength",
   ],
   properties: {
     reply: { type: "string", description: "局长的回复，1-3 句，≤80 字" },
@@ -265,6 +291,26 @@ export const llmChatJsonSchema = {
     noAlcohol: nullable({ type: "boolean", description: "明确说了不喝酒 / 开车" }),
     skipItems: nullable({ type: "array", items: { type: "string" }, description: "明确说了不吃的菜" }),
     wantsAutofill: nullable({ type: "boolean", description: "说了“都行 / 随便 / 你定”" }),
+    needs: nullable({
+      type: "array",
+      description: "对方这句话里新说的、时间 / 预算数字 / 忌口之外的需求",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["dim", "kind", "strength", "type", "minutes", "at", "words", "text"],
+        properties: {
+          dim: { type: "string", enum: [...NEED_DIMS] },
+          kind: { type: "string", enum: ["hard", "soft"], description: "hard 只用于对方明确说了必须 / 绝对 / 最多 / 不然就不去" },
+          strength: { type: "integer", enum: [1, 2, 3], description: "1 随口一提 / 2 在意 / 3 很在意" },
+          type: { type: "string", enum: [...NEED_TYPES] },
+          minutes: nullable({ type: "number", description: "maxCommute 的分钟数" }),
+          at: nullable({ type: "string", description: "leaveBy 的时刻 HH:mm" }),
+          words: nullable({ type: "array", items: { type: "string" }, description: "avoidCategory / preferCategory 的品类词，如 火锅、KTV" }),
+          text: { type: "string", description: "局长复述这条需求的一句话，≤20 字，如“单程尽量别超过 30 分钟”" },
+        },
+      },
+    }),
+    budgetStrength: nullable({ type: "integer", enum: [1, 2, 3], description: "预算有多在意：手头紧 = 3，无所谓 = 1" }),
   },
 } as const;
 
