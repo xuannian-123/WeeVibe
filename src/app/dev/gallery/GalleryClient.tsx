@@ -96,6 +96,7 @@ function makeFakeApi(set: (k: FixtureKey) => void, get: () => JuState): Organize
     nextRound: async () => get(),
     seatAbsent: async () => get(),
     verifySeating: fakeVerify,
+    switchFallback: async () => get(),
   };
 }
 

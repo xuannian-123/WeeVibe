@@ -745,10 +745,34 @@ function DiagnosisCard({ c }: { c: Ctx }) {
 
 /* ───────── v5 发起人待办（来自决定书） ───────── */
 function Todos({ c }: { c: Ctx }) {
-  const d = decisionOf(c.state.ju, c.state.members.length);
-  if (!d || (!d.organizerActions.length && !d.risks.length)) return null;
+  const { state, admin, api, busy, run, apply } = c;
+  const d = decisionOf(state.ju, state.members.length);
+  const wx = state.ju.weatherAlert;
+  if (!d || (!d.organizerActions.length && !d.risks.length && !wx)) return null;
   return (
     <Card title="📝 你的待办" hint="局长按这次的情况列的" tone="gold">
+      {wx && (
+        <div className={`mb-2.5 rounded-lg border-2 px-3 py-2 ${wx.suggestFallback ? "border-cinnabar bg-cinnabar-soft" : "border-ink bg-paper"}`}>
+          <p className="text-[13.5px] font-bold">
+            🌦️ 局长复查了天气（活动前 {wx.phase === "24h" ? "24" : "3"} 小时）：{wx.label}
+            {wx.text}
+            {wx.switched ? "，已经换到室内了" : ""}
+          </p>
+          {wx.suggestFallback && d.fallback && (
+            <Button
+              size="sm"
+              className="mt-2 w-full"
+              loading={busy === "fallback"}
+              onClick={run("fallback", async () => {
+                apply(await api.switchFallback(state.ju.id, admin));
+                toast("已经换到室内，大家都收到通知了 ☂️", "ok");
+              })}
+            >
+              切到备案「{d.fallback.poi.name}」（时间不变）
+            </Button>
+          )}
+        </div>
+      )}
       {d.organizerActions.length > 0 && (
         <ul className="space-y-1.5">
           {d.organizerActions.map((a) => (

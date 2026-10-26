@@ -68,7 +68,7 @@ describe("决定书", () => {
   it("发起人待办：订位 / 确认营业时间 / 备案 / 生日蛋糕；订好位就不再提醒", () => {
     const p = proposal({
       risks: [risk("closing", "营业时间未知", { confidence: "unknown" })],
-      fallback: { trigger: "到时候下雨（前一天局长再确认天气）", poi: { id: "i", name: "室内桌游吧", address: "" }, proposalId: "p2" },
+      fallback: { trigger: "到时候下雨（前一天局长再确认天气）", poi: { id: "i", name: "室内桌游吧", address: "", lat: 31, lng: 121, type: "休闲娱乐;桌游" }, proposalId: "p2" },
     });
     const acts = organizerActionsOf(ju(p, { title: "小林生日局" }), p, 8);
     expect(acts).toEqual([

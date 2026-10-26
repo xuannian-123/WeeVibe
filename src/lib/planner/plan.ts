@@ -640,7 +640,7 @@ export function fallbackFor(c: Candidate, pool: Candidate[]): Fallback | undefin
   if (!alt) return undefined;
   return {
     trigger: c.wx.kind === "unknown" ? "到时候下雨（前一天局长再确认天气）" : "雨下大了（中雨及以上）",
-    poi: { id: alt.poi.id, name: alt.poi.name, address: alt.poi.address },
+    poi: alt.poi,
     proposalId: proposalIdFor(alt.slot, alt.poi),
   };
 }

@@ -5,7 +5,7 @@ export { experienceFor, publicExperience, type PlanContext } from "./experience"
 export { planJu, ALGORITHM_VERSION, LABEL_TEXT, outputHashOf } from "./plan";
 export { buildSwipeDeck, predictSwipes, autofillFromProfile, availabilityFromBusy } from "./intake";
 export { fairnessWeights, ledgerEntryFor } from "./fairness";
-export { replanStable } from "./replan";
+export { replanStable, proposalAt } from "./replan";
 export { itineraryFor, etaFor } from "./itinerary";
 export { splitBill, settle } from "./bill";
 export { canonicalJson, chainName, slotLabel } from "./util";
@@ -36,3 +36,5 @@ export {
   isDiningCategory,
   type FormatContext,
 } from "./formats";
+export { slotWeather, classifyWeather, risksFor, openFits, parseOpenTime, weatherEffects, type SlotWeather, type WeatherKind } from "./external";
+export { poiIndoor } from "./needs";

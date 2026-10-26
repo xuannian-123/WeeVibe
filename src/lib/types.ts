@@ -513,6 +513,8 @@ export type Ju = {
   prevJuId?: string;
   /** v4 #18 局内编排：分几轮、每轮怎么分桌、玩什么 */
   seating?: Seating;
+  /** v5 定局后的天气复查（活动前 24 小时 / 3 小时各一次；天气是公开事实） */
+  weatherAlert?: WeatherAlert;
   /** 仅后端 & 发起人 */
   admin?: JuAdmin;
 };
@@ -837,11 +839,29 @@ export type Risk = {
   confidence: "known" | "estimated" | "unknown";
 };
 
+/** v5 定局后天气复查的结果 */
+export type WeatherAlert = {
+  phase: "24h" | "3h";
+  at: string;
+  /** "周六白天" */
+  label: string;
+  /** "中雨" / "暂无预报" */
+  text: string;
+  kind: "ok" | "light" | "heavy" | "unknown";
+  /** 定局的店在户外 */
+  outdoor: boolean;
+  /** 建议发起人切到备案（户外 + 中雨以上，且有备案） */
+  suggestFallback?: boolean;
+  /** 已经切到备案了 */
+  switched?: boolean;
+};
+
 /** v5 备案：触发条件 + B 方案（室内） */
 export type Fallback = {
   /** "当天预报中雨及以上" */
   trigger: string;
-  poi: Pick<Poi, "id" | "name" | "address">;
+  /** 完整的店（公开信息）：切到备案时要用它重算每个人的体验 */
+  poi: Poi;
   /** 备案对应的候选方案 id（同一时间、换成室内的店） */
   proposalId: string;
 };

@@ -124,6 +124,8 @@ export type OrganizerApi = {
   seatAbsent: (id: string, admin: string, memberId: string, absent: boolean) => Promise<JuState>;
   /** v4 #18 排座一键复算 */
   verifySeating: (id: string) => Promise<VerifyResult>;
+  /** v5 天气变坏：一键切到备案（同一时间换成室内的店） */
+  switchFallback: (id: string, admin: string) => Promise<JuState>;
 };
 
 export const api = {
@@ -157,6 +159,7 @@ export const organizerApi: OrganizerApi = {
   nextRound: (id, admin) => request<JuState>(ju(id, "/seating/next"), { body: {}, admin, timeoutMs: 30000 }),
   seatAbsent: (id, admin, memberId, absent) => request<JuState>(ju(id, "/seating/absent"), { body: { memberId, absent }, admin, timeoutMs: 30000 }),
   verifySeating: (id) => request<VerifyResult>(ju(id, "/seating/verify"), { timeoutMs: 30000 }),
+  switchFallback: (id, admin) => request<JuState>(ju(id, "/fallback"), { body: {}, admin, timeoutMs: 45000 }),
 };
 
 /** 邀请链接里携带圈层 token 的查询参数名（A1 的局页读它，入局时作为 tierToken 提交） */

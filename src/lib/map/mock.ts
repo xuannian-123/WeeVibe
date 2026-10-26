@@ -3,7 +3,7 @@
 // searchAround 采用"固定世界"思路：把地图切成 0.01°×0.01° 的格子，每个格子里有哪些店
 // 只由 (关键词, 格子坐标) 决定。所以有人退出、公平中心移动后重算，附近还是同一批店，
 // 不会整批换名字，Demo 时更像真实地图。
-import type { LatLng, MapProvider, Place, Poi } from "../types";
+import type { LatLng, MapProvider, Place, Poi, WeatherDay } from "../types";
 import { estimateCommute, getDemoCenter, hashString, haversineKm, seededRandom } from "./geo";
 
 // ---------------- 地标 ----------------
@@ -302,6 +302,14 @@ function shopsInCell(keyword: string, ci: number, cj: number, suzhou: boolean): 
 
 export function createMockMapProvider(): MapProvider {
   return {
+    // 没有真实天气：默认"没有预报"（当作未知，不编天气）；测试可以用 JUZHANG_MOCK_WEATHER（JSON 数组）注入
+    async weather(): Promise<WeatherDay[]> {
+      try {
+        return process.env.JUZHANG_MOCK_WEATHER ? (JSON.parse(process.env.JUZHANG_MOCK_WEATHER) as WeatherDay[]) : [];
+      } catch {
+        return [];
+      }
+    },
     async searchPlaces(q: string, city: string): Promise<Place[]> {
       const query = (q ?? "").trim();
       const list = landmarksFor(city);

@@ -86,6 +86,13 @@ export function DecisionCard({ state, me }: { state: JuState; me: Member | null 
           ))}
         </ul>
       </div>
+      {state.ju.weatherAlert && (
+        <p className="rounded-lg bg-paper-deep px-3 py-2 text-[13px]">
+          🌦️ 局长刚复查了天气：{state.ju.weatherAlert.label}
+          {state.ju.weatherAlert.text}
+          {state.ju.weatherAlert.switched ? "，已经换到室内" : state.ju.weatherAlert.kind === "light" || state.ju.weatherAlert.kind === "heavy" ? "，记得带伞" : "，放心出发"}
+        </p>
+      )}
       <RisksList p={d.proposal} />
       {d.groupActions.length > 0 && (
         <p className="text-[13.5px]">

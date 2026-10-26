@@ -11,6 +11,7 @@ import type { Itinerary, Ju, Member, Proposal } from "../../types";
 import { nowFor, withJuLock } from "../ju";
 import { runCoreDeadlines } from "./core";
 import { ensurePrivate, pushNoticeOnce } from "./inbox";
+import { dueLeaveAndLateNight, dueWeatherCheck, isQuietHour } from "./reminders";
 import { HOUR, MIN, at, confirmedProposal, hhmm, inOnly, money, saveMembers, ymd } from "./util";
 
 /** 截止前多久开始催 */
@@ -121,8 +122,11 @@ export async function dueDeparts(ju: Ju, members: Member[], now: Date): Promise<
     if (now.getTime() < dep.getTime() - DEPART_LEAD_MIN * MIN) continue;
     // 没出发地时 C 给的是"按集合点估算"，不念给本人听
     const route = m.location ? itin.route.slice(0, 2).join("，") : "";
+    // v5：出发提醒里带上天气（复查结果优先，其次是定局时的预报）
+    const rain = ju.weatherAlert ? ju.weatherAlert.kind === "light" || ju.weatherAlert.kind === "heavy" : (proposal.risks ?? []).some((r) => r.kind === "weather" && /雨|雪/.test(r.text));
     const text =
       `该准备出发啦：建议 ${itin.departAt} 出门${route ? `，${route}` : ""}，预计 ${itin.arriveAt} 到 ${proposal.poi.name}。` +
+      (rain ? "外面有雨，记得带伞。" : "") +
       (itin.leaveAt ? `别忘了 ${itin.leaveAt} 得往回走。` : "");
     if (pushNoticeOnce(m, "depart", key, text, now)) list.push(m);
   }
@@ -171,10 +175,17 @@ export async function tickJu(juId: string): Promise<void> {
       const members = db.listMembers(juId);
       const now = nowFor(ju);
       const touched = new Set<Member>();
-      for (const m of dueNudges(ju, members, now)) touched.add(m);
+      // v5：催入局、催转账不紧急，23:00–8:00 不打扰
+      const quiet = isQuietHour(now);
+      if (!quiet) for (const m of dueNudges(ju, members, now)) touched.add(m);
       for (const m of await dueDeparts(ju, members, now)) touched.add(m);
-      for (const m of duePayReminders(ju, members, now)) touched.add(m);
+      if (!quiet) for (const m of duePayReminders(ju, members, now)) touched.add(m);
+      // v5：天气复查（前 24 / 3 小时）、该往回走了、夜归
+      const wx = await dueWeatherCheck(ju, members, now);
+      for (const m of wx.touched) touched.add(m);
+      for (const m of await dueLeaveAndLateNight(ju, members, now)) touched.add(m);
       if (touched.size) saveMembers(touched);
+      if (wx.dirty) db.saveJu(ju);
     });
   } catch (e) {
     console.warn(`[after] tickJu(${juId}) 失败：${(e as Error)?.message ?? e}`);

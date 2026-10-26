@@ -89,3 +89,15 @@ export async function replanStable(
   changes.push(`订位改为 ${proposal.attendCount} 人`);
   return { proposal, changes, tableSize: proposal.attendCount, keptVenue };
 }
+
+/**
+ * v5 切到备案：同一个时间，换成备案里的那家（室内）店，重新算一遍每个人的体验。
+ * 外部因素照样生效（打烊、天气）；返回的方案 id 和原方案不同（店换了）。
+ */
+export async function proposalAt(ju: Ju, members: Member[], current: Proposal, poi: Proposal["poi"], map: MapProvider): Promise<Proposal> {
+  const ins = inMembersOf(members);
+  const { cands, weights, ctx } = await computeCandidates(ju, ins, map, {}, () => {}, { slots: [current.slot], pois: [poi] });
+  const c = cands[0];
+  if (!c) throw new Error("备案的店算不出来");
+  return toProposal(c, current.label, ins, weights, c, ctx, current.recommended);
+}
