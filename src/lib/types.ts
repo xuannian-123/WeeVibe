@@ -339,6 +339,10 @@ export type Proposal = {
   recommended: boolean;
   /** v5：被照顾到的人数（能来 + 硬约束满足 + 满意度 ≥ 保底线；内部含私密因素算，只公开聚合数） */
   cared?: number;
+  /** v5：会在现场翻车的风险（天气 / 打烊 / 排队 / 夜归），每条都带应对办法 */
+  risks?: Risk[];
+  /** v5：户外方案碰上坏天气（或 4 天外没有预报）时的室内备案 */
+  fallback?: Fallback;
 };
 
 /** #9 可复核的拍板：同样输入一定得到同样结论 */
@@ -766,6 +770,30 @@ export type PrivacySelfTest = {
   at: string;
 };
 
+/** v5 天气：高德只给今天起 4 天、白天 / 夜间各一条（没有降水概率、没有逐小时） */
+export type WeatherHalf = { text: string; temp: number; windPower: string };
+export type WeatherDay = { date: string; day: WeatherHalf; night: WeatherHalf };
+
+/** v5 方案的风险（公开安全：只涉及所有人共享的公开事实） */
+export type Risk = {
+  kind: "weather" | "closing" | "queue" | "lateNight" | "unknown";
+  level: "low" | "mid" | "high";
+  /** "周五夜间预报小雨" */
+  text: string;
+  /** "带伞；这家在室内，不受影响" */
+  mitigation: string;
+  confidence: "known" | "estimated" | "unknown";
+};
+
+/** v5 备案：触发条件 + B 方案（室内） */
+export type Fallback = {
+  /** "当天预报中雨及以上" */
+  trigger: string;
+  poi: Pick<Poi, "id" | "name" | "address">;
+  /** 备案对应的候选方案 id（同一时间、换成室内的店） */
+  proposalId: string;
+};
+
 /** 地图能力抽象：高德实现 + 无 key 时的 mock 实现 */
 export interface MapProvider {
   searchPlaces(q: string, city: string): Promise<Place[]>;
@@ -774,4 +802,6 @@ export interface MapProvider {
   commute(origins: LatLng[], dest: LatLng): Promise<{ minutes: number; distanceKm: number }[]>;
   /** 公交 / 地铁路线（给个人行程卡），失败时实现方应退回到打车估算 */
   transitRoute(origin: LatLng, dest: LatLng, city: string): Promise<{ minutes: number; steps: string[] }>;
+  /** v5：集合点附近的天气预报（可选；拿不到返回 []，当作"未知"） */
+  weather?(center: LatLng): Promise<WeatherDay[]>;
 }

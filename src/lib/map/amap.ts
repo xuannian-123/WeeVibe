@@ -3,7 +3,7 @@
 // - 同一 URL 成功结果在内存缓存 10 分钟（Demo 时反复刷新不打高德）
 // - 并发上限 3，遇到 QPS 超限自动重试一次
 // 注意：高德返回里空值常常是 [] 而不是 ""，解析时一律用 str()/num() 处理。
-import type { LatLng, MapProvider, Place, Poi } from "../types";
+import type { LatLng, MapProvider, Place, Poi, WeatherDay } from "../types";
 import { estimateCommute } from "./geo";
 
 const BASE = "https://restapi.amap.com";
@@ -141,6 +141,7 @@ type RegeoResp = AmapBase & {
     addressComponent?: {
       township?: unknown;
       neighborhood?: { name?: unknown };
+      adcode?: unknown;
       building?: { name?: unknown };
       streetNumber?: { street?: unknown; number?: unknown };
     };
@@ -155,8 +156,23 @@ type AroundPoi = {
   address?: unknown;
   location?: unknown;
   tel?: unknown;
-  biz_ext?: { rating?: unknown; cost?: unknown } | unknown[];
+  biz_ext?: { rating?: unknown; cost?: unknown; open_time?: unknown } | unknown[];
   photos?: { url?: unknown }[];
+  indoor_map?: unknown;
+  indoor_data?: { floor?: unknown; truefloor?: unknown } | unknown[];
+};
+type WeatherResp = AmapBase & {
+  forecasts?: {
+    casts?: {
+      date?: unknown;
+      dayweather?: unknown;
+      nightweather?: unknown;
+      daytemp?: unknown;
+      nighttemp?: unknown;
+      daypower?: unknown;
+      nightpower?: unknown;
+    }[];
+  }[];
 };
 type AroundResp = AmapBase & { pois?: AroundPoi[] };
 type DistanceResp = AmapBase & {
@@ -223,6 +239,10 @@ export function parseAroundPoi(p: AroundPoi): Poi | undefined {
   const cost = num(biz.cost);
   const photo = Array.isArray(p.photos) && p.photos.length > 0 ? str(p.photos[0]?.url) : "";
   const tel = str(p.tel);
+  const openTime = str((biz as { open_time?: unknown }).open_time);
+  // 有室内地图 / 楼层 = 在楼里（商场、写字楼）；没有就不下结论
+  const indoorData = p.indoor_data && !Array.isArray(p.indoor_data) ? p.indoor_data : undefined;
+  const indoor = str(p.indoor_map) === "1" || !!str(indoorData?.floor) || !!str(indoorData?.truefloor) ? true : undefined;
   return {
     id,
     name,
@@ -234,7 +254,25 @@ export function parseAroundPoi(p: AroundPoi): Poi | undefined {
     type: str(p.type),
     tel: tel || undefined,
     photoUrl: photo || undefined,
+    ...(openTime ? { openTime } : {}),
+    ...(indoor ? { indoor } : {}),
   };
+}
+
+/** 高德天气 → WeatherDay[]（今天起 4 天，白天 / 夜间各一条） */
+export function parseWeather(data: WeatherResp): WeatherDay[] {
+  const casts = data.forecasts?.[0]?.casts ?? [];
+  const out: WeatherDay[] = [];
+  for (const c of casts) {
+    const date = str(c.date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    out.push({
+      date,
+      day: { text: str(c.dayweather), temp: num(c.daytemp) ?? 20, windPower: str(c.daypower) },
+      night: { text: str(c.nightweather), temp: num(c.nighttemp) ?? 15, windPower: str(c.nightpower) },
+    });
+  }
+  return out;
 }
 
 export function pickRegeoLabel(data: RegeoResp): string {
@@ -249,6 +287,8 @@ export function pickRegeoLabel(data: RegeoResp): string {
   if (street) return `${street}${str(c?.streetNumber?.number)}`;
   return str(c?.neighborhood?.name) || str(c?.building?.name) || str(c?.township) || str(r.formatted_address);
 }
+
+const weatherCache = new Map<string, { at: number; days: WeatherDay[] }>();
 
 // ---------- Provider ----------
 export function createAmapProvider(key: string): MapProvider {
@@ -269,6 +309,19 @@ export function createAmapProvider(key: string): MapProvider {
         out.push({ label: name, ...loc });
       }
       return out;
+    },
+
+    async weather(center: LatLng): Promise<WeatherDay[]> {
+      // 先用逆地理拿区县 adcode，再查预报；同一个区县 30 分钟内复用
+      const regeo = await amapGet<RegeoResp>("/v3/geocode/regeo", { location: fmtLocation(center), extensions: "base" }, key);
+      const adcode = str(regeo.regeocode?.addressComponent?.adcode);
+      if (!adcode) return [];
+      const hit = weatherCache.get(adcode);
+      if (hit && Date.now() - hit.at < 30 * 60_000) return structuredClone(hit.days);
+      const data = await amapGet<WeatherResp>("/v3/weather/weatherInfo", { city: adcode, extensions: "all" }, key);
+      const days = parseWeather(data);
+      weatherCache.set(adcode, { at: Date.now(), days });
+      return days;
     },
 
     async reverseGeocode(p: LatLng): Promise<string> {

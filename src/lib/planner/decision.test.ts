@@ -1,7 +1,7 @@
 // 决策基准集（docs/DECISION.md 第 11 节）：手写场景，每个都能手算出"对的答案"。
 // 用一张可控的假地图：店、每人到每店的通勤分钟全部写死，结果和真实路况无关。
 import { describe, expect, it } from "vitest";
-import type { DayAvailability, LatLng, LedgerEntry, MapProvider, Member, MemberPrivate, Need, Poi } from "../types";
+import type { DayAvailability, LatLng, LedgerEntry, MapProvider, Member, MemberPrivate, Need, Poi, WeatherDay } from "../types";
 import { generateSlots, planJu } from "./index";
 import { ju as mkJu, member, spec } from "./testutil";
 
@@ -10,7 +10,7 @@ import { ju as mkJu, member, spec } from "./testutil";
 type Shop = Partial<Poi> & { id: string; name: string };
 
 /** 成员 i 的出发地 lat = 31 + i/1000；店 p 的 lng = 121 + p/1000。commute[i][p] = 分钟 */
-function fakeMap(shops: Shop[], commute: number[][]): MapProvider {
+function fakeMap(shops: Shop[], commute: number[][], forecast: WeatherDay[] = []): MapProvider {
   const pois: Poi[] = shops.map((s, p) => ({
     address: "某路 1 号",
     type: "餐饮服务;中餐厅",
@@ -28,6 +28,7 @@ function fakeMap(shops: Shop[], commute: number[][]): MapProvider {
     searchAround: async () => pois,
     commute: async (origins, dest) => origins.map((o) => ({ minutes: commute[mIdx(o)]?.[pIdx(dest)] ?? 20, distanceKm: 5 })),
     transitRoute: async () => ({ minutes: 20, steps: [] }),
+    weather: async () => forecast,
   };
 }
 
@@ -51,12 +52,19 @@ function people(n: number, over: (i: number) => Partial<MemberPrivate> & { role?
     return member(`P${i}`, 31 + i / 1000, 120, { id: `p${i}`, ...(role ? { role } : {}), priv: { availability: day(), ...priv } });
   });
 }
-async function decide(shops: Shop[], commute: number[][], members: Member[], specOver: Parameters<typeof spec>[0] = {}, ledgers: Record<string, LedgerEntry[]> = {}) {
+async function decide(
+  shops: Shop[],
+  commute: number[][],
+  members: Member[],
+  specOver: Parameters<typeof spec>[0] = {},
+  ledgers: Record<string, LedgerEntry[]> = {},
+  forecast: WeatherDay[] = [],
+) {
   const s = spec({ dates: [DATE], earliest: "18:30", latest: "19:30", durationMinutes: 120, category: "聚餐", poiKeywords: ["餐厅"], budgetPerPerson: undefined, ...specOver });
   const j = mkJu(s, generateSlots(s), { id: "bench" });
   // 店名里带上类型词，确保通过品类过滤
   const shopsOk = shops.map((x) => ({ ...x, type: x.type ?? "餐饮服务;中餐厅;餐厅" }));
-  return planJu(j, members, fakeMap(shopsOk, commute), { auditSecret: "bench", ledgers, now: new Date("2030-10-30T10:00:00+08:00") });
+  return planJu(j, members, fakeMap(shopsOk, commute, forecast), { auditSecret: "bench", ledgers, now: new Date("2030-10-30T10:00:00+08:00") });
 }
 const rows = (n: number, f: (i: number) => number[]) => Array.from({ length: n }, (_, i) => f(i));
 
@@ -147,6 +155,61 @@ describe("决策基准集", () => {
     expect(rec.attendCount).toBe(5);
     expect(plan.why?.join("")).toMatch(/照顾到 5\/6 人/);
     expect(plan.why?.join("")).toMatch(/1 位朋友这个时间来不了/);
+  });
+
+  // ---------------- 外部因素（docs/DECISION.md 第 6 节）
+
+  it("B10 营业时间：不会排到打烊之后（结束前至少留 15 分钟）", async () => {
+    // 甲店评分高但 21:00 打烊；乙店 23:00 打烊。活动 150 分钟：18:30 开始 21:00 结束，甲店来不及
+    const ms = people(5);
+    const shops = [
+      { id: "early", name: "甲店", openTime: "11:00-21:00", rating: 4.9 },
+      { id: "late", name: "乙店", openTime: "11:00-23:00", rating: 4.0 },
+    ];
+    const { plan } = await decide(shops, rows(5, () => [15, 15]), ms, { durationMinutes: 150 });
+    expect(plan.proposals.every((p) => p.poi.id === "late")).toBe(true);
+    const rec = plan.proposals[0];
+    expect((rec.risks ?? []).some((r) => r.kind === "closing")).toBe(false);
+  });
+
+  it("B11 户外 + 当晚中雨：户外方案不成立，换室内", async () => {
+    const ms = people(5);
+    const shops = [
+      { id: "camp", name: "江边露天烧烤营地", type: "体育休闲服务;露营地", rating: 4.9 },
+      { id: "indoor", name: "室内烤肉", indoor: true, rating: 4.1 },
+    ];
+    const fc: WeatherDay[] = [{ date: DATE, day: { text: "阴", temp: 18, windPower: "1-3" }, night: { text: "中雨", temp: 14, windPower: "1-3" } }];
+    const { plan } = await decide(shops, rows(5, () => [15, 15]), ms, {}, {}, fc);
+    expect(plan.proposals.every((p) => p.poi.id === "indoor")).toBe(true);
+    const rain = plan.proposals[0].risks?.find((r) => r.kind === "weather");
+    expect(rain?.text).toBe("周五夜间预报中雨");
+    expect(rain?.mitigation).toContain("室内");
+  });
+
+  it("B12 户外 + 4 天外还没有预报：可以选户外，但必须带室内备案", async () => {
+    const ms = people(5);
+    const shops = [
+      { id: "camp", name: "江边露天烧烤营地", type: "体育休闲服务;露营地", rating: 4.9 },
+      { id: "indoor", name: "室内烤肉", indoor: true, rating: 4.0 },
+    ];
+    const { plan } = await decide(shops, rows(5, () => [15, 15]), ms);
+    const camp = plan.proposals.find((p) => p.poi.id === "camp")!;
+    expect(camp).toBeDefined();
+    expect(camp.fallback?.poi.id).toBe("indoor");
+    expect(camp.fallback?.trigger).toMatch(/下雨/);
+    expect(camp.risks?.find((r) => r.kind === "weather")?.confidence).toBe("unknown");
+  });
+
+  it("B13 小雨：室内的店照常选，风险里提醒带伞；户外的店扣分", async () => {
+    const ms = people(5);
+    const shops = [
+      { id: "camp", name: "江边露天烧烤营地", type: "体育休闲服务;露营地", rating: 4.5 },
+      { id: "indoor", name: "室内烤肉", indoor: true, rating: 4.3 },
+    ];
+    const fc: WeatherDay[] = [{ date: DATE, day: { text: "小雨", temp: 18, windPower: "1-3" }, night: { text: "小雨", temp: 14, windPower: "1-3" } }];
+    const { plan } = await decide(shops, rows(5, () => [15, 15]), ms, {}, {}, fc);
+    expect(plan.proposals[0].poi.id).toBe("indoor");
+    expect(plan.proposals[0].risks?.find((r) => r.kind === "weather")?.mitigation).toBe("带伞；这家在室内，不受影响");
   });
 
   it("B9 推荐理由只用公开信息：不出现任何人的私密预算或需求原文", async () => {

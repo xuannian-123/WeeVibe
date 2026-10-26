@@ -7,8 +7,11 @@ import type {
   LedgerEntry,
   MapProvider,
   Member,
+  Fallback,
   MyExperience,
   NeedResult,
+  Risk,
+  WeatherDay,
   Plan,
   Poi,
   Proposal,
@@ -20,7 +23,9 @@ import { estimateCommute, haversineKm, round1 } from "../map/geo";
 import { fairCenter } from "./center";
 import { categoryMatches, categoryWords } from "./category";
 import { isHotpotCategory } from "./diet";
-import { experienceDetail, queueMinutes, slotTimes, type PlanContext, type PrivateFlags } from "./experience";
+import { CARE_FLOOR, experienceDetail, queueMinutes, slotTimes, type PlanContext, type PrivateFlags } from "./experience";
+import { openFits, risksFor, slotWeather, weatherEffects, type Effects, type SlotWeather } from "./external";
+import { poiIndoor } from "./needs";
 import { fairnessWeights } from "./fairness";
 import { generateSlots } from "./slots";
 import { canonicalJson, chainName, cmpStr, hmToMin, hmacHex, sha256Hex, slotLabel } from "./util";
@@ -71,6 +76,12 @@ export type Candidate = {
   cost: number;
   score: number;
   vetoed: boolean;
+  /** v5 外部因素：现场风险（公开事实） */
+  risks: Risk[];
+  /** v5 外部因素：方案不成立的原因（打烊前来不及 / 户外遇上中雨以上），成立时为空 */
+  infeasible?: string;
+  /** v5 外部因素：这个时间段的天气 */
+  wx: SlotWeather;
 };
 
 export function inMembersOf(members: Member[]): Member[] {
@@ -176,12 +187,18 @@ export function evaluateCandidate(
   ctx: PlanContext,
   idx: number,
   fallbackCost: number,
+  eff?: Effects,
 ): Candidate {
   const pubs: Experience[] = [];
   const mines: Candidate["mines"] = [];
   const flags: PrivateFlags[] = [];
   members.forEach((m, i) => {
     const d = experienceDetail(m, slot, poi, commutes[i], ctx);
+    // 天气（公开事实）：户外 + 小雨 / 高温 / 严寒 / 大风，所有到场的人一起扣
+    if (eff?.penalty && d.pub.status !== "absent") {
+      const u = Math.max(0, d.mine.utility - eff.penalty);
+      d.mine = { ...d.mine, utility: u, cared: d.mine.cared && u >= CARE_FLOOR, notes: eff.note ? [...d.mine.notes, eff.note] : d.mine.notes };
+    }
     pubs.push(d.pub);
     mines.push(d.mine);
     flags.push(d.flags);
@@ -217,6 +234,8 @@ export function evaluateCandidate(
     cost: poi.costPerPerson ?? fallbackCost,
     score: attend ? Math.round(Math.max(0, Math.min(100, raw))) : 0,
     vetoed,
+    risks: [],
+    wx: { kind: "unknown", label: "" },
   };
 }
 
@@ -429,6 +448,7 @@ export function toProposal(
     highlights,
     recommended,
     cared: c.cared,
+    ...(c.risks.length ? { risks: c.risks } : {}),
   };
 }
 
@@ -567,13 +587,56 @@ export async function computeCandidates(
   const costs = pois.map((p) => p.costPerPerson).filter((x): x is number => typeof x === "number");
   const fallbackCost = Math.round(median(costs) ?? ju.spec.budgetPerPerson ?? 100);
 
+  // v5 外部因素：天气（集合点附近，4 天内）+ 营业时间 + 室内 / 户外
+  let forecast: WeatherDay[] = [];
+  if (map.weather) {
+    try {
+      forecast = await map.weather(center);
+    } catch {
+      forecast = [];
+    }
+  }
+  const dates = [...new Set(slots.map((sl) => slotWeather(forecast, sl).label))];
+  const known = dates.map((label) => ({ label, w: slots.map((sl) => slotWeather(forecast, sl)).find((x) => x.label === label)! })).filter((x) => x.w.half);
+  if (known.length) trace("search", `查了天气：${known.map((x) => `${x.label}${x.w.half!.text} ${x.w.half!.temp}℃`).join("，")}`);
+  else if (pois.some((p) => poiIndoor(p) === false)) trace("warn", "候选日期还没有天气预报（只能看 4 天内），户外的店会准备室内备案");
+
   const cands: Candidate[] = [];
   let idx = 0;
   for (const slot of slots)
     pois.forEach((poi, pi) => {
-      cands.push(evaluateCandidate(members, slot, poi, matrix[pi], weights, ctx, idx++, fallbackCost));
+      const { start, end } = slotTimes(slot);
+      const wx = slotWeather(forecast, slot);
+      const eff = weatherEffects(wx, poi);
+      const open = openFits(poi.openTime, start, end);
+      const commutes = eff.commuteFactor === 1 ? matrix[pi] : matrix[pi].map((c) => Math.round(c * eff.commuteFactor));
+      const c = evaluateCandidate(members, slot, poi, commutes, weights, ctx, idx++, fallbackCost, eff);
+      c.wx = wx;
+      c.risks = risksFor(slot, poi, wx, open, queueMinutes(slot, poi));
+      if (open.fit === "no") c.infeasible = open.closeAt ? `店 ${open.closeAt} 打烊，来不及` : "那个时间不营业";
+      else if (eff.infeasible) c.infeasible = eff.reason;
+      cands.push(c);
     });
-  return { slots, pois, center, located, cands, weights, ctx, matrix };
+  // 硬过滤：打烊前来不及、户外遇上中雨以上的组合直接不成立；全都不成立时保留原样，交给风险提示
+  const feasible = cands.filter((c) => !c.infeasible);
+  const closed = cands.filter((c) => c.infeasible?.includes("打烊") || c.infeasible?.includes("营业")).length;
+  const rained = cands.length - feasible.length - closed;
+  if (feasible.length && feasible.length < cands.length) {
+    trace("filter", [closed ? `${closed} 个组合打烊前来不及` : "", rained ? `${rained} 个户外组合遇上坏天气` : ""].filter(Boolean).join("，") + "，直接排除");
+  }
+  return { slots, pois, center, located, cands: feasible.length ? feasible : cands, weights, ctx, matrix };
+}
+
+/** v5 备案：户外方案碰上小雨 / 还没有预报时，挑同一时间最好的室内（或不是户外的）店 */
+export function fallbackFor(c: Candidate, pool: Candidate[]): Fallback | undefined {
+  if (poiIndoor(c.poi) !== false || (c.wx.kind !== "light" && c.wx.kind !== "unknown")) return undefined;
+  const alt = pool.filter((x) => x.slot.id === c.slot.id && poiIndoor(x.poi) !== false && !x.infeasible).sort(decisionCompare)[0];
+  if (!alt) return undefined;
+  return {
+    trigger: c.wx.kind === "unknown" ? "到时候下雨（前一天局长再确认天气）" : "雨下大了（中雨及以上）",
+    poi: { id: alt.poi.id, name: alt.poi.name, address: alt.poi.address },
+    proposalId: proposalIdFor(alt.slot, alt.poi),
+  };
 }
 
 /**
@@ -642,7 +705,13 @@ export async function planJu(
 
   const picked = pickProposals(front, pool);
   const rec = picked[0].c;
-  const proposals = picked.map((p, i) => toProposal(p.c, p.label, inMembers, weights, rec, { spec: ju.spec }, i === 0));
+  const proposals = picked.map((p, i) => {
+    const prop = toProposal(p.c, p.label, inMembers, weights, rec, { spec: ju.spec }, i === 0);
+    const fb = fallbackFor(p.c, pool);
+    return fb ? { ...prop, fallback: fb } : prop;
+  });
+  const fbCount = proposals.filter((p) => p.fallback).length;
+  if (fbCount) trace("decide", `${fbCount} 个户外方案准备了室内备案`);
   trace("decide", `挑出 ${proposals.length} 个标签不同的方案：${proposals.map((p) => p.labelText).join(" / ")}`);
 
   const top = proposals[0];

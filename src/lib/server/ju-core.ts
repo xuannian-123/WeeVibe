@@ -254,9 +254,11 @@ export type PlanDeps = {
 type MapLog = Record<string, unknown>;
 
 /** 包一层地图：记录每次调用的返回值，复算时回放 */
+type CoreMethod = Exclude<keyof MapProvider, "weather">;
+
 export function recordingMap(map: MapProvider, log: MapLog): MapProvider {
   const wrap =
-    <K extends keyof MapProvider>(k: K) =>
+    <K extends CoreMethod>(k: K) =>
     async (...args: unknown[]) => {
       const key = `${k}:${JSON.stringify(args)}`;
       const r = await (map[k] as (...a: unknown[]) => Promise<unknown>)(...args);
@@ -269,13 +271,20 @@ export function recordingMap(map: MapProvider, log: MapLog): MapProvider {
     searchAround: wrap("searchAround") as MapProvider["searchAround"],
     commute: wrap("commute") as MapProvider["commute"],
     transitRoute: wrap("transitRoute") as MapProvider["transitRoute"],
+    // 天气也要记下来：复算时用当时的预报，否则天气一变哈希就对不上
+    weather: async (center) => {
+      const key = `weather:${JSON.stringify([center])}`;
+      const r = map.weather ? await map.weather(center) : [];
+      log[key] = structuredClone(r);
+      return r;
+    },
   };
 }
 
 /** 回放地图：有记录就用记录，没有再问真地图 */
 export function replayMap(log: MapLog, fallback: MapProvider): MapProvider {
   const wrap =
-    <K extends keyof MapProvider>(k: K) =>
+    <K extends CoreMethod>(k: K) =>
     async (...args: unknown[]) => {
       const key = `${k}:${JSON.stringify(args)}`;
       if (key in log) return structuredClone(log[key]);
@@ -287,6 +296,11 @@ export function replayMap(log: MapLog, fallback: MapProvider): MapProvider {
     searchAround: wrap("searchAround") as MapProvider["searchAround"],
     commute: wrap("commute") as MapProvider["commute"],
     transitRoute: wrap("transitRoute") as MapProvider["transitRoute"],
+    weather: async (center) => {
+      const key = `weather:${JSON.stringify([center])}`;
+      if (key in log) return structuredClone(log[key]) as Awaited<ReturnType<NonNullable<MapProvider["weather"]>>>;
+      return fallback.weather ? fallback.weather(center) : [];
+    },
   };
 }
 

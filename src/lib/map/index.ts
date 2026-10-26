@@ -12,10 +12,13 @@ export const MAP_UNAVAILABLE = "地图服务暂时不可用";
  * 高德出错时的策略：
  * - searchPlaces / reverseGeocode / commute / transitRoute：降级到 mock（地标 / 直线估算），打 console.warn
  * - searchAround：绝不降级（虚构店铺不能当真店推荐），重试 1 次后抛出"地图服务暂时不可用"
+ * - weather：失败返回 []（当作"没有预报"），不降级到编出来的天气
  */
+type CoreMethod = Exclude<keyof MapProvider, "weather">;
+
 export function withFallback(primary: MapProvider, fallback: MapProvider, name = "amap"): MapProvider {
   const wrap =
-    <K extends keyof MapProvider>(method: K) =>
+    <K extends CoreMethod>(method: K) =>
     async (...args: Parameters<MapProvider[K]>) => {
       try {
         return await (primary[method] as (...a: unknown[]) => Promise<unknown>)(...args);
@@ -41,6 +44,16 @@ export function withFallback(primary: MapProvider, fallback: MapProvider, name =
     },
     commute: wrap("commute") as MapProvider["commute"],
     transitRoute: wrap("transitRoute") as MapProvider["transitRoute"],
+    // 天气拿不到就当"未知"（返回 []），绝不降级成编出来的天气
+    weather: async (center) => {
+      if (!primary.weather) return [];
+      try {
+        return await primary.weather(center);
+      } catch (e) {
+        console.warn(`[map] ${name}.weather 失败，当作没有预报：${(e as Error)?.message ?? e}`);
+        return [];
+      }
+    },
   };
 }
 
