@@ -6,7 +6,8 @@ const head = (f: PublicFacts) => `【${f.title}】`;
 
 function proposalLines(f: PublicFacts): string[] {
   return (f.proposals ?? []).map((p) => {
-    const cost = p.costPerPerson !== undefined ? ` 人均${Math.round(p.costPerPerson)}` : "";
+    // 标题里已经写了人均就不再重复
+    const cost = p.costPerPerson !== undefined && !/人均/.test(p.headline) ? ` 人均${Math.round(p.costPerPerson)}` : "";
     return `· ${p.labelText}${p.recommended ? "（局长推荐）" : ""}：${p.slotLabel} ${p.poiName}${cost}，${p.headline}`;
   });
 }

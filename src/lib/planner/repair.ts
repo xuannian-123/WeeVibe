@@ -45,7 +45,7 @@ function someone(k: number, rest: string): string {
 function fixFor(m: Member, i: number, c: Candidate, ctx: PlanContext, concessions: number): AskDraft | undefined {
   if (c.mines[i].cared || c.flags[i].hard) return undefined;
   const commute = c.pubs[i].commuteMin;
-  const when = `${slotLabel(c.slot.start)}在「${c.poi.name}」`;
+  const when = `${slotLabel(c.slot.start)}，在「${c.poi.name}」`;
 
   if (c.pubs[i].status === "absent") {
     const tf = timeFit(m, c.slot, commute);
@@ -53,7 +53,9 @@ function fixFor(m: Member, i: number, c: Candidate, ctx: PlanContext, concession
     const relax = { maxLateMin: Math.max(45, tf.late), minStayMin: Math.min(60, tf.stay) };
     const trial = { ...m, private: { ...m.private!, relax: { ...m.private?.relax, ...relax } } };
     if (!experienceDetail(trial, c.slot, c.poi, commute, ctx).mine.cared) return undefined;
-    const cost = askCostOf(m, "selfTime", undefined, concessions);
+    // 让人让得越多越贵：晚到超过 45 分钟的部分、少待不到 60 分钟的部分都算进去，优先问让得少的
+    const imposition = (Math.max(0, tf.late - 45) / 45) * 0.5 + (Math.max(0, 60 - tf.stay) / 30) * 0.5;
+    const cost = askCostOf(m, "selfTime", undefined, concessions) + imposition;
     if (!Number.isFinite(cost)) return undefined;
     const lateText = tf.late > 45 ? `要晚到 ${tf.late} 分钟` : "";
     const stayText = tf.stay < 60 ? `大约只能待 ${tf.stay} 分钟${tf.leaveAt ? `（${tf.leaveAt} 得走）` : ""}` : "";
@@ -137,12 +139,13 @@ export function planRepairs(
   }
   const asks = best && best.potential > rec.cared ? best.fixes : [];
 
-  // 局长自己解决不了的，交给发起人
+  // 局长自己解决不了的，交给发起人（问完就能照顾到所有人时不用建议）
   const suggestions: string[] = [];
+  const solvable = !!best && best.potential >= n && asks.length > 0;
   const stillTime = rec.pubs.some((e, i) => e.status === "absent" && !rec.mines[i].cared && !asks.some((a) => a.memberId === members[i].id));
-  if (stillTime && !cands.some((c) => c.pubs.every((e) => e.status !== "absent"))) suggestions.push("加一个候选时间（比如周末下午），可能让所有人都能来");
+  if (!solvable && stillTime && !cands.some((c) => c.pubs.every((e) => e.status !== "absent"))) suggestions.push("加一个候选时间（比如周末下午），可能让所有人都能来");
   const stillHard = rec.flags.some((f, i) => f.hard && !rec.mines[i].cared);
-  if (stillHard && !cands.some((c) => c.flags.every((f) => !f.hard))) suggestions.push("附近没有满足所有人忌口 / 硬性要求的店，可以换个品类或扩大范围");
+  if (!solvable && stillHard && !cands.some((c) => c.flags.every((f) => !f.hard))) suggestions.push("附近没有满足所有人忌口 / 硬性要求的店，可以换个品类或扩大范围");
 
   return {
     asks,

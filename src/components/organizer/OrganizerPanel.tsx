@@ -725,7 +725,7 @@ function DiagnosisCard({ c }: { c: Ctx }) {
     <Card title={d ? "🩺 没有完美方案" : "🤝 局长协调过了"} hint="只有人数，看不出是谁" tone="gold">
       {d && (
         <>
-          <p className="text-[14px] font-bold">还有 {d.uncared} 位朋友没照顾好：{d.reasons.join("；")}</p>
+          <p className="text-[14px] font-bold">{d.reasons.join("；")}</p>
           {d.coordinating > 0 && <p className="mt-1 text-[13.5px]">局长正在私下问 {d.coordinating} 位朋友能不能让一小步，都答完会自动重算。</p>}
           {d.suggestions.length > 0 && (
             <ul className="mt-2 space-y-1">
