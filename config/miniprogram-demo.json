@@ -1,0 +1,7 @@
+{
+  "TARO_APP_LOGIN_MODE": "cloud",
+  "TARO_APP_API_TRANSPORT": "cloud-http",
+  "TARO_APP_CLOUD_ENV_ID": "cloud1-d2gl86h3t5a8b5369",
+  "TARO_APP_CLOUD_LOGIN_FUNCTION": "weegoLogin20261025",
+  "TARO_APP_CLOUD_API_FUNCTION": "weego-api-demo"
+}
