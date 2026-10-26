@@ -676,7 +676,20 @@ export type PublicFacts = {
   }[];
   recommendation?: string;
   caredFor?: string;
-  confirmed?: { slotLabel: string; poiName: string; address: string; tel?: string; headcount: number };
+  /** v5：推荐理由（三级准则各一句） */
+  why?: string[];
+  confirmed?: {
+    slotLabel: string;
+    poiName: string;
+    address: string;
+    tel?: string;
+    headcount: number;
+    /** v5 决定书的公开部分 */
+    why?: string[];
+    risks?: { text: string; mitigation: string }[];
+    fallback?: { trigger: string; poiName: string };
+    groupActions?: string[];
+  };
   settlement?: { total: number; payCount: number; paidCount: number; explain: string[] };
   revisions?: string[];
 };

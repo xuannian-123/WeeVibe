@@ -13,6 +13,7 @@ import { StampSlam } from "../Stamp";
 import { toast } from "../toast";
 import { WaitlistCard } from "./Waiting";
 import { CircleCard, ClickCard, SeatCard, SocialCard } from "./Social";
+import { DecisionCard } from "./Decision";
 
 export function photoSrc(juId: string, p: string): string {
   return /^(https?:|data:|\/)/.test(p) ? p : api.photoUrl(juId, p);
@@ -420,6 +421,8 @@ export function ConfirmedView({ state, me, actions }: { state: JuState; me: Memb
         <>
           {/* v4：排了座就先看座位（当天最要紧）；还没排座时请大家帮局长标一下熟不熟 */}
           {inJu && s && <SeatCard state={state} me={me} actions={actions} />}
+          {/* v5：为什么这么定 + 注意事项 + 你跟局长说的每一条 */}
+          <DecisionCard state={state} me={inJu ? me : null} />
           {inJu && <ItineraryCard state={state} actions={actions} p={p} />}
           {travel}
           {inJu && phase === "day" && <OnTheWay state={state} me={me} actions={actions} p={p} />}

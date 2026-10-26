@@ -10,6 +10,7 @@ import { toast } from "@/components/toast";
 import { InviteLinks } from "@/components/launch/InviteLinks";
 import { confirmedProposal, slotLabel, voteTally, yuan } from "@/components/screen/fmt";
 import { errMsg, organizerApi, type CreateResult, type OrganizerApi, type Payments } from "./api";
+import { decisionOf } from "@/lib/decision";
 import { Card, CopyBlock, type Ctx } from "./bits";
 import { SeatingPanel } from "./Seating";
 import { SimCall } from "./SimCall";
@@ -714,6 +715,31 @@ function DemoTools({ c }: { c: Ctx }) {
   );
 }
 
+/* ───────── v5 发起人待办（来自决定书） ───────── */
+function Todos({ c }: { c: Ctx }) {
+  const d = decisionOf(c.state.ju, c.state.members.length);
+  if (!d || (!d.organizerActions.length && !d.risks.length)) return null;
+  return (
+    <Card title="📝 你的待办" hint="局长按这次的情况列的" tone="gold">
+      {d.organizerActions.length > 0 && (
+        <ul className="space-y-1.5">
+          {d.organizerActions.map((a) => (
+            <li key={a} className="flex gap-2 text-[14px] leading-snug">
+              <span aria-hidden>☐</span>
+              <span>{a}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {d.risks.length > 0 && (
+        <p className="mt-2 text-[12.5px] leading-relaxed text-ink-soft">
+          群公告里已经写了注意事项：{d.risks.map((r) => r.text).join("；")}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 /* ───────── 定局后：按时间先后只放眼前的事 ───────── */
 function Confirmed({ c, msgs, setMsgs }: { c: Ctx; msgs: GroupMessages | null; setMsgs: (m: GroupMessages) => void }) {
   const { state } = c;
@@ -750,6 +776,7 @@ function Confirmed({ c, msgs, setMsgs }: { c: Ctx; msgs: GroupMessages | null; s
   return (
     <>
       {seatLive && <SeatingPanel c={c} />}
+      <Todos c={c} />
       <Reservation c={c} msgs={msgs} setMsgs={setMsgs} />
       {!seatLive && <SeatingPanel c={c} />}
       {changes}

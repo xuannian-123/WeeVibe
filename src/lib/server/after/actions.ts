@@ -392,14 +392,14 @@ export function recap(juId: string, adminToken: string): Promise<JuState> {
     for (const m of attendees) {
       if (!m.profileId) continue;
       const exp = proposal.experiences.find((e) => e.memberId === m.id);
-      if (!exp || exp.status === "absent") continue;
+      if (!exp) continue;
       const profile = getProfile(m.profileId);
       if (!profile) continue;
       if (profile.ledger.some((l) => l.juId === ju.id)) continue;
-      const utility = myUtilityFor(ju, m, proposal) ?? exp.utility;
-      profile.ledger.push(
-        ledgerEntryFor(ju.id, { proposalId: proposal.id, utility, notes: [], commuteMin: exp.commuteMin }, avg, now.toISOString()),
-      );
+      // v5（docs/DECISION.md R6）：想来但这次来不了的人也记一笔（满意度 0 = 遗憾 100），下次权重更高、被优先照顾
+      const utility = exp.status === "absent" ? 0 : (myUtilityFor(ju, m, proposal) ?? exp.utility);
+      const commuteMin = exp.status === "absent" ? avg : exp.commuteMin;
+      profile.ledger.push(ledgerEntryFor(ju.id, { proposalId: proposal.id, utility, notes: [], commuteMin }, avg, now.toISOString()));
       saveProfile(profile);
     }
     // #21 一起到场的人，在各自档案里至少是"见过"（再约时局长记得）

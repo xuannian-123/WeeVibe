@@ -7,6 +7,7 @@
 // 反事实检验（privacy.ts）直接调用这里的函数，测的就是线上跑的这一份代码。
 import { timingSafeEqual } from "node:crypto";
 import * as db from "../db";
+import { decisionOf } from "../decision";
 import { mySeats, publicSeating } from "./social-view";
 import type {
   GroupMessages,
@@ -282,15 +283,25 @@ export function publicFacts(ju: Ju, members: Member[]): PublicFacts {
     });
     facts.recommendation = pj.plan.recommendation;
     if (pj.plan.caredFor) facts.caredFor = pj.plan.caredFor;
+    if (pj.plan.why?.length) facts.why = [...pj.plan.why];
     const c = pj.status === "confirmed" ? pj.plan.proposals.find((p) => p.id === pj.confirmedProposalId) : undefined;
     if (c) {
+      const headcount = attendeesOf(c, visibleIds);
       facts.confirmed = {
         slotLabel: slotLabel(c.slot),
         poiName: c.poi.name,
         address: c.poi.address,
-        headcount: attendeesOf(c, visibleIds),
+        headcount,
       };
       if (c.poi.tel) facts.confirmed.tel = c.poi.tel;
+      // v5 决定书的公开部分（只读公开的方案数据：理由、风险、备案）
+      const d = decisionOf(pj, headcount);
+      if (d) {
+        if (d.why.length) facts.confirmed.why = d.why;
+        if (d.risks.length) facts.confirmed.risks = d.risks.map((r) => ({ text: r.text, mitigation: r.mitigation }));
+        if (d.fallback) facts.confirmed.fallback = { trigger: d.fallback.trigger, poiName: d.fallback.poi.name };
+        if (d.groupActions.length) facts.confirmed.groupActions = d.groupActions;
+      }
     }
   }
   if (pj.settlement) {

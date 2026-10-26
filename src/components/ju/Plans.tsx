@@ -7,6 +7,7 @@ import { errMsg, type VerifyResult } from "@/lib/client/api";
 import type { JuActions } from "@/lib/client/useJu";
 import { Avatar, AvatarStack, Button, LockNote, Meter, Sheet, Spinner } from "../ui";
 import { toast } from "../toast";
+import { NeedsChecklist, RisksList } from "./Decision";
 
 const STATUS_TEXT: Record<Experience["status"], string> = {
   full: "全程",
@@ -136,13 +137,20 @@ function MyExperienceBox({ p, state, me }: { p: Proposal; state: JuState; me: Me
               {f}
             </div>
           ))}
-          {mine?.notes.map((n) => (
-            <div key={n} className="text-ink-soft">
-              · {n}
-            </div>
-          ))}
+          {!mine?.needs?.length &&
+            mine?.notes.map((n) => (
+              <div key={n} className="text-ink-soft">
+                · {n}
+              </div>
+            ))}
         </div>
       </div>
+      {/* v5：你跟局长说的每一条，在这个方案里怎么样了 */}
+      {mine?.needs?.length ? (
+        <div className="mt-3 border-t-2 border-dashed border-ink/20 pt-2.5">
+          <NeedsChecklist needs={mine.needs} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -210,6 +218,7 @@ function ProposalDetail({ p, state, me, members }: { p: Proposal; state: JuState
             ))}
           </ul>
         )}
+        <RisksList p={p} />
         {p.tradeoffs.length > 0 && (
           <ul className="space-y-1 rounded-lg border-2 border-cinnabar bg-cinnabar-soft px-3 py-2">
             {p.tradeoffs.map((t) => (

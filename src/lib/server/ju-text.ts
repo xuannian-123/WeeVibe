@@ -24,7 +24,8 @@ export function planText(f: PublicFacts, replan = false): string {
     replan ? `🔄${head(f)}有朋友更新了情况，局长重新排了一遍方案：` : `🗳${head(f)}局长出方案了：`,
     ...proposalLines(f),
   ];
-  if (f.recommendation) lines.push(`局长的理由：${f.recommendation}`);
+  if (f.why?.length) lines.push(`局长推荐第一个：${f.why.join("；")}`);
+  else if (f.recommendation) lines.push(`局长的理由：${f.recommendation}`);
   if (f.constraintSummaries.length) lines.push(`已考虑：${f.constraintSummaries.join("；")}`);
   lines.push("点链接投票，过半就定～");
   return lines.join("\n");
@@ -38,7 +39,10 @@ export function confirmedText(f: PublicFacts): string {
     `🕖 ${c.slotLabel}`,
     `📍 ${c.poiName}${c.address ? `（${c.address}）` : ""}`,
     `👥 ${c.headcount} 人`,
-    "点链接加日历，出发前局长会按你的路线提醒你。",
+    ...(c.why?.length ? [`为什么：${c.why.join("；")}`] : []),
+    ...(c.risks?.length ? ["注意：", ...c.risks.map((r) => `· ${r.text} → ${r.mitigation}`)] : []),
+    ...(c.fallback ? [`备案：如果${c.fallback.trigger}，改去「${c.fallback.poiName}」`] : []),
+    "每个人的出发时间和路线，局长已经私信给你了，点链接还能加日历。",
   ].join("\n");
 }
 
