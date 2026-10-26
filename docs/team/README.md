@@ -2,6 +2,8 @@
 
 WeeVibe采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与共享Zod契约。管理者与参与者共用客户端，业务身份与管理权限分开。
 
+使用Codex的成员先拉取最新代码，再从仓库目录启动新对话，确认已加载根目录[AGENTS.md](../../AGENTS.md)。已有对话请明确要求“重新阅读AGENTS.md，概括当前分支、预览方式与合并/部署边界后再开始”。默认在自己的功能分支开发和预览、提交PR，由维护者统一合并和更新共享版本。
+
 - [品牌、微信账号名与兼容标识](./branding.md)
 - [工程、目录、Markdown及对话名称同步检查](./rename-audit.md)
 - [克隆、配置与本地开发](./development.md)
