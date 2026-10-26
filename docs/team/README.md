@@ -7,6 +7,7 @@ WeeVibe采用单个Taro微信小程序、Next.js Node API、PostgreSQL/Prisma与
 - [品牌、微信账号名与兼容标识](./branding.md)
 - [工程、目录、Markdown及对话名称同步检查](./rename-audit.md)
 - [克隆、配置与本地开发](./development.md)
+- [成员首次开发条件预检](./development-preflight.md)
 - [当前架构、已验证内容及后续接通](./architecture.md)
 - [团队接手边界、轻量简版和待办](./handoff.md)
 - [功能认领、代码分区与界面一致性方案](./collaboration.md)

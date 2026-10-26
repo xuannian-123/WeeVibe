@@ -2,6 +2,8 @@
 
 Node24（至少24.11且小于25）、pnpm11.15.1，具体依赖以锁文件为准。PostgreSQL推荐17，已有真实本机验证为17.11；可使用已有专用PG或自行准备本地实例。不要连接原业务数据库。
 
+首次接手请让Codex先执行[开发条件预检](./development-preflight.md)，按实际任务区分页面/已有接口、新后端/数据库与纯离线逻辑；先报告本机能做什么、哪些条件待验证。
+
 ## 不依赖外部账号的检查
 
 ```text
@@ -42,6 +44,8 @@ Next从apps/web读取.env.local；Prisma CLI需进程中同一正确DATABASE_URL
 ## 小程序构建与开发工具
 
 pnpm build:mini后在微信开发者工具导入apps/miniprogram。project.config.json使用原账号公开AppID、保持urlCheck=true；成员需具备实际开发/体验资格。微信平台资格、WeeVibe业务身份和当前活动管理权是三层不同检查。
+
+使用现有共享演示API开发页面时，可显式运行`pnpm build:mini:demo`。它使用仓库`config/miniprogram-demo.json`的公开参数，只构建自己的小程序；无需成员持有AI/高德Key。新后端能力仍须对应开发环境，不因客户端连接演示API而自动生效。
 
 TARO_APP_API_BASE_URL是小程序构建时公开HTTPS地址，需在构建进程设置；它不会从后端.env.local自动注入。不要把AppSecret、PG或高德密钥交给客户端。未配置API时编译仍可通过，页面会显示未配置；手机上的localhost不能指向开发者电脑。
 
