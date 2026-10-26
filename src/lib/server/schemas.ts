@@ -124,7 +124,7 @@ export const confirmBody = z.object({ proposalId: z.string().min(1).max(200) });
 export const seedBody = z.object({
   count: z.number().int().min(1).max(12).optional(),
   /** club = v4 社团团建场景（9 个半生不熟的演示成员 + 前两局的圈子历史） */
-  scene: z.enum(["default", "club"]).optional(),
+  scene: z.enum(["default", "club", "conflict"]).optional(),
 });
 
 export type CreateJuInput = z.output<typeof createJuBody>;

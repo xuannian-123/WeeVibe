@@ -695,6 +695,16 @@ function DemoTools({ c }: { c: Ctx }) {
             {busy === "seed-club" ? "拉人中…" : "社团演示（9 个半生不熟的朋友）"}
           </button>
         )}
+        {state.ju.status === "collecting" && (
+          <button className={btn} disabled={!!busy} onClick={run("seed-conflict", async () => apply(await api.devSeed(state.ju.id, admin, undefined, "conflict")))}>
+            {busy === "seed-conflict" ? "拉人中…" : "冲突演示（门禁 vs 加班）"}
+          </button>
+        )}
+        {state.ju.status === "voting" && (state.ju.plan?.diagnosis?.coordinating ?? 0) > 0 && (
+          <button className={btn} disabled={!!busy} onClick={run("dev-answer", async () => apply(await api.devAnswer(state.ju.id, admin)))}>
+            {busy === "dev-answer" ? "回答中…" : "替被问的演示朋友说「可以」"}
+          </button>
+        )}
         <button className={btn} disabled={!!busy} onClick={shift(off + 30, "+30 分钟")}>
           +30 分钟
         </button>

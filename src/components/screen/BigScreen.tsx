@@ -29,6 +29,9 @@ export type ScreenAdmin = {
   /** v4：局长排座 / 开始下一轮 */
   seat?: () => Promise<void>;
   nextRound?: () => Promise<void>;
+  /** v5：冲突演示 / 替被问的演示朋友回答 */
+  seedConflict?: () => Promise<void>;
+  demoAnswer?: () => Promise<void>;
 };
 
 /* ───────── 左上：二维码 + 进度 ───────── */
@@ -294,10 +297,20 @@ function AdminBar({ state, admin }: { state: JuState; admin: ScreenAdmin }) {
               {busy === "club" ? "拉人中…" : "演示：社团 9 人"}
             </button>
           )}
+          {admin.seedConflict && (
+            <button className={btn} disabled={!!busy} onClick={run("conflict", admin.seedConflict)}>
+              {busy === "conflict" ? "拉人中…" : "演示：冲突局"}
+            </button>
+          )}
           <button className={btn} disabled={!!busy || state.ju.quorum?.state === "pending"} onClick={run("plan", admin.plan)}>
             {busy === "plan" ? <RotatingText lines={PLAN_LINES} /> : "出方案"}
           </button>
         </>
+      )}
+      {st === "voting" && (state.ju.plan?.diagnosis?.coordinating ?? 0) > 0 && admin.demoAnswer && (
+        <button className={btn} disabled={!!busy} onClick={run("answer", admin.demoAnswer)}>
+          {busy === "answer" ? "回答中…" : "演示：被问的人说「可以」"}
+        </button>
       )}
       {st === "voting" && rec && (
         <button className={btn} disabled={!!busy} onClick={run("confirm", () => admin.confirm(rec.id))}>

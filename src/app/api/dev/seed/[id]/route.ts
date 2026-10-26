@@ -1,6 +1,6 @@
 import { handle, json, readBody, requireAdmin, viewerOf } from "@/lib/server/http";
 import { seedBody } from "@/lib/server/schemas";
-import { seedClub, seedJu } from "@/lib/server/seed";
+import { seedClub, seedConflict, seedJu } from "@/lib/server/seed";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +14,7 @@ export function POST(req: Request, { params }: Ctx) {
     requireAdmin(req, id);
     const { count, scene } = await readBody(req, seedBody);
     if (scene === "club") return json(await seedClub(id, viewerOf(req)));
+    if (scene === "conflict") return json(await seedConflict(id, viewerOf(req)));
     return json(await seedJu(id, Math.min(count ?? 6, 6), viewerOf(req)));
   });
 }

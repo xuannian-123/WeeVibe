@@ -69,6 +69,14 @@ export default function ScreenPage() {
         await organizerApi.confirm(id, adminToken, pid);
         await refresh();
       },
+      seedConflict: async () => {
+        await organizerApi.devSeed(id, adminToken, undefined, "conflict");
+        await refresh();
+      },
+      demoAnswer: async () => {
+        await organizerApi.devAnswer(id, adminToken);
+        await refresh();
+      },
       seedClub: async () => {
         await organizerApi.devSeed(id, adminToken, undefined, "club");
         await refresh();

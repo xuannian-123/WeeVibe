@@ -115,7 +115,9 @@ export type OrganizerApi = {
   again: (id: string, admin: string, prompt?: string) => Promise<CreateResult>;
   devClock: (id: string, admin: string, offsetMin: number) => Promise<JuState>;
   /** scene = "club"：v4 社团团建演示（9 个半生不熟的朋友 + 前两局圈子历史） */
-  devSeed: (id: string, admin: string, count?: number, scene?: "default" | "club") => Promise<JuState>;
+  devSeed: (id: string, admin: string, count?: number, scene?: "default" | "club" | "conflict") => Promise<JuState>;
+  /** v5 演示：被局长私下问到的演示朋友（没有手机）回答"可以" */
+  devAnswer: (id: string, admin: string) => Promise<JuState>;
   /** v4 #18 局长排座（第一轮开始前可以重排） */
   seating: (id: string, admin: string, body: { rounds?: number; tableSize?: number }) => Promise<JuState>;
   /** v4 #19 开始 / 下一轮 */
@@ -160,6 +162,7 @@ export const organizerApi: OrganizerApi = {
   seatAbsent: (id, admin, memberId, absent) => request<JuState>(ju(id, "/seating/absent"), { body: { memberId, absent }, admin, timeoutMs: 30000 }),
   verifySeating: (id) => request<VerifyResult>(ju(id, "/seating/verify"), { timeoutMs: 30000 }),
   switchFallback: (id, admin) => request<JuState>(ju(id, "/fallback"), { body: {}, admin, timeoutMs: 45000 }),
+  devAnswer: (id, admin) => request<JuState>(`/api/dev/answer/${enc(id)}`, { body: {}, admin, timeoutMs: 60000 }),
 };
 
 /** 邀请链接里携带圈层 token 的查询参数名（A1 的局页读它，入局时作为 tierToken 提交） */

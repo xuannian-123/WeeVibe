@@ -11,11 +11,11 @@ import { nanoid } from "nanoid";
 import * as db from "../db";
 import { getMapProvider } from "../map";
 import { DEMO_VENUE, buildSwipeDeck, demoPeople, predictSwipes, type DemoPerson } from "../planner";
-import type { Ju, JuState, Member, Poi, Profile, SwipeVerdict } from "../types";
+import type { Ju, JuState, Member, Need, Poi, Profile, SwipeVerdict } from "../types";
 import { publicState } from "./firewall";
 import { HttpError } from "./http";
-import { AVATARS, TIER_LABELS, mutateJu, type Viewer } from "./ju";
-import { appendTraceAt, autofillMember, emptyPrivate, evalQuorum, inOnly, markChanged, recomputeMatches } from "./ju-core";
+import { AVATARS, TIER_LABELS, mutateJu, planDeps, type Viewer } from "./ju";
+import { appendTraceAt, applyAnswer, autofillMember, computePlan, emptyPrivate, evalQuorum, inOnly, markChanged, pendingAsks, recomputeMatches } from "./ju-core";
 import { saveProfile } from "./profile";
 
 /** 私聊里的几句原话（只进本人私聊记录，不影响规划） */
@@ -296,5 +296,98 @@ export function seedJu(id: string, count = 6, viewer: Viewer = {}): Promise<JuSt
     if (nIn) appendTraceAt(ju, "listen", `又有 ${nIn} 位朋友跟局长私聊完了`, now);
     evalQuorum(ju, members, now);
     return publicState(ju, members, viewer, { mine: priv.mine });
+  });
+}
+
+// ---------------------------------------------------------------- v5 冲突场景（scene = "conflict"）
+// 部门周五聚餐：阿杰 20:00 宿舍门禁（已确认的硬约束）、小林 19:30 才下班 —— 18:30 / 19:00 / 19:30 哪个时间都少一个人。
+// 老王私下手头紧、小周想安静点、阿May 想吃清淡。局长出方案时会发现"没有完美方案"，私下去问能让一小步的人。
+// 被问的是演示成员（没有手机），演示时用控制台 / 大屏的"替演示朋友回答"按钮。
+
+type ConflictPerson = { name: string; avatar: string; from: string; homeBy?: string; budgetMax?: number; needs?: Need[]; dLat: number; dLng: number };
+
+const NEED_AT = "2026-10-26T12:00:00+08:00";
+const CONFLICT: ConflictPerson[] = [
+  { name: "阿杰", avatar: "🧑‍💻", from: "17:00", homeBy: "20:00", dLat: 0.01, dLng: -0.01 },
+  { name: "小林", avatar: "🦊", from: "19:30", dLat: -0.008, dLng: 0.012 },
+  { name: "老王", avatar: "🐻", from: "17:30", budgetMax: 70, dLat: 0.015, dLng: 0.004 },
+  {
+    name: "小周",
+    avatar: "🐧",
+    from: "17:30",
+    needs: [{ id: "n1-quiet", dim: "ambience", kind: "soft", strength: 2, rule: { t: "quiet" }, text: "想安静点、能好好聊天", source: "chat", at: NEED_AT }],
+    dLat: -0.012,
+    dLng: -0.006,
+  },
+  {
+    name: "阿May",
+    avatar: "🐰",
+    from: "17:30",
+    needs: [{ id: "n1-lightFood", dim: "food", kind: "soft", strength: 2, rule: { t: "lightFood" }, text: "想吃清淡点", source: "chat", at: NEED_AT }],
+    dLat: 0.004,
+    dLng: 0.018,
+  },
+];
+
+export function seedConflict(id: string, viewer: Viewer = {}): Promise<JuState> {
+  return mutateJu(id, (ctx) => {
+    const { ju, members, now } = ctx;
+    if (ju.status === "confirmed" || ju.status === "cancelled") throw new HttpError(409, "局已经定了，不能再加演示成员");
+    const taken = new Set(members.map((m) => m.name));
+    let n = 0;
+    CONFLICT.forEach((p, i) => {
+      if (taken.has(p.name)) return;
+      const pv = emptyPrivate();
+      pv.rsvp = "yes";
+      for (const d of ju.spec.dates) pv.availability[d] = { from: p.from, ...(p.homeBy ? { homeBy: p.homeBy } : {}), pref: "ok" };
+      if (p.homeBy) pv.confirmed = ["homeBy"];
+      if (p.budgetMax) {
+        pv.budgetMax = p.budgetMax;
+        pv.budgetStrength = 3;
+        pv.notes = ["最近手头有点紧"];
+      }
+      if (p.needs) pv.needs = structuredClone(p.needs);
+      const m: Member = {
+        id: nanoid(10),
+        juId: id,
+        name: p.name,
+        avatar: p.avatar,
+        location: { label: `${p.name}的出发地`, lat: +(DEMO_VENUE.lat + p.dLat).toFixed(5), lng: +(DEMO_VENUE.lng + p.dLng).toFixed(5) },
+        role: "guest",
+        intake: "done",
+        status: "in",
+        joinedAt: new Date(now.getTime() + i).toISOString(),
+        isOrganizer: false,
+        isDemo: true,
+        private: pv,
+        secret: { token: nanoid(24), tier: 1 },
+      };
+      members.push(m);
+      markChanged(ju, ctx.priv, m.id);
+      n++;
+    });
+    if (n) appendTraceAt(ju, "listen", `又有 ${n} 位朋友跟局长私聊完了`, now);
+    evalQuorum(ju, members, now);
+    return publicState(ju, members, viewer, { mine: ctx.priv.mine });
+  });
+}
+
+/** 演示用：被局长私下问到的演示成员（没有手机）一律回答"可以"，问完自动重算 */
+export function answerDemoAsks(id: string, viewer: Viewer = {}): Promise<JuState> {
+  return mutateJu(id, async (ctx) => {
+    let n = 0;
+    for (const m of ctx.members) {
+      if (!m.isDemo) continue;
+      const ask = (m.private?.asks ?? []).find((a) => a.status === "pending");
+      if (!ask) continue;
+      applyAnswer(m, ask.id, true, ctx.now);
+      markChanged(ctx.ju, ctx.priv, m.id);
+      n++;
+    }
+    if (!n) throw new HttpError(409, "没有正在等演示朋友回答的问题");
+    if (ctx.ju.status === "voting" && !pendingAsks(ctx.members)) {
+      await computePlan(ctx.ju, ctx.members, ctx.priv, { ...planDeps(ctx.members), now: ctx.now });
+    }
+    return publicState(ctx.ju, ctx.members, viewer, { mine: ctx.priv.mine });
   });
 }

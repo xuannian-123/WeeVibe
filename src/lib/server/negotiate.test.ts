@@ -11,6 +11,7 @@ import type { JuSpec, Member } from "../types";
 import { chat, join } from "./intake";
 import { createJu, getState, makePlan } from "./ju";
 import { answerAsk } from "./negotiate";
+import { answerDemoAsks, seedConflict } from "./seed";
 
 const SPEC: JuSpec = { category: "火锅", poiKeywords: ["火锅"], dates: ["2030-11-01"], earliest: "18:30", latest: "19:30", durationMinutes: 120, city: "上海" };
 const HOME = { lat: 31.1952, lng: 121.4372, label: "徐家汇" };
@@ -35,6 +36,23 @@ async function conflict() {
 }
 const raw = (id: string): Member[] => db.listMembers(id);
 const pending = (id: string) => raw(id).filter((m) => (m.private?.asks ?? []).some((a) => a.status === "pending"));
+
+describe("演示场景 scene = conflict", () => {
+  it("门禁 vs 加班：出方案没有完美解 → 局长私下问演示朋友 → 替他回答「可以」→ 所有人都照顾到", async () => {
+    const { id, adminToken } = await createJu({ prompt: "", spec: SPEC, title: "部门周五聚餐", organizerName: "小张" } as Parameters<typeof createJu>[0]);
+    const org = await join(id, { name: "小张", isOrganizer: true }, { adminToken });
+    await chat(id, org.memberToken, { location: HOME, availability: { "2030-11-01": { from: "17:00", pref: "ok" } } });
+    await seedConflict(id, { adminToken });
+    await makePlan(id, { adminToken });
+    const before = getState(id).ju.plan!;
+    expect(before.diagnosis?.coordinating).toBeGreaterThanOrEqual(1);
+    expect(pending(id).every((m) => m.isDemo)).toBe(true);
+    const st = await answerDemoAsks(id, { adminToken });
+    expect(st.ju.plan!.proposals[0].cared).toBe(6);
+    expect(st.ju.plan!.coordination).toMatch(/协调了/);
+    await expect(answerDemoAsks(id, { adminToken })).rejects.toMatchObject({ status: 409 });
+  });
+});
 
 describe("协商", () => {
   it("没有完美方案：诊断只给分类人数，局长私下去问能让一小步的人（只发给本人）", async () => {
