@@ -1,11 +1,13 @@
-// 前端 API client —— 形状以 docs/CONTRACT.md 第五节与 src/lib/types.ts（v3）为准。
+// 前端 API client —— 形状以 docs/CONTRACT.md 第五节、第十节与 src/lib/types.ts（v4）为准。
 // 自动带 token：x-member-token / x-admin-token 按局 id 从 localStorage 取（见 storage.ts）。
 import type {
   BillSplit,
   ChatReply,
   ChatScreenshotParse,
+  CircleStep,
   DayAvailability,
   DietTag,
+  Familiarity,
   GroupMessages,
   Itinerary,
   JuSpec,
@@ -17,7 +19,9 @@ import type {
   PrivacySelfTest,
   Profile,
   Receipt,
+  RoundFeel,
   Slot,
+  SocialEnergy,
   Stats,
   SwipeVerdict,
 } from "@/lib/types";
@@ -157,6 +161,13 @@ export type ChatBody =
 export type ChatResult = ChatReply & { me: Member };
 
 export type DeckResult = { deck: Poi[]; predicted?: Record<string, SwipeVerdict> };
+/** v4 私下标记：只有 interests 会给别人看 */
+export type SocialBody = {
+  know?: Record<string, Familiarity>;
+  energy?: SocialEnergy;
+  avoid?: string[];
+  interests?: string[];
+};
 export type VerifyResult = { ok: boolean; inputHash: string; outputHash: string; recomputedOutputHash: string };
 export type PaymentsResult = Record<string, { name: string; amount: number; paid: boolean }>;
 
@@ -212,6 +223,24 @@ export const api = {
   /** #2 想认识谁（私密） */
   wants: (id: string, memberIds: string[]) =>
     request<{ me: Member; matchNames: string[] }>(`${J(id)}/wants`, { body: { memberIds }, ju: id, auth: "member" }),
+
+  /** v4 #17 #18 我和大家熟不熟 / 今天电量 / 悄悄回避 / 公开兴趣 */
+  social: (id: string, body: SocialBody) =>
+    request<{ me: Member }>(`${J(id)}/social`, { body, ju: id, auth: "member" }),
+
+  /** v4 #19 这一轮感觉怎么样（私下） */
+  feel: (id: string, round: number, feel: RoundFeel) =>
+    request<{ me: Member }>(`${J(id)}/feel`, { body: { round, feel }, ju: id, auth: "member" }),
+
+  /** v4 #20 局后：和谁聊得来（双方都选了才揭晓） */
+  clicked: (id: string, memberIds: string[]) =>
+    request<{ me: Member; clickNames: string[] }>(`${J(id)}/clicked`, { body: { memberIds }, ju: id, auth: "member" }),
+
+  /** v4 #21 同一个圈子一局一局熟起来 */
+  circle: (id: string) => request<CircleStep[]>(`${J(id)}/circle`, { timeoutMs: 10000 }),
+
+  /** v4 #18 排座一键复算 */
+  verifySeating: (id: string) => request<VerifyResult>(`${J(id)}/seating/verify`, { timeoutMs: 30000 }),
 
   /** 本人改自己的状态（退出 / 回来） */
   setMyStatus: (id: string, mid: string, status: "in" | "out") =>

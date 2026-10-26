@@ -19,8 +19,35 @@ describe("反事实泄露检验", () => {
     if (r.failures.length) console.error(JSON.stringify(r.failures.slice(0, 50), null, 2));
     expect(r.runs).toBe(200);
     expect(r.checks.find((c) => c.name.startsWith("交换"))!.runs).toBe(200);
-    expect(r.checks.find((c) => c.name.startsWith("可否认"))!.runs).toBeGreaterThan(30);
+    expect(r.checks.find((c) => c.name.startsWith("可否认缺席"))!.runs).toBeGreaterThan(30);
+    // v4 排座检验：足够多的场景真的排了座、真的有人提了回避
+    expect(r.checks.find((c) => c.name.startsWith("单向标记"))!.runs).toBeGreaterThan(40);
+    expect(r.checks.find((c) => c.name.startsWith("单方面"))!.runs).toBeGreaterThan(40);
+    expect(r.checks.find((c) => c.name.startsWith("可否认回避"))!.runs).toBeGreaterThan(15);
     expect(r.leaks).toBe(0);
+  });
+
+  it("v4 检验不是空转：对方没表态时，我的熟悉度标记确实会改变排座", async () => {
+    let found = false;
+    for (let s = 1; s < 150 && !found; s++) {
+      const sc = await genScenario(s, map);
+      if (!sc.seat) continue;
+      const C = sc.members.find((m) => m.id !== sc.a && m.id !== sc.b && m.status === "in");
+      if (!C) continue;
+      const variant = (v: 0 | 2) => {
+        const x = structuredClone(sc);
+        const c = x.members.find((m) => m.id === C.id)!;
+        const ck = { ...(c.private!.know ?? {}) };
+        delete ck[x.a];
+        c.private!.know = ck;
+        const a = x.members.find((m) => m.id === x.a)!;
+        a.private!.know = { ...(a.private!.know ?? {}), [C.id]: v };
+        return x;
+      };
+      const [o0, o2] = await Promise.all([publicOutputs(variant(0), map), publicOutputs(variant(2), map)]);
+      if (o0.ju.seating && o0.json !== o2.json) found = true;
+    }
+    expect(found).toBe(true);
   });
 
   it("同一个种子 → 同一个场景（可复现）", async () => {

@@ -160,7 +160,36 @@ export default function FirewallPage() {
           </div>
         </Section>
 
-        <Section n="4" title="评委可以试试">
+        <Section n="4" title="可否认的排座：座位用了你的秘密，但从座位推不出来">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className={`${card} p-5`}>
+              <div className="text-[13px] font-black tracking-widest text-cinnabar">双方取高</div>
+              <p className="mt-2 text-[16px] leading-relaxed">
+                熟不熟按两边说的<b>较大值</b>算。你觉得和 TA 挺熟、TA 觉得一般——这种最尴尬的单向关系，永远体现不出来：
+                <span className="text-ink-soft dark:text-cream-faint">只要对方说了熟，你标什么，座位都一模一样。</span>
+              </p>
+            </div>
+            <div className={`${card} p-5`}>
+              <div className="text-[13px] font-black tracking-widest text-cinnabar">诱饵分组</div>
+              <p className="mt-2 text-[16px] leading-relaxed">
+                悄悄说“别和 TA 一桌”，局长会照办，同时用每局自己的密钥再随机分开几对别的朋友，保证从没同桌的对数 ≥ 3 × 要求数。
+                <span className="text-ink-soft dark:text-cream-faint">任何一对没同过桌的人，是“有人提了要求”的比例不超过 1/3。</span>
+              </p>
+            </div>
+            <div className={`${card} p-5`}>
+              <div className="text-[13px] font-black tracking-widest text-cinnabar">藏不住就不执行</div>
+              <p className="mt-2 text-[16px] leading-relaxed">
+                只有一桌、或者掩护不够时，局长干脆不照办——结果和“没人提要求”<b>逐字节相同</b>，连审计里的计算次数都一样。
+                <span className="text-ink-soft dark:text-cream-faint">宁可不照顾，也不让你暴露。</span>
+              </p>
+            </div>
+          </div>
+          <p className="mt-3 text-[13px] text-ink-faint dark:text-cream-faint">
+            这三条都在上面的实时自检里：单向标记隐藏、单方面不可见、可否认回避。排座同样可以一键复算：同样的输入 + 同一个密钥，一定得到同样的座位。
+          </p>
+        </Section>
+
+        <Section n="5" title="评委可以试试">
           <div className="grid items-center gap-5 rounded-[var(--radius-card)] border-2 border-ink bg-mustard p-5 text-ink shadow-sticker md:grid-cols-[1fr_auto] md:p-8 dark:border-mustard">
             <div>
               <p className="text-[24px] font-black leading-snug md:text-[34px]">扫码进局，私下问局长：</p>

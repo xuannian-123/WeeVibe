@@ -221,7 +221,7 @@ export default function Home() {
           <span className="mx-1 inline-block -rotate-6 rounded-lg border-[3px] border-ink bg-cinnabar px-1.5 leading-[1.1] text-white shadow-sticker-sm">局长</span>
         </h1>
         <p className="mt-3 max-w-[320px] text-[15px] leading-relaxed text-ink-soft">
-          预算紧、门禁早、不想去 —— 私下告诉局长就行。局长只对外说结论，帮大家挑一个对谁都公平的时间和店。
+          新社团、新班级、刚认识的同事 —— 预算紧、门禁早、不想去、和谁还不熟，私下告诉局长就行。局长对外只说结论，到了现场还帮你们排好座，一局比一局熟。
         </p>
       </section>
 
@@ -381,8 +381,10 @@ export default function Home() {
             ["🎯", "凑够才成局", "凑不够悄悄作废，没人尴尬"],
             ["⚖️", "局长拍板", "算法定方案，谁都能复核"],
             ["🧾", "催人催钱", "私下提醒，群里不点名"],
+            ["💺", "局长排座", "每桌留个熟人，也介绍新朋友"],
+            ["🌱", "越约越熟", "聊得来的，下次还坐一起"],
           ].map(([icon, t, d], i) => (
-            <li key={t} className="sticker p-3" style={{ transform: `rotate(${[-1.5, 1.2, 1, -1.2][i]}deg)` }}>
+            <li key={t} className="sticker p-3" style={{ transform: `rotate(${[-1.5, 1.2, 1, -1.2, -1, 1.4][i]}deg)` }}>
               <div className="text-2xl">{icon}</div>
               <div className="mt-1 text-[15px] font-black">{t}</div>
               <div className="mt-0.5 text-[12px] leading-snug text-ink-soft">{d}</div>

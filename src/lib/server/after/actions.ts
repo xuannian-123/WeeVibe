@@ -20,6 +20,7 @@ import { guardPublicText, publicFacts, publicState, selfMember } from "../firewa
 import { HttpError } from "../http";
 import { announce, appendTrace, loadJu, memberByToken, messagesFor, nowFor, withJuLock } from "../ju";
 import { getProfile, saveProfile } from "../profile";
+import { rememberAttendance } from "../social";
 import { createJuForAgain, myUtilityFor } from "./core";
 import { ensurePrivate, markRead, pushNotice, pushNoticeOnce } from "./inbox";
 import { listPhotos } from "./photos";
@@ -401,8 +402,10 @@ export function recap(juId: string, adminToken: string): Promise<JuState> {
       );
       saveProfile(profile);
     }
+    // #21 一起到场的人，在各自档案里至少是"见过"（再约时局长记得）
+    rememberAttendance(attendees.filter((m) => proposal.experiences.find((e) => e.memberId === m.id)?.status !== "absent" && !ju.seating?.absentIds.includes(m.id)));
     for (const m of attendees) {
-      pushNoticeOnce(m, "recap", `recap:${ju.id}`, `局后回顾出来啦，去看看大家的照片吧～想再约同一拨人，跟发起人说一声就行。`, now);
+      pushNoticeOnce(m, "recap", `recap:${ju.id}`, `局后回顾出来啦，去看看大家的照片吧～和谁聊得来，悄悄告诉局长，下次还安排你们一起。`, now);
     }
     saveMembers(attendees);
     db.saveJu(ju);

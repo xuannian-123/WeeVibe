@@ -7,6 +7,7 @@
 // 反事实检验（privacy.ts）直接调用这里的函数，测的就是线上跑的这一份代码。
 import { timingSafeEqual } from "node:crypto";
 import * as db from "../db";
+import { mySeats, publicSeating } from "./social-view";
 import type {
   GroupMessages,
   Ju,
@@ -66,6 +67,8 @@ export function publicMember(m: Member): Member {
   if (m.fillSeconds !== undefined) out.fillSeconds = m.fillSeconds;
   if (m.isDemo) out.isDemo = true;
   if (m.eta) out.eta = { arriveAt: m.eta.arriveAt, lateMin: m.eta.lateMin, updatedAt: m.eta.updatedAt };
+  // v4：兴趣是本人明确同意公开的（填的时候写着"会给同桌看"）
+  if (m.interests?.length) out.interests = [...m.interests];
   return out;
 }
 
@@ -144,16 +147,17 @@ function publicPlan(plan: Plan, visibleIds: Set<string>): Plan {
   return p;
 }
 
-/** Ju 的公开版：去掉 admin；票、方案体验、截图预填只保留对外可见的人 */
+/** Ju 的公开版：去掉 admin；票、方案体验、截图预填、座位表只保留对外可见的人 */
 export function publicJu(ju: Ju, members: Member[]): Ju {
   const visibleIds = new Set(visibleMembers(ju, members).map((m) => m.id));
-  const { admin: _admin, plan, votes, seeds, ...rest } = structuredClone(ju);
+  const { admin: _admin, plan, votes, seeds, seating, ...rest } = structuredClone(ju);
   void _admin;
   const out: Ju = { ...rest, votes: {} };
   for (const [mid, pid] of Object.entries(votes ?? {})) if (visibleIds.has(mid)) out.votes[mid] = pid;
   if (plan) out.plan = publicPlan(plan, visibleIds);
   const s = publicSeeds(seeds, visibleIds);
   if (s) out.seeds = s;
+  if (seating) out.seating = publicSeating(seating, visibleIds);
   return out;
 }
 
@@ -200,13 +204,16 @@ export function publicState(
       }
     }
     const visibleById = new Map(visible.map((m) => [m.id, m]));
+    const namesOf = (ids: string[] | undefined) => (ids ?? []).map((id) => visibleById.get(id)?.name).filter((x): x is string => !!x);
     state.mine = {
       experiences: structuredClone(mineAll[me.id] ?? []),
-      matchNames: (me.private?.matches ?? [])
-        .map((id) => visibleById.get(id)?.name)
-        .filter((x): x is string => !!x),
+      matchNames: namesOf(me.private?.matches),
       unread: (me.private?.inbox ?? []).filter((n) => !n.read).length,
     };
+    const seats = me.status === "in" ? mySeats(ju, visible, me) : undefined;
+    if (seats) state.mine.seats = seats;
+    const clicks = namesOf(me.private?.clickMatches);
+    if (clicks.length) state.mine.clickNames = clicks;
   }
 
   if (adminTokenOk(ju.id, viewer?.adminToken)) {
@@ -344,7 +351,8 @@ export function sensitiveOf(ju: Ju, members: Member[]): Sensitive {
 
 export type LeakHit = { kind: "note" | "budget" | "name" | "secret" | "tier"; detail: string };
 
-const TIER_RE = /第\s*[一二三123]\s*[圈层轮]|tier\s*\d/i;
+// v4 起"第 N 轮"是局内编排的活动轮次（公开），只有"第 N 轮邀请 / 名单 / 链接"才是圈层
+const TIER_RE = /第\s*[一二三123]\s*[圈层]|第\s*[一二三123]\s*轮\s*(?:邀请|名单|链接)|tier\s*\d/i;
 
 const numRe = (n: number) => new RegExp(`(?<![\\d.])${String(n).replace(".", "\\.")}(?![\\d]|\\.\\d)`);
 

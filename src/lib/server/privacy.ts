@@ -9,14 +9,20 @@
 //   3. 字面检验：私密备注原文、私密预算数字（因果判定：换一个预算数字它就消失）、不在场的人名、
 //      各种 token / 密钥 / profileId、圈层标签，都不能出现在任何公开输出里；公开 JSON 里不能有私密字段名。
 //   4. 身份隔离：带 C 的 token 只能拿到 C 自己的 private；拿不到 secret；带错 token 什么都没有；没有 admin token 就没有 ju.admin。
-// 这里调用的 computePlan / evalQuorum / publicState / publicFacts 就是线上跑的那一份。
+// v4 局内编排（排座本身就是由私密标记决定的——这是功能——所以交换检验在排座之前比；排座之后另有三项）：
+//   5. 单向标记隐藏：C 说了和 A 挺熟时，A 对 C 标"不认识 / 见过 / 挺熟 / 没标"，排座后的全部公开输出逐字节相同。
+//   6. 单方面不可见：A 单方面"想认识" / "聊得来"某人，排座后的全部公开输出不变。
+//   7. 可否认回避：悄悄回避的两人从不同桌，并且从没同桌的对数 ≥ 3 × 回避数；做不到时结果和没人提回避逐字节相同。
+//   另外可否认缺席、字面检验、身份隔离都在排座 + 轮次推进（含按反馈重排）之后跑。
+// 这里调用的 computePlan / evalQuorum / computeSeating / advanceRound / publicState / publicFacts 就是线上跑的那一份。
 import { ruleGroupMessages as b1GroupMessages, rulePolishPlan } from "../llm";
 import { createMockMapProvider } from "../map";
-import { buildSwipeDeck, generateSlots } from "../planner";
+import { AVOID_COVER, buildSwipeDeck, generateSlots, pairKey } from "../planner";
 import type { JuPrivate } from "../db";
 import type {
   DayAvailability,
   DietTag,
+  Familiarity,
   Ju,
   JuSpec,
   LedgerEntry,
@@ -25,12 +31,16 @@ import type {
   MemberPrivate,
   Poi,
   PrivacySelfTest,
+  RoundFeel,
   SeedMember,
+  SocialEnergy,
   SwipeVerdict,
 } from "../types";
 import { publicFacts, publicState, quorumHidden, scanText, sensitiveOf, stringsIn, type Sensitive } from "./firewall";
+import { HttpError } from "./http";
 import { computePlan, confirmProposal, emptyPrivate, evalQuorum, inOnly } from "./ju-core";
 import { ruleGroupMessages } from "./ju-text";
+import { advanceRound, computeSeating } from "./social-core";
 
 // ---------------------------------------------------------------- 伪随机
 
@@ -76,6 +86,11 @@ const NOTES = [
   "腿受伤了不想走太远",
 ];
 const DIETS: DietTag[] = ["不吃辣", "素食", "清真", "不吃牛肉", "不吃海鲜", "不吃内脏"];
+// 公开兴趣（本来就公开，交换对 A、B 用同一组）
+const INTERESTS = ["爬山", "桌游", "摄影", "猫", "羽毛球", "剧本杀", "咖啡", "动漫"];
+const ENERGIES: SocialEnergy[] = ["low", "mid", "high"];
+const FEELS: RoundFeel[] = ["stiff", "ok", "loud"];
+const FAMS: Familiarity[] = [0, 1, 2];
 const FROMS = ["17:30", "18:00", "18:30", "19:00"];
 const HOMES = [undefined, "21:30", "22:00", "23:00"];
 const CATS: [string, string[]][] = [
@@ -100,6 +115,8 @@ export type Scenario = {
   x?: string;
   /** 出方案后是否直接定局 */
   confirm: boolean;
+  /** v4 定局后排座：几轮、每桌几人、是否推进两轮（含按反馈调整） */
+  seat?: { rounds: number; tableSize: number; advance: boolean };
 };
 
 function randomAvailability(r: Rng, dates: string[]): Record<string, DayAvailability> {
@@ -123,6 +140,12 @@ function randomHidden(r: Rng, deck: Poi[], others: string[]): Partial<MemberPriv
     wants: others.filter(() => chance(r, 0.3)),
     billFacts: chance(r, 0.3) ? { noAlcohol: true } : {},
     chat: [{ role: "me", text: pick(r, NOTES), at: NOW.toISOString() }],
+    // v4：熟悉度 / 电量 / 回避 / 第一轮感受 / 聊得来
+    know: Object.fromEntries(others.filter(() => chance(r, 0.5)).map((id) => [id, pick(r, FAMS)])),
+    energy: pick(r, ENERGIES),
+    avoid: chance(r, 0.15) && others.length ? [pick(r, others)] : [],
+    feel: chance(r, 0.7) ? { "0": pick(r, FEELS) } : {},
+    clicked: others.filter(() => chance(r, 0.2)),
   };
   if (chance(r, 0.7)) h.budgetMax = pick(r, BUDGETS);
   return h;
@@ -272,6 +295,22 @@ export async function genScenario(seed: number, map: MapProvider): Promise<Scena
   for (const m of members) Object.assign(m.private!, randomHidden(r, deck, others(m)));
   // 单方面 wants 不能被对方回应（否则 matchPairs 跟着变）：去掉指向 A / B 的回应
   for (const m of members) if (m !== A && m !== B) m.private!.wants = m.private!.wants.filter((id) => id !== A.id && id !== B.id);
+  // v4：公开兴趣（A、B 同一组）；别人对 A、B 的熟悉度标记一样（否则 A、B 的公开处境就不对称了）
+  const pairInterests = INTERESTS.filter(() => chance(r, 0.3));
+  for (const m of members) {
+    const xs = m === A || m === B ? pairInterests : INTERESTS.filter(() => chance(r, 0.3));
+    if (xs.length) m.interests = [...xs];
+    if (m === A || m === B) continue;
+    const v = chance(r, 0.5) ? pick(r, FAMS) : undefined;
+    const know = { ...(m.private!.know ?? {}) };
+    delete know[A.id];
+    delete know[B.id];
+    if (v !== undefined) {
+      know[A.id] = v;
+      know[B.id] = v;
+    }
+    m.private!.know = know;
+  }
   // 一对固定互选（不涉及 A / B）
   const c = members[3];
   const d = members[4];
@@ -289,15 +328,20 @@ export async function genScenario(seed: number, map: MapProvider): Promise<Scena
   }
 
   const x = members.find((m) => m.status === "out")?.id;
-  return { seed, ju, members, ledgers, a: A.id, b: B.id, ...(x ? { x } : {}), confirm: chance(r, 0.3) };
+  const confirm = chance(r, 0.45);
+  const seat = confirm ? { rounds: 1 + Math.floor(r() * 3), tableSize: 3 + Math.floor(r() * 3), advance: chance(r, 0.6) } : undefined;
+  return { seed, ju, members, ledgers, a: A.id, b: B.id, ...(x ? { x } : {}), confirm, ...(seat ? { seat } : {}) };
 }
 
 // ---------------------------------------------------------------- 公开输出
 
 export type Outputs = { json: string; ju: Ju; members: Member[] };
 
-/** 跑一遍线上同款流程（门限 → 出方案 → 可选定局），收集全部公开输出 */
-export async function publicOutputs(sc: Scenario, map: MapProvider): Promise<Outputs> {
+/**
+ * 跑一遍线上同款流程（门限 → 出方案 → 可选定局 → 可选排座 → 可选推进两轮），收集全部公开输出。
+ * opts.seat = false：停在排座之前（交换检验用）；opts.advance = false：排座后不推进轮次（可否认回避检验用）。
+ */
+export async function publicOutputs(sc: Scenario, map: MapProvider, opts: { seat?: boolean; advance?: boolean } = {}): Promise<Outputs> {
   const ju = structuredClone(sc.ju);
   const members = structuredClone(sc.members);
   const priv: JuPrivate = { mine: {}, pendingMembers: [], decks: {} };
@@ -313,6 +357,18 @@ export async function publicOutputs(sc: Scenario, map: MapProvider): Promise<Out
       if (rec) confirmProposal(ju, members, rec.id, NOW, "admin");
     }
   }
+  if (opts.seat !== false && sc.seat && ju.status === "confirmed") {
+    try {
+      computeSeating(ju, members, priv, { rounds: sc.seat.rounds, tableSize: sc.seat.tableSize, now: NOW });
+      if (sc.seat.advance && opts.advance !== false) {
+        advanceRound(ju, members, priv, NOW); // 第 1 轮开始
+        advanceRound(ju, members, priv, NOW); // 第 1 轮结束（聚合私下感受）→ 按反馈调整第 2 轮
+      }
+    } catch (e) {
+      // 人太少（< 3）排不了座：两个对照组里一样会发生
+      if (!(e instanceof HttpError)) throw e;
+    }
+  }
   const state = publicState(ju, members, undefined, { mine: priv.mine });
   const facts = publicFacts(ju, members);
   const messages = ruleGroupMessages(facts);
@@ -322,12 +378,32 @@ export async function publicOutputs(sc: Scenario, map: MapProvider): Promise<Out
   // 没有密钥既不能反推、也不能穷举验证，所以它随私密输入变化不构成泄露。比较前把它（及思考流里的前缀）归一化。
   const ih = ju.plan?.audit.inputHash;
   if (ih) json = json.split(ih).join("<inputHash>").split(ih.slice(0, 8)).join("<inputHash>");
+  // 排座的 inputHash 同理（HMAC 承诺覆盖私密标记，按设计随之变化）
+  const sh = ju.seating?.audit.inputHash;
+  if (sh) json = json.split(sh).join("<seatInputHash>");
   return { json, ju, members };
 }
 
 // ---------------------------------------------------------------- 各项检验
 
-const HIDDEN_KEYS: (keyof MemberPrivate)[] = ["dietTags", "notes", "swipes", "wants", "billFacts", "chat", "budgetMax", "autoFilled", "inbox"];
+const HIDDEN_KEYS: (keyof MemberPrivate)[] = [
+  "dietTags",
+  "notes",
+  "swipes",
+  "wants",
+  "billFacts",
+  "chat",
+  "budgetMax",
+  "autoFilled",
+  "inbox",
+  "know",
+  "knowAuto",
+  "energy",
+  "avoid",
+  "feel",
+  "clicked",
+  "clickMatches",
+];
 
 /** 交换 A、B 的全部"隐藏"私密信息（含 secret.tier、账本、档案 id） */
 export function swapHidden(sc: Scenario): Scenario {
@@ -360,7 +436,9 @@ function absenceVariants(sc: Scenario, r: Rng, pendingMode: boolean): [Scenario,
   if (!sc.x) return undefined;
   const v1 = structuredClone(sc);
   const X1 = v1.members.find((m) => m.id === sc.x)!;
-  Object.assign(X1.private!, randomHidden(r, [], []), { availability: randomAvailability(r, sc.ju.spec.dates), rsvp: "no" });
+  // X 私下说了什么都不该有影响：v4 的熟悉度 / 回避 / 感受也随便给
+  const otherIds = v1.members.filter((m) => m.id !== sc.x).map((m) => m.id);
+  Object.assign(X1.private!, randomHidden(r, [], otherIds), { availability: randomAvailability(r, sc.ju.spec.dates), rsvp: "no" });
   X1.location = { ...near(r, 9), label: "随便哪里" };
   X1.secret!.tier = 1 + Math.floor(r() * 3);
   if (v1.ju.seeds?.length && chance(r, 0.5)) v1.ju.seeds[0].claimedBy = X1.id;
@@ -377,8 +455,14 @@ function absenceVariants(sc: Scenario, r: Rng, pendingMode: boolean): [Scenario,
     // 门限后 / 没有门限：和"压根没来过"比
     v2.members = v2.members.filter((m) => m.id !== sc.x);
     for (const m of v2.members) {
-      m.private!.wants = m.private!.wants.filter((id) => id !== sc.x);
-      m.private!.matches = m.private!.matches.filter((id) => id !== sc.x);
+      const p = m.private!;
+      p.wants = p.wants.filter((id) => id !== sc.x);
+      p.matches = p.matches.filter((id) => id !== sc.x);
+      if (p.know) delete p.know[sc.x!];
+      if (p.knowAuto) p.knowAuto = p.knowAuto.filter((id) => id !== sc.x);
+      if (p.avoid) p.avoid = p.avoid.filter((id) => id !== sc.x);
+      if (p.clicked) p.clicked = p.clicked.filter((id) => id !== sc.x);
+      if (p.clickMatches) p.clickMatches = p.clickMatches.filter((id) => id !== sc.x);
     }
     for (const s of v2.ju.seeds ?? []) if (s.claimedBy === sc.x) delete s.claimedBy;
     delete v2.ledgers[sc.x];
@@ -388,7 +472,29 @@ function absenceVariants(sc: Scenario, r: Rng, pendingMode: boolean): [Scenario,
 }
 
 /** 公开 JSON 里不能出现的字段名 */
-const FORBIDDEN_KEYS = ["private", "secret", "admin", "profileId", "wants", "matches", "budgetMax", "tier", "auditSecret", "token", "swipes"];
+const FORBIDDEN_KEYS = [
+  "private",
+  "secret",
+  "admin",
+  "profileId",
+  "wants",
+  "matches",
+  "budgetMax",
+  "tier",
+  "auditSecret",
+  "token",
+  "swipes",
+  // v4
+  "know",
+  "knowAuto",
+  "energy",
+  "avoid",
+  "feel",
+  "clicked",
+  "clickMatches",
+  "decoys",
+  "seatSnapshot",
+];
 
 function forbiddenKeys(x: unknown, path = "", out: string[] = []): string[] {
   if (Array.isArray(x)) x.forEach((v, i) => forbiddenKeys(v, `${path}[${i}]`, out));
@@ -465,6 +571,84 @@ function identityCheck(out: Outputs, r: Rng): string[] {
   return problems;
 }
 
+// ---------------------------------------------------------------- v4 排座检验
+
+/** 排得上座的场景里，挑一个不是 A、B 的在局成员 C */
+function thirdOf(sc: Scenario): Member | undefined {
+  return sc.members.find((m) => m.id !== sc.a && m.id !== sc.b && m.status === "in");
+}
+
+/** 5. 单向标记隐藏：C 说和 A 挺熟时，A 对 C 怎么标（含没标）都不影响任何公开输出 */
+async function asymmetryCheck(sc: Scenario, map: MapProvider): Promise<string[]> {
+  const C = thirdOf(sc);
+  if (!C) return [];
+  const base = structuredClone(sc);
+  const Cb = base.members.find((m) => m.id === C.id)!;
+  Cb.private!.know = { ...(Cb.private!.know ?? {}), [sc.a]: 2 };
+  const variants: (Familiarity | undefined)[] = [undefined, 0, 1, 2];
+  let first: string | undefined;
+  for (const v of variants) {
+    const s = structuredClone(base);
+    const A = s.members.find((m) => m.id === s.a)!;
+    const know = { ...(A.private!.know ?? {}) };
+    if (v === undefined) delete know[C.id];
+    else know[C.id] = v;
+    A.private!.know = know;
+    const out = (await publicOutputs(s, map)).json;
+    if (first === undefined) first = out;
+    else if (out !== first) return [`A 对 C 标 ${v ?? "没标"} 时公开输出变了：${firstDiff(first, out)}`];
+  }
+  return [];
+}
+
+/** 6. 单方面不可见：A 单方面"想认识" / "聊得来" C（C 没回应），排座后的公开输出不变 */
+async function unilateralCheck(sc: Scenario, map: MapProvider): Promise<string[]> {
+  const C = thirdOf(sc);
+  if (!C || C.private?.wants.includes(sc.a) || C.private?.clicked?.includes(sc.a)) return [];
+  const s = structuredClone(sc);
+  const A = s.members.find((m) => m.id === s.a)!;
+  A.private!.wants = [...new Set([...A.private!.wants, C.id])];
+  A.private!.clicked = [...new Set([...(A.private!.clicked ?? []), C.id])];
+  const [o1, o2] = await Promise.all([publicOutputs(sc, map), publicOutputs(s, map)]);
+  return o1.json === o2.json ? [] : [`单方面想认识 / 聊得来改变了公开输出：${firstDiff(o1.json, o2.json)}`];
+}
+
+/**
+ * 7. 可否认回避（只看第一次排座）：回避的两人从不同桌，且从没同桌的对数 ≥ 3 × 回避数；
+ *    做不到时必须和"没人提回避"逐字节相同。返回 undefined = 这个场景没有生效的回避。
+ */
+async function avoidCheck(sc: Scenario, map: MapProvider): Promise<string[] | undefined> {
+  const out = await publicOutputs(sc, map, { advance: false });
+  const seating = out.ju.seating;
+  if (!seating) return undefined;
+  const seated = new Set(seating.rounds[0].tables.flatMap((t) => t.memberIds));
+  const pairs = new Set<string>();
+  for (const m of out.members) {
+    if (!seated.has(m.id)) continue;
+    const t = m.private?.avoid?.[0];
+    if (t && t !== m.id && seated.has(t)) pairs.add(pairKey(m.id, t));
+  }
+  if (!pairs.size) return undefined;
+  const togetherCount = (k: string) => {
+    const [a, b] = k.split("|");
+    return seating.rounds.reduce((n, r) => n + r.tables.filter((t) => t.memberIds.includes(a) && t.memberIds.includes(b)).length, 0);
+  };
+  const ids = [...seated].sort();
+  let never = 0;
+  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) if (!togetherCount(pairKey(ids[i], ids[j]))) never++;
+  const honored = [...pairs].every((k) => togetherCount(k) === 0);
+  if (honored) {
+    if (never < AVOID_COVER * pairs.size) return [`回避执行了但掩护不够：从没同桌 ${never} 对 < ${AVOID_COVER} × ${pairs.size}`];
+    if (seating.metrics.neverTogether !== never) return [`neverTogether 统计不对：${seating.metrics.neverTogether} vs ${never}`];
+    return [];
+  }
+  // 没执行：必须和所有人都没提回避时一模一样
+  const plain = structuredClone(sc);
+  for (const m of plain.members) if (m.private) m.private.avoid = [];
+  const o2 = await publicOutputs(plain, map, { advance: false });
+  return o2.json === out.json ? [] : [`回避没执行，但结果和没人提回避时不一样：${firstDiff(out.json, o2.json)}`];
+}
+
 // ---------------------------------------------------------------- 总入口
 
 export type SelfTestReport = PrivacySelfTest & { failures: { seed: number; check: string; detail: string }[] };
@@ -478,6 +662,9 @@ export async function runPrivacySelfTest(opts: { scenarios?: number; seed?: numb
     absence: { name: "可否认缺席（私下拒绝 = 压根没来 / 还没回）", runs: 0, leaks: 0 },
     literal: { name: "字面检验（备注原文 / 预算数字 / 不在场的名字 / token / 圈层）", runs: 0, leaks: 0 },
     identity: { name: "身份隔离（别人的 token 拿不到 private，任何视图没有 secret）", runs: 0, leaks: 0 },
+    asym: { name: "单向标记隐藏（对方说了挺熟，我标什么都不影响排座和任何公开输出）", runs: 0, leaks: 0 },
+    unilateral: { name: "单方面不可见（单方面想认识 / 聊得来不改变任何公开输出）", runs: 0, leaks: 0 },
+    avoid: { name: `可否认回避（回避的人从不同桌，且从没同桌的对数 ≥ ${AVOID_COVER} × 回避数；藏不住就不执行）`, runs: 0, leaks: 0 },
   };
   const failures: SelfTestReport["failures"] = [];
   const fail = (seed: number, check: keyof typeof checks, detail: string) => {
@@ -496,13 +683,14 @@ export async function runPrivacySelfTest(opts: { scenarios?: number; seed?: numb
       continue;
     }
 
-    // 1. 交换
+    // 1. 交换（停在排座之前：排座本身就是由私密标记决定的，排座之后由 5–7 检验）
     checks.swap.runs++;
     let o1: Outputs;
     try {
-      o1 = await publicOutputs(sc, map);
-      const o2 = await publicOutputs(swapHidden(sc), map);
+      o1 = await publicOutputs(sc, map, { seat: false });
+      const o2 = await publicOutputs(swapHidden(sc), map, { seat: false });
       if (o1.json !== o2.json) fail(seed, "swap", firstDiff(o1.json, o2.json));
+      if (sc.seat) o1 = await publicOutputs(sc, map);
     } catch (e) {
       fail(seed, "swap", `运行出错：${(e as Error)?.message ?? e}`);
       continue;
@@ -527,6 +715,23 @@ export async function runPrivacySelfTest(opts: { scenarios?: number; seed?: numb
     // 4. 身份隔离
     checks.identity.runs++;
     for (const p of identityCheck(o1, r)) fail(seed, "identity", p);
+
+    // 5–7. 排座（只在定局并排座的场景里跑）
+    if (o1.ju.seating) {
+      try {
+        checks.asym.runs++;
+        for (const p of await asymmetryCheck(sc, map)) fail(seed, "asym", p);
+        checks.unilateral.runs++;
+        for (const p of await unilateralCheck(sc, map)) fail(seed, "unilateral", p);
+        const av = await avoidCheck(sc, map);
+        if (av) {
+          checks.avoid.runs++;
+          for (const p of av) fail(seed, "avoid", p);
+        }
+      } catch (e) {
+        fail(seed, "asym", `运行出错：${(e as Error)?.message ?? e}`);
+      }
+    }
   }
 
   const list = Object.values(checks);

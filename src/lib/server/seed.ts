@@ -8,9 +8,10 @@
 // - 小林和阿杰互相标了"想认识"（#2 互选成功 1 对）
 // 这里只负责把设定落成真实成员（token / 圈层 / 档案 / 刷卡 / 互选 / 名额），规划相关的数据一律以 C 为准。
 import { nanoid } from "nanoid";
+import * as db from "../db";
 import { getMapProvider } from "../map";
-import { buildSwipeDeck, demoPeople, predictSwipes, type DemoPerson } from "../planner";
-import type { JuState, Member, Poi, Profile, SwipeVerdict } from "../types";
+import { DEMO_VENUE, buildSwipeDeck, demoPeople, predictSwipes, type DemoPerson } from "../planner";
+import type { Ju, JuState, Member, Poi, Profile, SwipeVerdict } from "../types";
 import { publicState } from "./firewall";
 import { HttpError } from "./http";
 import { AVATARS, TIER_LABELS, mutateJu, type Viewer } from "./ju";
@@ -28,6 +29,159 @@ const CHAT: Record<DemoPerson["key"], string[]> = {
 };
 
 const SPICY = /麻辣|川|重庆|湘|串串|辣/;
+
+// ---------------------------------------------------------------- v4 社团团建场景（scene = "club"）
+// 摄影社第 3 次聚会：4 个老社员互相挺熟、都认识社长（发起人），5 个新生之间只是见过几次，两拨人基本不认识。
+// - 木木今天社交电量低（每一轮都给留熟人）
+// - 小鹿悄悄不想和大鹏一桌（局长用诱饵分组掩护，谁也推断不出来）
+// - 橙子和知夏互相想认识（互选成功，至少同桌一次）
+// - 前两次聚会作为圈子历史挂在 prevJuId 链上：大屏能画出"一局一局熟起来"
+
+type ClubPerson = {
+  name: string;
+  avatar: string;
+  old: boolean;
+  interests: string[];
+  energy?: "low" | "mid" | "high";
+  /** 和其他新生"见过"的人 */
+  met?: string[];
+  avoid?: string;
+  wants?: string[];
+  dLat: number;
+  dLng: number;
+};
+
+const CLUB: ClubPerson[] = [
+  { name: "知夏", avatar: "🦉", old: true, interests: ["胶片", "爬山"], wants: ["橙子"], dLat: 0.012, dLng: -0.01 },
+  { name: "阿哲", avatar: "🐺", old: true, interests: ["人像", "剧本杀"], met: ["小舟"], dLat: -0.008, dLng: 0.015 },
+  { name: "小鹿", avatar: "🦌", old: true, interests: ["胶片", "猫"], avoid: "大鹏", dLat: 0.02, dLng: 0.006 },
+  { name: "大鹏", avatar: "🦅", old: true, interests: ["风光", "爬山"], met: ["阿June"], dLat: -0.015, dLng: -0.012 },
+  { name: "橙子", avatar: "🍊", old: false, interests: ["胶片", "咖啡"], met: ["木木", "豆豆"], wants: ["知夏"], dLat: 0.005, dLng: 0.022 },
+  { name: "木木", avatar: "🌳", old: false, interests: ["猫", "动漫"], energy: "low", met: ["橙子", "阿June"], dLat: -0.02, dLng: 0.004 },
+  { name: "阿June", avatar: "🐳", old: false, interests: ["人像", "咖啡"], met: ["木木", "小舟"], energy: "high", dLat: 0.017, dLng: -0.018 },
+  { name: "小舟", avatar: "⛵", old: false, interests: ["风光", "剧本杀"], met: ["阿June"], dLat: -0.004, dLng: -0.024 },
+  { name: "豆豆", avatar: "🫘", old: false, interests: ["动漫", "猫"], met: ["橙子"], dLat: 0.024, dLng: 0.016 },
+];
+
+/** 前两次聚会的聚合数字（只有对数，没有人） */
+const CLUB_HISTORY = [
+  { title: "（演示）摄影社第 1 次聚会", people: 6, knownBefore: 3, newPairs: 6, daysAgo: 28 },
+  { title: "（演示）摄影社第 2 次聚会", people: 8, knownBefore: 9, newPairs: 6, daysAgo: 14 },
+];
+
+function historyJu(ownerId: string, h: (typeof CLUB_HISTORY)[number], i: number, prevJuId: string | undefined, now: Date, spec: Ju["spec"]): Ju {
+  const at = new Date(now.getTime() - h.daysAgo * 86400_000).toISOString();
+  const pairs = (h.people * (h.people - 1)) / 2;
+  return {
+    id: `${ownerId}h${i + 1}`,
+    title: h.title,
+    rawPrompt: "",
+    spec,
+    slots: [],
+    status: "confirmed",
+    createdAt: at,
+    votes: {},
+    trace: [],
+    announcements: [],
+    pendingChanges: 0,
+    revisions: [],
+    ...(prevJuId ? { prevJuId } : {}),
+    recap: { text: `${h.people} 个人一起扫了街，新认识了 ${h.newPairs} 对朋友。`, photos: [], at },
+    seating: {
+      rounds: [],
+      current: 1,
+      tableSize: 4,
+      metrics: {
+        people: h.people,
+        pairs,
+        knownBefore: h.knownBefore,
+        newPairs: h.newPairs,
+        everyoneAnchored: true,
+        matchesSeated: 0,
+        matchPairs: 0,
+        neverTogether: Math.max(0, pairs - h.knownBefore - h.newPairs),
+      },
+      audit: { inputHash: "demo", outputHash: "demo", restarts: 0, evaluations: 0, algorithmVersion: "demo" },
+      absentIds: [],
+      computedAt: at,
+      version: 1,
+    },
+    admin: { tiers: [], auditSecret: nanoid(32) },
+  };
+}
+
+export function seedClub(id: string, viewer: Viewer = {}): Promise<JuState> {
+  return mutateJu(id, (ctx) => {
+    const { ju, members, now } = ctx;
+    if (ju.status === "confirmed" || ju.status === "cancelled") throw new HttpError(409, "局已经定了，不能再加演示成员");
+    const center = DEMO_VENUE;
+    const taken = new Set(members.map((m) => m.name));
+    const byName = new Map<string, Member>();
+    const organizer = members.find((m) => m.isOrganizer);
+
+    CLUB.forEach((p, i) => {
+      if (taken.has(p.name)) return;
+      const at = new Date(now.getTime() + i).toISOString();
+      const pv = emptyPrivate();
+      pv.rsvp = "yes";
+      for (const d of ju.spec.dates) pv.availability[d] = { from: ju.spec.earliest, pref: "ok" };
+      if (p.energy) pv.energy = p.energy;
+      const m: Member = {
+        id: nanoid(10),
+        juId: id,
+        name: p.name,
+        avatar: p.avatar,
+        location: { label: `${p.name}的出发地`, lat: +(center.lat + p.dLat).toFixed(5), lng: +(center.lng + p.dLng).toFixed(5) },
+        role: "guest",
+        intake: "done",
+        status: "in",
+        joinedAt: at,
+        isOrganizer: false,
+        isDemo: true,
+        interests: [...p.interests],
+        private: pv,
+        secret: { token: nanoid(24), tier: 1 },
+      };
+      members.push(m);
+      byName.set(p.name, m);
+    });
+
+    // 熟悉度：老社员之间挺熟、都和社长挺熟；新生之间按 met 见过；其余不认识
+    for (const p of CLUB) {
+      const m = byName.get(p.name);
+      if (!m) continue;
+      const know: Record<string, 0 | 1 | 2> = {};
+      for (const q of CLUB) {
+        const o = byName.get(q.name);
+        if (!o || o === m) continue;
+        if (p.old && q.old) know[o.id] = 2;
+        else if (p.met?.includes(q.name) || q.met?.includes(p.name)) know[o.id] = 1;
+        else know[o.id] = 0;
+      }
+      if (p.old && organizer) know[organizer.id] = 2;
+      m.private!.know = know;
+      if (p.avoid && byName.get(p.avoid)) m.private!.avoid = [byName.get(p.avoid)!.id];
+      m.private!.wants = (p.wants ?? []).map((n) => byName.get(n)?.id).filter((x): x is string => !!x);
+    }
+    for (const m of byName.values()) recomputeMatches(members, m, now);
+    for (const m of byName.values()) markChanged(ju, ctx.priv, m.id);
+
+    // 圈子历史：前两次聚会（只有聚合数字），挂在 prevJuId 链上
+    if (!ju.prevJuId) {
+      let prev: string | undefined;
+      CLUB_HISTORY.forEach((h, i) => {
+        const hj = historyJu(id, h, i, prev, now, ju.spec);
+        if (!db.getJu(hj.id)) db.insertJu(hj, nanoid(24));
+        prev = hj.id;
+      });
+      if (prev) ju.prevJuId = prev;
+    }
+
+    appendTraceAt(ju, "listen", `又有 ${byName.size} 位朋友跟局长私聊完了`, now);
+    evalQuorum(ju, members, now);
+    return publicState(ju, members, viewer, { mine: ctx.priv.mine });
+  });
+}
 
 export function seedJu(id: string, count = 6, viewer: Viewer = {}): Promise<JuState> {
   return mutateJu(id, async (ctx) => {

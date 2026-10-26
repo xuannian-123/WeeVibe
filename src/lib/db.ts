@@ -5,11 +5,12 @@
 // - ju.data       整个 Ju（含 admin；出接口前由 firewall.publicState 剥离）
 // - members.data  整个 Member（含 private / secret；出接口前由 firewall 剥离）
 // - ju_private    只有服务端用的东西：每个人的 mine（私密体验）、出方案时的输入快照（#9 复算）、
-//                 攒批重算的待处理成员集合（#4）、刷卡牌堆。这张表的内容永远不会原样出接口。
+//                 攒批重算的待处理成员集合（#4）、刷卡牌堆、排座输入快照和诱饵对（#18）。这张表的内容永远不会原样出接口。
 // - profiles      设备级档案（#6 #10），只按 profileId 读写
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
+import type { GroupingInput } from "./planner/grouping";
 import type { Ju, LedgerEntry, Member, MyExperience, Poi, Profile } from "./types";
 import { upgradeJu, upgradeMember } from "./legacy";
 
@@ -161,6 +162,8 @@ export type JuPrivate = {
   firstPlanAt?: string;
   /** memberId -> 发给他的刷卡牌堆，刷完才算入局完成 */
   decks: Record<string, Pick<Poi, "id" | "name" | "type">[]>;
+  /** #18 最近一次排座的输入（含私密标记）和诱饵对：一键复算用，永远不出接口 */
+  seatSnapshot?: { input: GroupingInput; decoys: [string, string][] };
 };
 
 export function getJuPrivate(juId: string): JuPrivate {

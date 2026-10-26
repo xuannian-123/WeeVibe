@@ -356,6 +356,9 @@ export const VISIBILITY: { what: string; cells: [boolean, boolean, boolean, bool
   { what: "忌口、私密备注", cells: [true, true, false, false] },
   { what: "谁说了不来", cells: [true, true, false, false] },
   { what: "单方面的\"想认识\"", cells: [true, true, false, false] },
+  { what: "我觉得和谁熟不熟、今天的电量", cells: [true, true, false, false] },
+  { what: "悄悄不想和谁一桌", cells: [true, true, false, false] },
+  { what: "座位表、\"新认识了几对\"", cells: [true, true, true, true] },
   { what: "出发地、通勤时间", cells: [true, true, true, true] },
   { what: "聚合结论（\"有人预算偏紧\"）", cells: [false, true, true, true] },
 ];

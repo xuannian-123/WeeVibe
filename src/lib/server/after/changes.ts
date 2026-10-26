@@ -6,6 +6,7 @@ import { replanStable } from "../../planner";
 import type { Ju, Member } from "../../types";
 import { announce, nowFor, withJuLock } from "../ju";
 import { promoteWaitlist } from "../ju-core";
+import { reseatUpcoming } from "../social-core";
 import { pushNotice } from "./inbox";
 import { confirmedProposal, inOnly, saveMembers } from "./util";
 
@@ -44,6 +45,17 @@ export async function replanAfterChangeLocked(ju: Ju, members: Member[], reason:
           ? `人数有变，记得跟店家改成 ${r.tableSize} 位`
           : ju.reservation.note,
     };
+  }
+
+  // #18 排过座：还没开始的轮次跟着人数重排（已经坐过的不动，未来的尽量少改）
+  if (ju.seating) {
+    const priv = db.getJuPrivate(ju.id);
+    try {
+      if (reseatUpcoming(ju, members, priv, now, { reason })) changes.push("后面几轮的座位跟着调了一下");
+      db.saveJuPrivate(ju.id, priv);
+    } catch (e) {
+      console.warn(`[after ${ju.id}] 重排座位失败，保留原座位：${(e as Error)?.message ?? e}`);
+    }
   }
 
   const summary = changes.length ? changes.join("；") : "原方案不变";

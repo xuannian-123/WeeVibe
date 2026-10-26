@@ -1,6 +1,7 @@
-// 共享类型契约 v3 —— 前端 / 后端 / 算法三方共用。改动前先找 leader。
+// 共享类型契约 v4 —— 前端 / 后端 / 算法三方共用。改动前先找 leader。
 // v3 核心：组局里所有尴尬的事都交给局长。私密信息进来，对外只说聚合结论（隐私防火墙）。
-// 字段旁的 #N 对应 docs/CONTRACT.md 里的 16 个痛点。
+// v4 聚焦半生不熟的小团体：局长还管"到了现场怎么坐、怎么熟起来"（#17–#21 局内编排 + 圈子记忆）。
+// 字段旁的 #N 对应 docs/CONTRACT.md 里的痛点编号。
 
 export type LatLng = { lat: number; lng: number };
 
@@ -79,7 +80,9 @@ export type Notice = {
     | "quorum" // #1 成局 / 未成局
     | "autofill" // #6 局长替你预填了
     | "payment" // #14 该转钱 / 提醒
-    | "recap"; // #16 局后回顾
+    | "recap" // #16 局后回顾
+    | "seat" // #18 座位排好了 / 下一轮换桌
+    | "click"; // #20 双方都觉得聊得来
   text: string;
   read?: boolean;
 };
@@ -122,7 +125,34 @@ export type MemberPrivate = {
   inbox: Notice[];
   /** #14 定局 AA 后：该转多少、转了没 */
   payment?: { amount: number; lines: BillShareLine[]; paid: boolean; remindedAt: string[] };
+  // ---- v4 半生不熟：以下字段旧数据里没有，一律可选 ----
+  /** #17 我觉得我和 TA 多熟（memberId -> 0/1/2）。单方面的感觉，谁也看不到，对方也看不到 */
+  know?: Record<string, Familiarity>;
+  /** #17 know 里哪些是局长按上次同桌的记忆预填的（本人可改） */
+  knowAuto?: string[];
+  /** #17 今天的社交电量 */
+  energy?: SocialEnergy;
+  /** #18 悄悄：别和 TA 排一桌（最多 1 人）。局长用"诱饵分组"让它不可推断 */
+  avoid?: string[];
+  /** #19 每一轮私下的感受（轮次 -> 感受），只以聚合数字出现 */
+  feel?: Record<string, RoundFeel>;
+  /** #20 局后：和谁聊得来。双方都选了才揭晓，单方面永远没人知道 */
+  clicked?: string[];
+  /** #20 双方都选了"聊得来"的人（后端算出） */
+  clickMatches?: string[];
 };
+
+/** v4 #17 我和 TA 熟不熟：0 不认识 / 1 见过几次 / 2 挺熟 */
+export type Familiarity = 0 | 1 | 2;
+
+/** v4 #17 今天的社交电量：low = 想安静点（每一轮都给留熟人） */
+export type SocialEnergy = "low" | "mid" | "high";
+
+/** v4 #19 这一轮的感受 */
+export type RoundFeel = "stiff" | "ok" | "loud";
+
+/** v4 #19 一轮感受的聚合计数 */
+export type FeelCounts = { stiff: number; ok: number; loud: number; total: number };
 
 /** 只有服务端知道的东西 —— 连本人也不返回 */
 export type MemberSecret = {
@@ -163,6 +193,8 @@ export type Member = {
   isDemo?: boolean;
   /** #11 路上共享的预计到达：只有算出来的时间，服务端从不保存坐标 */
   eta?: { arriveAt: string; lateMin: number; updatedAt: string };
+  /** v4 #17 自愿公开的兴趣标签（填的时候明确告诉本人"会给同桌看"），用来给每桌出话题 */
+  interests?: string[];
   /** 仅后端 & 本人：公开视图里一定是 undefined */
   private?: MemberPrivate;
   /** 仅后端：任何接口都不返回 */
@@ -370,8 +402,113 @@ export type Ju = {
   recap?: { text: string; photos: string[]; at: string };
   /** #16 「再约」生成的新局 */
   nextJuId?: string;
+  /** v4 #21 这个局是从哪一局「再约」来的（同一个圈子的上一局） */
+  prevJuId?: string;
+  /** v4 #18 局内编排：分几轮、每轮怎么分桌、玩什么 */
+  seating?: Seating;
   /** 仅后端 & 发起人 */
   admin?: JuAdmin;
+};
+
+// ---------------------------------------------------------------- v4 局内编排（半生不熟）
+
+/** #19 一轮的玩法（规则库里挑，强度随反馈调整） */
+export type RoundFormat = {
+  key: string;
+  name: string;
+  /** 1 = 轻松（有题目卡、不用当众表现）… 3 = 热闹（跨桌挑战） */
+  intensity: 1 | 2 | 3;
+  minutes: number;
+  /** 一句话玩法说明 */
+  how: string;
+};
+
+export type SeatingTable = {
+  id: string;
+  memberIds: string[];
+  /** 这桌的话题卡：只从大家自愿公开的兴趣里来 */
+  topics: string[];
+};
+
+export type SeatingRound = {
+  index: number;
+  format: RoundFormat;
+  tables: SeatingTable[];
+  status: "upcoming" | "live" | "done";
+  /** #19 这一轮私下感受的聚合（这轮结束后才写入；人数太少时不写，免得能对上是谁） */
+  feedback?: FeelCounts;
+  /** #19 局长根据上一轮的反馈做了什么调整（公开安全） */
+  adjust?: string;
+};
+
+/** 公开的聚合数字：只有对数，没有"谁和谁" */
+export type SeatingMetrics = {
+  people: number;
+  /** C(n, 2) */
+  pairs: number;
+  /** 排座之前就认识的对数（任一方说"见过"或"挺熟"都算） */
+  knownBefore: number;
+  /** 这次第一次同桌、之前互不认识的对数 */
+  newPairs: number;
+  /** 第一轮每个人桌上都至少有一位认识的人 */
+  everyoneAnchored: boolean;
+  /** 互选成功的对数里，被安排同桌的 */
+  matchesSeated: number;
+  matchPairs: number;
+  /** 从头到尾没同桌过的对数 —— 悄悄回避的请求就藏在这里面（#18 可否认） */
+  neverTogether: number;
+};
+
+export type SeatingAudit = {
+  /** 分组输入（含私密标记）的 HMAC-SHA256，密钥是每个局自己的 auditSecret */
+  inputHash: string;
+  /** 分组结果的 SHA-256 */
+  outputHash: string;
+  restarts: number;
+  /** 局部搜索评估过的换位次数 */
+  evaluations: number;
+  algorithmVersion: string;
+};
+
+export type Seating = {
+  rounds: SeatingRound[];
+  /** 正在进行第几轮（-1 = 还没开始） */
+  current: number;
+  /** 排座时的参数 */
+  tableSize: number;
+  metrics: SeatingMetrics;
+  audit: SeatingAudit;
+  /** 没到场的人（现场看得见的事实，公开） */
+  absentIds: string[];
+  computedAt: string;
+  /** 第几版（中途有人没来 / 根据反馈重排会 +1） */
+  version: number;
+};
+
+/** #18 只给本人：我在每一轮坐哪、为什么这么排（只用本人自己的标记解释） */
+export type MySeat = {
+  round: number;
+  tableId: string;
+  /** 同桌的人（名字本来就公开） */
+  mates: string[];
+  /** 如 "这桌有你挺熟的小林" "另外 2 位你还不认识，话题卡给你们准备好了" */
+  notes: string[];
+};
+
+/** GET /api/ju/:id/circle —— 同一个圈子一局一局熟起来（全是聚合数字） */
+export type CircleStep = {
+  juId: string;
+  title: string;
+  /** 活动开始时间（ISO），没定局时为空 */
+  at?: string;
+  people: number;
+  pairs: number;
+  /** 这一局开始前就认识的对数 */
+  knownBefore: number;
+  /** 这一局结束后认识的对数 = knownBefore + newPairs */
+  knownAfter: number;
+  /** 双方都觉得"聊得来"的对数 */
+  clickPairs: number;
 };
 
 /** 公开聚合数字（随 JuState 一起返回） */
@@ -403,6 +540,10 @@ export type JuState = {
     /** #2 互选成功的人的名字（局长会安排坐一起） */
     matchNames: string[];
     unread: number;
+    /** #18 我每一轮坐哪（排座之后才有） */
+    seats?: MySeat[];
+    /** #20 双方都觉得聊得来的人的名字 */
+    clickNames?: string[];
   };
   /** 带 x-admin-token 时附上（含 ju.admin） */
   isAdmin?: boolean;
@@ -528,6 +669,8 @@ export type Profile = {
   /** #6 常用时间 */
   usualFrom?: string;
   usualHomeBy?: string;
+  /** v4 #21 我和别人熟不熟的记忆（对方的 profileId -> 0/1/2）：同桌过至少"见过"，选了聊得来就是"挺熟"。只有本人档案里有 */
+  know?: Record<string, Familiarity>;
 };
 
 /** GET /api/stats —— 路演用的真实使用数据，只统计非演示成员 */

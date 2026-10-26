@@ -98,9 +98,34 @@ export const patchMemberBody = z
   })
   .refine((v) => Object.keys(v).length > 0, { message: "没有要修改的字段" });
 
+// ---- v4 局内编排 ----
+const familiarity = z.union([z.literal(0), z.literal(1), z.literal(2)]);
+const memberIdField = z.string().min(1).max(40);
+
+export const socialBody = z
+  .object({
+    know: z.record(memberIdField, familiarity).optional(),
+    energy: z.enum(["low", "mid", "high"]).optional(),
+    avoid: z.array(memberIdField).max(1).optional(),
+    interests: z.array(z.string().trim().min(1).max(20)).max(8).optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "没有要修改的字段" });
+
+export const feelBody = z.object({ round: z.number().int().min(0).max(10), feel: z.enum(["stiff", "ok", "loud"]) });
+export const clickedBody = z.object({ memberIds: z.array(memberIdField).max(50) });
+export const seatingBody = z.object({
+  rounds: z.number().int().min(1).max(3).optional(),
+  tableSize: z.number().int().min(2).max(8).optional(),
+});
+export const seatAbsentBody = z.object({ memberId: memberIdField, absent: z.boolean() });
+
 export const voteBody = z.object({ proposalId: z.string().min(1).max(200) });
 export const confirmBody = z.object({ proposalId: z.string().min(1).max(200) });
-export const seedBody = z.object({ count: z.number().int().min(1).max(6).optional() });
+export const seedBody = z.object({
+  count: z.number().int().min(1).max(12).optional(),
+  /** club = v4 社团团建场景（9 个半生不熟的演示成员 + 前两局的圈子历史） */
+  scene: z.enum(["default", "club"]).optional(),
+});
 
 export type CreateJuInput = z.output<typeof createJuBody>;
 export type PatchJuInput = z.output<typeof patchJuBody>;

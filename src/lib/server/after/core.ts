@@ -48,12 +48,16 @@ export async function createJuForAgain(
     .map((m) => ({ name: m.name, said: "yes" as const, hint: "上次一起的朋友" }));
   const organizer = attendees.find((m) => m.isOrganizer)?.name ?? ju.organizerName;
   const text = prompt?.trim() || ju.rawPrompt;
-  return createJu({
-    prompt: text || `再约一次${ju.spec.category}`,
-    ...(organizer ? { organizerName: organizer } : {}),
-    // 没有一句话可解析（截图开的局）：沿用上次的需求，日期顺延到下周同一天
-    ...(text ? {} : { spec: shiftSpecToFuture(ju.spec, new Date()), title: ju.title }),
-    ...(ju.capacity ? { capacity: ju.capacity } : {}),
-    ...(seeds.length ? { seeds } : {}),
-  });
+  return createJu(
+    {
+      prompt: text || `再约一次${ju.spec.category}`,
+      ...(organizer ? { organizerName: organizer } : {}),
+      // 没有一句话可解析（截图开的局）：沿用上次的需求，日期顺延到下周同一天
+      ...(text ? {} : { spec: shiftSpecToFuture(ju.spec, new Date()), title: ju.title }),
+      ...(ju.capacity ? { capacity: ju.capacity } : {}),
+      ...(seeds.length ? { seeds } : {}),
+    },
+    // #21 同一个圈子的上一局：大屏和局页能画出"一局一局熟起来"
+    { prevJuId: ju.id },
+  );
 }

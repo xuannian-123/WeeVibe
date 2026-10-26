@@ -12,6 +12,7 @@ import { Avatar, AvatarStack, Button, LockNote, SectionTitle, Spinner } from "..
 import { StampSlam } from "../Stamp";
 import { toast } from "../toast";
 import { WaitlistCard } from "./Waiting";
+import { CircleCard, ClickCard, SeatCard, SocialCard } from "./Social";
 
 export function photoSrc(juId: string, p: string): string {
   return /^(https?:|data:|\/)/.test(p) ? p : api.photoUrl(juId, p);
@@ -367,7 +368,11 @@ export function ConfirmedView({ state, me, actions }: { state: JuState; me: Memb
   const p = confirmedProposal(ju) ?? ju.plan?.proposals[0];
   if (!p) return null;
   const inJu = me && me.status === "in";
-  const phase = phaseOf(state, p);
+  const s = ju.seating;
+  const seatLive = !!s && s.current >= 0 && s.current < s.rounds.length;
+  const seatDone = !!s && s.current >= s.rounds.length;
+  // 所有轮次都玩完了，也算进入局后（该选"聊得来"了）
+  const phase = seatDone ? "after" : phaseOf(state, p);
 
   const travel = (
     <div className="grid grid-cols-2 gap-3" data-tour="travel">
@@ -404,15 +409,22 @@ export function ConfirmedView({ state, me, actions }: { state: JuState; me: Memb
 
       {phase === "after" ? (
         <>
+          {inJu && seatLive && <SeatCard state={state} me={me} actions={actions} />}
+          {inJu && <ClickCard state={state} me={me} actions={actions} />}
           {inJu && <PaymentCard state={state} me={me} actions={actions} />}
           <RecapCard state={state} />
+          <CircleCard state={state} />
           {inJu && <PhotosCard state={state} actions={actions} />}
         </>
       ) : (
         <>
+          {/* v4：排了座就先看座位（当天最要紧）；还没排座时请大家帮局长标一下熟不熟 */}
+          {inJu && s && <SeatCard state={state} me={me} actions={actions} />}
           {inJu && <ItineraryCard state={state} actions={actions} p={p} />}
           {travel}
           {inJu && phase === "day" && <OnTheWay state={state} me={me} actions={actions} p={p} />}
+          {inJu && !s && <SocialCard state={state} me={me} actions={actions} />}
+          <CircleCard state={state} />
         </>
       )}
 

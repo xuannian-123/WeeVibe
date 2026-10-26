@@ -114,7 +114,16 @@ export type OrganizerApi = {
   recap: (id: string, admin: string) => Promise<JuState>;
   again: (id: string, admin: string, prompt?: string) => Promise<CreateResult>;
   devClock: (id: string, admin: string, offsetMin: number) => Promise<JuState>;
-  devSeed: (id: string, admin: string, count?: number) => Promise<JuState>;
+  /** scene = "club"：v4 社团团建演示（9 个半生不熟的朋友 + 前两局圈子历史） */
+  devSeed: (id: string, admin: string, count?: number, scene?: "default" | "club") => Promise<JuState>;
+  /** v4 #18 局长排座（第一轮开始前可以重排） */
+  seating: (id: string, admin: string, body: { rounds?: number; tableSize?: number }) => Promise<JuState>;
+  /** v4 #19 开始 / 下一轮 */
+  nextRound: (id: string, admin: string) => Promise<JuState>;
+  /** v4 #18 现场有人没到 / 又到了 */
+  seatAbsent: (id: string, admin: string, memberId: string, absent: boolean) => Promise<JuState>;
+  /** v4 #18 排座一键复算 */
+  verifySeating: (id: string) => Promise<VerifyResult>;
 };
 
 export const api = {
@@ -142,7 +151,12 @@ export const organizerApi: OrganizerApi = {
   recap: (id, admin) => request<JuState>(ju(id, "/recap"), { body: {}, admin, timeoutMs: 45000 }),
   again: (id, admin, prompt) => request<CreateResult>(ju(id, "/again"), { body: prompt ? { prompt } : {}, admin, timeoutMs: 20000 }),
   devClock: (id, admin, offsetMin) => request<JuState>(`/api/dev/clock/${enc(id)}`, { body: { offsetMin }, admin }),
-  devSeed: (id, admin, count) => request<JuState>(`/api/dev/seed/${enc(id)}`, { body: count ? { count } : {}, admin, timeoutMs: 45000 }),
+  devSeed: (id, admin, count, scene) =>
+    request<JuState>(`/api/dev/seed/${enc(id)}`, { body: { ...(count ? { count } : {}), ...(scene ? { scene } : {}) }, admin, timeoutMs: 45000 }),
+  seating: (id, admin, body) => request<JuState>(ju(id, "/seating"), { body, admin, timeoutMs: 30000 }),
+  nextRound: (id, admin) => request<JuState>(ju(id, "/seating/next"), { body: {}, admin, timeoutMs: 30000 }),
+  seatAbsent: (id, admin, memberId, absent) => request<JuState>(ju(id, "/seating/absent"), { body: { memberId, absent }, admin, timeoutMs: 30000 }),
+  verifySeating: (id) => request<VerifyResult>(ju(id, "/seating/verify"), { timeoutMs: 30000 }),
 };
 
 /** 邀请链接里携带圈层 token 的查询参数名（A1 的局页读它，入局时作为 tierToken 提交） */

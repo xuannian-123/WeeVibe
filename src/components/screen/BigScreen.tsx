@@ -9,6 +9,7 @@ import { AbstractMap } from "./AbstractMap";
 import { Odometer, QrSvg } from "./bits";
 import { categoryEmoji, confirmedProposal, dayLabel, focusProposal, slotLabel, trunc } from "./fmt";
 import { AuditPanel, ExperienceMatrix, Panel, PrivacyPanel } from "./PlanPanels";
+import { BondPanel, SeatingBoard } from "./SeatingPanels";
 import { TraceStream } from "./TraceStream";
 
 const STATUS_TEXT: Record<string, string> = {
@@ -23,6 +24,11 @@ export type ScreenAdmin = {
   seed: () => Promise<void>;
   plan: () => Promise<void>;
   confirm: (proposalId: string) => Promise<void>;
+  /** v4：社团团建演示（9 个半生不熟的朋友 + 前两局圈子历史） */
+  seedClub?: () => Promise<void>;
+  /** v4：局长排座 / 开始下一轮 */
+  seat?: () => Promise<void>;
+  nextRound?: () => Promise<void>;
 };
 
 /* ───────── 左上：二维码 + 进度 ───────── */
@@ -271,6 +277,7 @@ function AdminBar({ state, admin }: { state: JuState; admin: ScreenAdmin }) {
     }
   };
   const st = state.ju.status;
+  const seat = state.ju.seating;
   const rec = state.ju.plan?.proposals.find((p) => p.recommended) ?? state.ju.plan?.proposals[0];
   const btn =
     "max-w-[320px] truncate rounded-full border border-night-line px-4 py-2 text-[15px] font-semibold text-cream-faint transition hover:border-cream-faint hover:text-cream disabled:opacity-40";
@@ -282,6 +289,11 @@ function AdminBar({ state, admin }: { state: JuState; admin: ScreenAdmin }) {
           <button className={btn} disabled={!!busy} onClick={run("seed", admin.seed)}>
             {busy === "seed" ? "拉人中…" : "演示：加入朋友"}
           </button>
+          {admin.seedClub && (
+            <button className={btn} disabled={!!busy} onClick={run("club", admin.seedClub)}>
+              {busy === "club" ? "拉人中…" : "演示：社团 9 人"}
+            </button>
+          )}
           <button className={btn} disabled={!!busy || state.ju.quorum?.state === "pending"} onClick={run("plan", admin.plan)}>
             {busy === "plan" ? <RotatingText lines={PLAN_LINES} /> : "出方案"}
           </button>
@@ -290,6 +302,16 @@ function AdminBar({ state, admin }: { state: JuState; admin: ScreenAdmin }) {
       {st === "voting" && rec && (
         <button className={btn} disabled={!!busy} onClick={run("confirm", () => admin.confirm(rec.id))}>
           {busy === "confirm" ? "盖章中…" : `拍板：${trunc(rec.poi.name, 10)}`}
+        </button>
+      )}
+      {st === "confirmed" && !seat && admin.seat && (
+        <button className={btn} disabled={!!busy} onClick={run("seat", admin.seat)}>
+          {busy === "seat" ? "排座中…" : "局长排座"}
+        </button>
+      )}
+      {st === "confirmed" && seat && seat.current < seat.rounds.length && admin.nextRound && (
+        <button className={btn} disabled={!!busy} onClick={run("round", admin.nextRound)}>
+          {busy === "round" ? "换桌中…" : seat.current < 0 ? "开始第 1 轮" : seat.current + 1 >= seat.rounds.length ? "散场" : `下一轮（第 ${seat.current + 2} 轮）`}
         </button>
       )}
     </div>
@@ -336,6 +358,8 @@ export function BigScreen({
 
   const collecting = ju.status === "collecting";
   const hasPlan = !!ju.plan && (ju.status === "voting" || ju.status === "confirmed");
+  // v4：定局并排了座，现场最要紧的是"这一轮坐哪"和"大家熟起来了多少"
+  const seating = ju.status === "confirmed" && !!ju.seating?.rounds.length;
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-night text-cream">
@@ -420,18 +444,26 @@ export function BigScreen({
               <div className="dot-grid-night relative min-h-0 flex-1 overflow-hidden rounded-[28px] border-2 border-night-line bg-night-2">
                 <PhotoWall state={state} />
               </div>
+            ) : seating ? (
+              <SeatingBoard state={state} />
             ) : (
               <MapBox state={state} />
             )}
             {ju.status === "confirmed" ? <ConfirmedCard state={state} /> : hasPlan && <Recommendation state={state} />}
           </div>
           <div className="flex min-h-0 flex-col gap-6">
-            {hasPlan && (
-              <Panel title="👥 每个人 × 每个方案" right="公开满意度 · 只由通勤和时段算出" className="flex-1">
-                <ExperienceMatrix state={state} />
-              </Panel>
+            {seating ? (
+              <BondPanel state={state} className="flex-1" />
+            ) : (
+              <>
+                {hasPlan && (
+                  <Panel title="👥 每个人 × 每个方案" right="公开满意度 · 只由通勤和时段算出" className="flex-1">
+                    <ExperienceMatrix state={state} />
+                  </Panel>
+                )}
+                {hasPlan && <AuditPanel state={state} verify={verify} className="shrink-0" />}
+              </>
             )}
-            {hasPlan && <AuditPanel state={state} verify={verify} className="shrink-0" />}
           </div>
         </div>
       )}

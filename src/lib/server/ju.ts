@@ -215,7 +215,7 @@ export async function previewScreenshot(image: string): Promise<ChatScreenshotPa
   return { ...r, slots: generateSlots(r.spec) };
 }
 
-export async function createJu(input: CreateJuInput): Promise<{
+export async function createJu(input: CreateJuInput, extra: { prevJuId?: string } = {}): Promise<{
   id: string;
   adminToken: string;
   tierLinks: { tier: number; label: string; token: string }[];
@@ -270,6 +270,7 @@ export async function createJu(input: CreateJuInput): Promise<{
     announcements: [],
     pendingChanges: 0,
     revisions: [],
+    ...(extra.prevJuId ? { prevJuId: extra.prevJuId } : {}),
     admin: { tiers, auditSecret: randomBytes(32).toString("hex"), clockOffsetMin: 0 },
   };
   appendTraceAt(

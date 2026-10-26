@@ -11,3 +11,28 @@ export { splitBill, settle } from "./bill";
 export { canonicalJson, chainName, slotLabel } from "./util";
 export { checkDiet, dietConflictReason } from "./diet";
 export { demoPeople, DEMO_VENUE, DEMO_ORGANIZER_PLACE, type DemoPerson } from "./demo";
+export {
+  solveGrouping,
+  symmetricFamiliarity,
+  normalizeInterests,
+  canonicalInput,
+  groupingStats,
+  tableSizes,
+  pairKey,
+  AVOID_COVER,
+  GROUPING_VERSION,
+  type GroupingInput,
+  type GroupingPerson,
+  type GroupingResult,
+} from "./grouping";
+export {
+  planFormats,
+  pickFormat,
+  nextIntensity,
+  majorityFeel,
+  firstRoundWhy,
+  adjustText,
+  tableTopics,
+  isDiningCategory,
+  type FormatContext,
+} from "./formats";

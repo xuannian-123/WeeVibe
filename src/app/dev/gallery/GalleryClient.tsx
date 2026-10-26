@@ -91,6 +91,11 @@ function makeFakeApi(set: (k: FixtureKey) => void, get: () => JuState): Organize
       return s;
     },
     devSeed: () => to("collecting"),
+    // v4 排座：gallery 的 fixture 没有排座数据，原样返回
+    seating: async () => get(),
+    nextRound: async () => get(),
+    seatAbsent: async () => get(),
+    verifySeating: fakeVerify,
   };
 }
 

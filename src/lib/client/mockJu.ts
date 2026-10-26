@@ -200,6 +200,29 @@ export function useMockJu(id: string, key: string): JuHook {
         });
         return names;
       },
+      social: async (body) => {
+        await wait(300);
+        const s = patchMe((me, p) => {
+          if (body.know) p.know = { ...(p.know ?? {}), ...body.know };
+          if (body.energy) p.energy = body.energy;
+          if (body.avoid) p.avoid = body.avoid.slice(0, 1);
+          if (body.interests) me.interests = body.interests;
+        });
+        return s.me!;
+      },
+      feel: async (round, feel) => {
+        await wait(200);
+        patchMe((_me, p) => {
+          p.feel = { ...(p.feel ?? {}), [String(round)]: feel };
+        });
+      },
+      clicked: async (ids) => {
+        await wait(300);
+        patchMe((_me, p) => {
+          p.clicked = ids;
+        });
+        return [];
+      },
       setStatus: async (status) => {
         await wait(300);
         patchMe((me) => {

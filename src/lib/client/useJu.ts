@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Itinerary, JuState, Member, Notice, SwipeVerdict } from "@/lib/types";
-import { api, ApiError, type ChatBody, type ChatResult, type DeckResult, type JoinBody, type JoinResult, type VerifyResult } from "./api";
+import type { Itinerary, JuState, Member, Notice, RoundFeel, SwipeVerdict } from "@/lib/types";
+import { api, ApiError, type ChatBody, type ChatResult, type DeckResult, type JoinBody, type JoinResult, type SocialBody, type VerifyResult } from "./api";
 import { store } from "./storage";
 
 /** 页面组件只依赖这组动作；mock / gallery 用假实现替换 */
@@ -16,6 +16,12 @@ export type JuActions = {
   swipe: (poiId: string, verdict: SwipeVerdict) => Promise<Member>;
   /** #2 返回互选成功的名字 */
   wants: (memberIds: string[]) => Promise<string[]>;
+  /** v4 #17 #18 私下标记（熟不熟 / 电量 / 回避 / 公开兴趣） */
+  social: (body: SocialBody) => Promise<Member>;
+  /** v4 #19 这一轮的私下感受 */
+  feel: (round: number, feel: RoundFeel) => Promise<void>;
+  /** v4 #20 返回双方都觉得聊得来的名字 */
+  clicked: (memberIds: string[]) => Promise<string[]>;
   setStatus: (status: "in" | "out") => Promise<void>;
   vote: (proposalId: string) => Promise<void>;
   verify: () => Promise<VerifyResult>;
@@ -165,7 +171,9 @@ export function useJu(id: string): JuHook {
       seq.current++;
       const cur = stateRef.current;
       if (!cur) return;
-      const members = cur.members.map((m) => (m.id === me.id ? { ...m, intake: me.intake, status: me.status, name: me.name, avatar: me.avatar, location: me.location } : m));
+      const members = cur.members.map((m) =>
+        m.id === me.id ? { ...m, intake: me.intake, status: me.status, name: me.name, avatar: me.avatar, location: me.location, interests: me.interests } : m,
+      );
       commit({ ...cur, me, members });
     };
     const needMe = () => {
@@ -214,6 +222,27 @@ export function useJu(id: string): JuHook {
         const cur = stateRef.current;
         if (cur) commit({ ...cur, mine: { experiences: [], unread: 0, ...cur.mine, matchNames: r.matchNames } });
         return r.matchNames;
+      },
+      social: async (body) => {
+        needMe();
+        const r = await api.social(id, body);
+        applyMe(r.me);
+        // 公开兴趣改了：公开成员列表跟着刷新
+        if (body.interests) kick.current();
+        return r.me;
+      },
+      feel: async (round, feel) => {
+        needMe();
+        const r = await api.feel(id, round, feel);
+        applyMe(r.me);
+      },
+      clicked: async (memberIds) => {
+        needMe();
+        const r = await api.clicked(id, memberIds);
+        applyMe(r.me);
+        const cur = stateRef.current;
+        if (cur) commit({ ...cur, mine: { experiences: [], unread: 0, matchNames: [], ...cur.mine, clickNames: r.clickNames } });
+        return r.clickNames;
       },
       setStatus: async (status) => {
         const mid = store.getMember(id);

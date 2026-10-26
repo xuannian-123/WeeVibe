@@ -9,6 +9,7 @@ import type { JuActions } from "@/lib/client/useJu";
 import { Avatar, Button, LockNote, SectionTitle, Sheet, copyText } from "../ui";
 import { toast } from "../toast";
 import { BudgetWidget, DietWidget, LocationWidget, TimeWidget, privateSummary } from "./widgets";
+import { SocialCard } from "./Social";
 
 function whenText(iso?: string): string {
   if (!iso) return "";
@@ -201,73 +202,6 @@ export function MyInfoCard({ state, me, actions }: { state: JuState; me: Member;
   );
 }
 
-/* ───────── #2 想认识谁 ───────── */
-export function WantsCard({ state, me, actions }: { state: JuState; me: Member; actions: JuActions }) {
-  const others = state.members.filter((m) => m.id !== me.id);
-  const saved = me.private?.wants ?? [];
-  const [sel, setSel] = useState<string[]>(saved);
-  const [busy, setBusy] = useState(false);
-  const savedKey = [...saved].sort().join(",");
-  useEffect(() => setSel(savedKey ? savedKey.split(",") : []), [savedKey]);
-  if (!others.length || state.ju.quorum?.state === "pending") return null;
-  const dirty = [...sel].sort().join(",") !== savedKey;
-  const matches = state.mine?.matchNames ?? [];
-
-  const save = async () => {
-    setBusy(true);
-    try {
-      const names = await actions.wants(sel);
-      toast(names.length ? `🎉 和 ${names.join("、")} 互选成功！` : "记下了，只有对方也选了你才会揭晓", "ok");
-    } catch (e) {
-      toast(errMsg(e), "error");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <section className="sticker p-4" data-tour="wants">
-      <div className="mb-1 flex items-center gap-2">
-        <h3 className="flex-1 text-lg font-black">想认识谁？👀</h3>
-        <LockNote>私密</LockNote>
-      </div>
-      <p className="mb-3 text-[13px] leading-relaxed text-ink-soft">
-        只有对方也选了你才会揭晓，局长会安排你们坐一起。<b className="text-ink">单方面的选择，永远没人知道。</b>
-      </p>
-      {matches.length > 0 && (
-        <div className="animate-pop-in mb-3 rounded-xl border-2 border-ink bg-cinnabar-soft px-3 py-2.5 text-[14px] font-bold">
-          🎉 你和 <span className="text-cinnabar-deep">{matches.join("、")}</span> 互相想认识！到时候坐一起。
-        </div>
-      )}
-      <div className="flex flex-wrap gap-2">
-        {others.map((m) => {
-          const on = sel.includes(m.id);
-          return (
-            <button
-              key={m.id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setSel((xs) => (on ? xs.filter((x) => x !== m.id) : [...xs, m.id]))}
-              className={`pressable flex min-h-11 items-center gap-1.5 rounded-full border-2 border-ink py-1 pl-1 pr-3 text-[14px] font-bold ${
-                on ? "bg-cinnabar text-white shadow-sticker-sm" : "bg-card"
-              }`}
-            >
-              <Avatar emoji={m.avatar} size={30} />
-              {m.name}
-              {on && <span aria-hidden>♥</span>}
-            </button>
-          );
-        })}
-      </div>
-      {dirty && (
-        <Button className="mt-3 w-full" size="sm" loading={busy} onClick={save}>
-          悄悄告诉局长
-        </Button>
-      )}
-    </section>
-  );
-}
-
 /* ───────── 拉人 ───────── */
 export function SharePanel({ state }: { state: JuState }) {
   const [url, setUrl] = useState("");
@@ -345,7 +279,7 @@ export function WaitingView({ state, me, actions }: { state: JuState; me: Member
       {waitlist ? <WaitlistCard /> : <QuorumCard state={state} />}
       {!waitlist && <ProgressCard state={state} meId={me.id} />}
       <MyInfoCard state={state} me={me} actions={actions} />
-      {!waitlist && <WantsCard state={state} me={me} actions={actions} />}
+      {!waitlist && <SocialCard state={state} me={me} actions={actions} />}
       {lastAnn && (
         <section className="rounded-[var(--radius-card)] border-2 border-dashed border-ink-faint p-4">
           <div className="mb-1 flex items-center justify-between text-[12px] font-bold text-ink-faint">

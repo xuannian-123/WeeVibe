@@ -30,6 +30,7 @@ import {
 } from "./ju-core";
 import { getProfile, learnFromMember, saveProfile } from "./profile";
 import type { ChatBody, JoinInput } from "./schemas";
+import { prefillKnow } from "./social";
 
 const DIET: readonly DietTag[] = ["不吃辣", "素食", "清真", "不吃牛肉", "不吃海鲜", "不吃内脏"];
 
@@ -192,6 +193,8 @@ export async function join(
       m.seedId = seed.id;
     }
     members.push(m);
+    // #21 同一拨人再约：局长记得上次谁和谁同桌、谁和谁聊得来（各自档案里的记忆，双向预填）
+    prefillKnow(members, m);
     if (m.status === "in" && ju.status === "confirmed") ctx.afterConfirm = "有朋友加入了";
     return { m: structuredClone(m), resumed: undefined as string | undefined, ju: structuredClone(ju), quorumPending: quorumHidden(ju), now };
   });

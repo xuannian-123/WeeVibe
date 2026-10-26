@@ -5,11 +5,13 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { BillSplit, GroupMessages, JuState, Proposal, Receipt } from "@/lib/types";
 import { compressImage } from "@/lib/client/image";
 import { store } from "@/lib/client/storage";
-import { Button, RotatingText, Sheet, copyText } from "@/components/ui";
+import { Button, RotatingText, Sheet } from "@/components/ui";
 import { toast } from "@/components/toast";
 import { InviteLinks } from "@/components/launch/InviteLinks";
 import { confirmedProposal, slotLabel, voteTally, yuan } from "@/components/screen/fmt";
 import { errMsg, organizerApi, type CreateResult, type OrganizerApi, type Payments } from "./api";
+import { Card, CopyBlock, type Ctx } from "./bits";
+import { SeatingPanel } from "./Seating";
 import { SimCall } from "./SimCall";
 
 /** gallery 里换成假实现；默认是真接口 */
@@ -17,29 +19,9 @@ export const OrganizerApiContext = createContext<OrganizerApi>(organizerApi);
 
 const PLAN_LINES = ["局长正在掐指一算…", "在帕累托前沿上挑方案…", "核对每个人的通勤…", "写审计哈希…"];
 
-type Ctx = {
-  state: JuState;
-  admin: string;
-  api: OrganizerApi;
-  busy: string | null;
-  run: (key: string, fn: () => Promise<void>) => () => Promise<void>;
-  apply: (s: JuState) => void;
-  refresh: () => Promise<void>;
-};
+
 
 /* ───────── 小积木 ───────── */
-function Card({ title, hint, children, tone = "card", tour }: { title: React.ReactNode; hint?: React.ReactNode; children: React.ReactNode; tone?: "card" | "gold"; tour?: string }) {
-  return (
-    <section data-tour={tour} className={`rounded-[var(--radius-card)] border-2 border-ink p-3.5 ${tone === "gold" ? "bg-mustard-soft" : "bg-card"}`}>
-      <div className="mb-2.5 flex items-baseline gap-2">
-        <h4 className="text-[16px] font-black">{title}</h4>
-        {hint && <span className="ml-auto text-right text-[12px] text-ink-faint">{hint}</span>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
 function Meter({ have, need, label }: { have: number; need: number; label?: string }) {
   const pct = need > 0 ? Math.min(100, (have / need) * 100) : 0;
   return (
@@ -48,31 +30,6 @@ function Meter({ have, need, label }: { have: number; need: number; label?: stri
         <div className="absolute inset-y-0 left-0 bg-cinnabar transition-[width] duration-700" style={{ width: `${pct}%` }} />
       </div>
       {label && <div className="mt-1 text-[12px] text-ink-soft">{label}</div>}
-    </div>
-  );
-}
-
-function CopyBlock({ text, label = "复制", clamp }: { text: string; label?: string; clamp?: boolean }) {
-  const [full, setFull] = useState(false);
-  const long = !!clamp && text.split("\n").length + text.length / 40 > 4;
-  return (
-    <div>
-      <p className={`whitespace-pre-wrap rounded-lg border-2 border-dashed border-line bg-paper px-3 py-2 text-[14px] leading-relaxed ${long && !full ? "line-clamp-3" : ""}`}>
-        {text}
-      </p>
-      {long && (
-        <button type="button" onClick={() => setFull((x) => !x)} className="mt-1 min-h-9 text-[13px] font-bold text-ink-soft underline underline-offset-4">
-          {full ? "收起" : "展开全文"}
-        </button>
-      )}
-      <Button
-        variant="gold"
-        size="sm"
-        className="mt-2 w-full"
-        onClick={async () => toast((await copyText(text)) ? "已复制，去群里粘贴" : "复制失败，长按文字手动复制", "ok")}
-      >
-        {label}
-      </Button>
     </div>
   );
 }
@@ -731,6 +688,11 @@ function DemoTools({ c }: { c: Ctx }) {
             {busy === "seed" ? "拉人中…" : "加入演示朋友"}
           </button>
         )}
+        {state.ju.status === "collecting" && (
+          <button className={btn} disabled={!!busy} onClick={run("seed-club", async () => apply(await api.devSeed(state.ju.id, admin, undefined, "club")))}>
+            {busy === "seed-club" ? "拉人中…" : "社团演示（9 个半生不熟的朋友）"}
+          </button>
+        )}
         <button className={btn} disabled={!!busy} onClick={shift(off + 30, "+30 分钟")}>
           +30 分钟
         </button>
@@ -772,9 +734,12 @@ function Confirmed({ c, msgs, setMsgs }: { c: Ctx; msgs: GroupMessages | null; s
       <After c={c} />
     </>
   );
+  const seat = state.ju.seating;
+  const seatLive = !!seat && seat.current >= 0 && seat.current < seat.rounds.length;
   if (over) {
     return (
       <>
+        {seatLive && <SeatingPanel c={c} />}
         {afterTools}
         {changes}
         <Reservation c={c} msgs={msgs} setMsgs={setMsgs} />
@@ -784,7 +749,9 @@ function Confirmed({ c, msgs, setMsgs }: { c: Ctx; msgs: GroupMessages | null; s
   }
   return (
     <>
+      {seatLive && <SeatingPanel c={c} />}
       <Reservation c={c} msgs={msgs} setMsgs={setMsgs} />
+      {!seatLive && <SeatingPanel c={c} />}
       {changes}
       <Broadcast msgs={msgs} state={state} />
       <details data-tour="org-after" className="rounded-[var(--radius-card)] border-2 border-dashed border-ink-faint px-3.5 py-2">

@@ -18,6 +18,8 @@ export const NOTICE_ICON: Record<Notice["kind"], string> = {
   autofill: "✍️",
   payment: "🧾",
   recap: "📸",
+  seat: "💺",
+  click: "🤝",
 };
 
 /** 站内信：JuState.me.private.inbox 为主，另外每 10 秒轮询一次 /inbox（页面隐藏时停） */
