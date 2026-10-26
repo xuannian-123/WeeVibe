@@ -236,6 +236,10 @@ export const api = {
   clicked: (id: string, memberIds: string[]) =>
     request<{ me: Member; clickNames: string[] }>(`${J(id)}/clicked`, { body: { memberIds }, ju: id, auth: "member" }),
 
+  /** v5 回答局长私下问的是 / 否问题 */
+  answerAsk: (id: string, askId: string, answer: "yes" | "no") =>
+    request<{ me: Member }>(`${J(id)}/ask`, { body: { askId, answer }, ju: id, auth: "member", timeoutMs: 60000 }),
+
   /** v4 #21 同一个圈子一局一局熟起来 */
   circle: (id: string) => request<CircleStep[]>(`${J(id)}/circle`, { timeoutMs: 10000 }),
 

@@ -341,6 +341,8 @@ export function sensitiveOf(ju: Ju, members: Member[]): Sensitive {
   const secrets = new Set<string>();
   for (const m of members) {
     for (const n of m.private?.notes ?? []) if (n.trim().length >= 2) notes.add(n.trim());
+    // v5：局长私下问的问题原文（里面有本人的时间 / 预算细节），任何公开输出里都不能出现
+    for (const a of m.private?.asks ?? []) if (a.text.trim().length >= 2) notes.add(a.text.trim());
     if (m.private?.budgetMax !== undefined) budgets.add(m.private.budgetMax);
     if (m.secret?.token) secrets.add(m.secret.token);
     if (m.profileId) secrets.add(m.profileId);

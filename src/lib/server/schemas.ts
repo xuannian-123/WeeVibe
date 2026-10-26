@@ -132,3 +132,6 @@ export type PatchJuInput = z.output<typeof patchJuBody>;
 export type JoinInput = z.output<typeof joinBody>;
 export type ChatBody = z.output<typeof chatBody>;
 export type PatchMemberInput = z.output<typeof patchMemberBody>;
+
+// ---- v5 协商 ----
+export const askBody = z.object({ askId: z.string().min(1).max(20), answer: z.enum(["yes", "no"]) });

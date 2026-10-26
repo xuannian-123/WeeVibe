@@ -23,7 +23,8 @@ import { estimateCommute, haversineKm, round1 } from "../map/geo";
 import { fairCenter } from "./center";
 import { categoryMatches, categoryWords } from "./category";
 import { isHotpotCategory } from "./diet";
-import { CARE_FLOOR, experienceDetail, queueMinutes, slotTimes, type PlanContext, type PrivateFlags } from "./experience";
+import { CARE_FLOOR, experienceDetail, queueMinutes, slotTimes, type PlanContext, type PrivateFlags, type SoftCost } from "./experience";
+import { planRepairs, type AskDraft } from "./repair";
 import { openFits, risksFor, slotWeather, weatherEffects, type Effects, type SlotWeather } from "./external";
 import { poiIndoor } from "./needs";
 import { fairnessWeights } from "./fairness";
@@ -59,6 +60,8 @@ export type Candidate = {
   pubs: Experience[];
   mines: { utility: number; notes: string[]; needs: NeedResult[]; cared: boolean }[];
   flags: PrivateFlags[];
+  /** v5 协商用：每人每条软偏好的扣分（只在服务端内部用） */
+  softs: SoftCost[][];
   attend: number;
   /** v5 第一级：被照顾到的人数（能来 + 硬约束满足 + 满意度 ≥ 保底线） */
   cared: number;
@@ -192,6 +195,7 @@ export function evaluateCandidate(
   const pubs: Experience[] = [];
   const mines: Candidate["mines"] = [];
   const flags: PrivateFlags[] = [];
+  const softs: SoftCost[][] = [];
   members.forEach((m, i) => {
     const d = experienceDetail(m, slot, poi, commutes[i], ctx);
     // 天气（公开事实）：户外 + 小雨 / 高温 / 严寒 / 大风，所有到场的人一起扣
@@ -202,6 +206,7 @@ export function evaluateCandidate(
     pubs.push(d.pub);
     mines.push(d.mine);
     flags.push(d.flags);
+    softs.push(d.soft);
   });
   const here = members.map((_, i) => i).filter((i) => pubs[i].status !== "absent");
   const attend = here.length;
@@ -223,6 +228,7 @@ export function evaluateCandidate(
     pubs,
     mines,
     flags,
+    softs,
     attend,
     cared: caredIdx.length,
     caredW: Math.round(caredIdx.reduce((s, i) => s + weights[i], 0) * 100) / 100,
@@ -652,8 +658,10 @@ export async function planJu(
     onTrace?: TraceFn;
     ledgers?: Record<string, LedgerEntry[]>;
     now?: Date;
+    /** v5 让步账：memberId -> 最近答应过让步的次数（越多越不先问） */
+    concessions?: Record<string, number>;
   },
-): Promise<{ plan: Plan; mine: Record<string, MyExperience[]> }> {
+): Promise<{ plan: Plan; mine: Record<string, MyExperience[]>; asks: AskDraft[] }> {
   const trace: TraceFn = (k, t) => {
     try {
       opts.onTrace?.(k, t);
@@ -679,7 +687,7 @@ export async function planJu(
     `${n} 位朋友在局里，${withLoc} 人给了出发地` + (shared ? `，${shared} 人私下跟局长说了自己的情况` : ""),
   );
 
-  const { slots, pois, center, cands, weights } = await computeCandidates(ju, inMembers, map, ledgers, trace);
+  const { slots, pois, center, cands, weights, ctx } = await computeCandidates(ju, inMembers, map, ledgers, trace);
 
   trace("compute", `计算了 ${slots.length} 个时段 × ${pois.length} 家店 × ${n} 个人 = ${slots.length * pois.length * n} 次体验`);
 
@@ -733,7 +741,25 @@ export async function planJu(
     paretoSize: front.length,
     algorithmVersion: ALGORITHM_VERSION,
   };
-  const body = { proposals, recommendation, why, caredFor, constraintSummaries, center };
+  // v5 极端情况：没能照顾到所有人 → 诊断 + 找一个问题就能照顾到的人（局长私下去问）
+  const repair = planRepairs(inMembers, pool, rec, ctx, opts.concessions ?? {}, decisionCompare);
+  if (repair.diagnosis) {
+    trace("warn", `没有完美方案：${repair.diagnosis.reasons.join("，")}`);
+    if (repair.asks.length) trace("decide", `局长私下去问 ${repair.asks.length} 位朋友能不能让一小步，问完自动重算`);
+    for (const sg of repair.diagnosis.suggestions) trace("decide", `建议发起人：${sg}`);
+  }
+  const yes = inMembers.filter((m) => (m.private?.asks ?? []).some((a) => a.status === "yes")).length;
+  const coordination = yes ? `局长私下协调了 ${yes} 位朋友` : undefined;
+  const body = {
+    proposals,
+    recommendation,
+    why,
+    caredFor,
+    constraintSummaries,
+    center,
+    ...(repair.diagnosis ? { diagnosis: repair.diagnosis } : {}),
+    ...(coordination ? { coordination } : {}),
+  };
   audit.outputHash = outputHashOf({ ...body, audit });
   const plan: Plan = { ...body, audit, computedAt: (opts.now ?? new Date()).toISOString() };
   if (!caredFor) delete plan.caredFor;
@@ -750,5 +776,5 @@ export async function planJu(
       cared: p.c.mines[i].cared,
     }));
   });
-  return { plan, mine };
+  return { plan, mine, asks: repair.asks };
 }

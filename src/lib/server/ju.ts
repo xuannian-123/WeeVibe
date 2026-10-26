@@ -194,10 +194,22 @@ export function ledgersFor(members: Member[]): Record<string, LedgerEntry[]> {
   return out;
 }
 
+/** v5 让步账：memberId -> 最近 6 局里答应过让步的次数（从档案取） */
+export function concessionsFor(members: Member[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const m of members) {
+    if (m.status !== "in" || !m.profileId) continue;
+    const n = (getProfile(m.profileId)?.concessions ?? []).slice(-6).length;
+    if (n) out[m.id] = n;
+  }
+  return out;
+}
+
 export function planDeps(members: Member[]): AdvanceDeps {
   return {
     map: getMapProvider(),
     ledgers: ledgersFor(members),
+    concessions: concessionsFor(members),
     profiles: profilesFor(members),
     polish: polishPlan,
   };
@@ -331,6 +343,7 @@ export async function verifyPlan(id: string): Promise<{ ok: boolean; inputHash: 
     replayMap(snap.mapLog, getMapProvider()),
     snap.ledgers,
     new Date(snap.now),
+    snap.concessions ?? {},
   );
   const a = ju.plan.audit;
   return {

@@ -82,7 +82,8 @@ export type Notice = {
     | "payment" // #14 该转钱 / 提醒
     | "recap" // #16 局后回顾
     | "seat" // #18 座位排好了 / 下一轮换桌
-    | "click"; // #20 双方都觉得聊得来
+    | "click" // #20 双方都觉得聊得来
+    | "ask"; // v5 局长私下问你一件事（协商）
   text: string;
   read?: boolean;
 };
@@ -149,6 +150,38 @@ export type MemberPrivate = {
   pendingConfirm?: PendingConfirm;
   /** 本人确认过的硬约束 key（如 "homeBy"、"diet:清真"、need id） */
   confirmed?: string[];
+  // ---- v5 极端情况：协商（docs/DECISION.md 第 5 节） ----
+  /** 局长私下问本人的事（是 / 否） */
+  asks?: NegotiationAsk[];
+  /** 本人同意放宽的时间门槛（"这次只能待 35 分钟也来"） */
+  relax?: { maxLateMin?: number; minStayMin?: number };
+  /** 本人同意这次不计较的软偏好（need id 或 "budget"） */
+  waived?: string[];
+};
+
+/** 局长私下问一个人的是 / 否问题。只问软的（时间门槛、软偏好），绝不请人违反硬约束 */
+export type NegotiationAsk = {
+  id: string;
+  /** selfTime：请本人接受晚到 / 少待一会儿；waiveSoft：请本人这次不计较某条软偏好 */
+  kind: "selfTime" | "waiveSoft";
+  text: string;
+  relax?: { maxLateMin?: number; minStayMin?: number };
+  needKey?: string;
+  status: "pending" | "yes" | "no";
+  at: string;
+  answeredAt?: string;
+};
+
+/** 推荐方案的冲突诊断（公开安全：只有分类后的人数） */
+export type Diagnosis = {
+  /** 没被照顾到的人数 */
+  uncared: number;
+  /** "有 1 位朋友时间凑不上" "2 人觉得偏贵" */
+  reasons: string[];
+  /** 局长正在私下问的人数 */
+  coordinating: number;
+  /** 局长没法自己解决、建议发起人做的事："加一个候选时间" */
+  suggestions: string[];
 };
 
 // ---------------------------------------------------------------- v5 需求模型
@@ -366,6 +399,10 @@ export type Plan = {
   recommendation: string;
   /** v5：推荐理由，三级准则各一句（公开安全：只用公开因素和聚合数） */
   why?: string[];
+  /** v5：推荐方案没能照顾到所有人时的诊断（公开安全：只有分类人数） */
+  diagnosis?: Diagnosis;
+  /** v5：协商摘要（聚合），如"局长私下协调了 1 位朋友" */
+  coordination?: string;
   /** #10 跨局公平的公开说明（聚合），如 "这次优先照顾了前几次跑得最远的 1 位朋友" */
   caredFor?: string;
   /** 聚合后的约束说明，公开安全；只有 1 人有某约束时只说"有人"，不给能反推的细节 */
@@ -758,6 +795,8 @@ export type Profile = {
   usualHomeBy?: string;
   /** v4 #21 我和别人熟不熟的记忆（对方的 profileId -> 0/1/2）：同桌过至少"见过"，选了聊得来就是"挺熟"。只有本人档案里有 */
   know?: Record<string, Familiarity>;
+  /** v5 让步账：在协商里答应过让步的局（最近的越多，下次越不先问他） */
+  concessions?: { juId: string; at: string }[];
 };
 
 /** GET /api/stats —— 路演用的真实使用数据，只统计非演示成员 */

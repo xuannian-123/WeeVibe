@@ -223,6 +223,7 @@ function Voting({ c, msgs }: { c: Ctx; msgs: GroupMessages | null }) {
   if (!plan) return null;
   return (
     <>
+      <DiagnosisCard c={c} />
       <Card title="🗳️ 大家在投" tour="org-votes" hint={<span className="font-num">{voted}/{state.counts.in} 已投 · 过半自动定局</span>}>
         <p className="mb-2.5 text-[12.5px] text-ink-faint">你自己投票在“我的”里；这里的拍板不算投票。</p>
         <ul className="space-y-2.5">
@@ -712,6 +713,33 @@ function DemoTools({ c }: { c: Ctx }) {
         )}
       </div>
     </section>
+  );
+}
+
+/* ───────── v5 冲突诊断（只有分类人数，看不出是谁） ───────── */
+function DiagnosisCard({ c }: { c: Ctx }) {
+  const plan = c.state.ju.plan;
+  const d = plan?.diagnosis;
+  if (!d && !plan?.coordination) return null;
+  return (
+    <Card title={d ? "🩺 没有完美方案" : "🤝 局长协调过了"} hint="只有人数，看不出是谁" tone="gold">
+      {d && (
+        <>
+          <p className="text-[14px] font-bold">还有 {d.uncared} 位朋友没照顾好：{d.reasons.join("；")}</p>
+          {d.coordinating > 0 && <p className="mt-1 text-[13.5px]">局长正在私下问 {d.coordinating} 位朋友能不能让一小步，都答完会自动重算。</p>}
+          {d.suggestions.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {d.suggestions.map((s) => (
+                <li key={s} className="text-[13.5px]">
+                  💡 {s}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+      {plan?.coordination && <p className="mt-1 text-[13.5px] text-ink-soft">{plan.coordination}。</p>}
+    </Card>
   );
 }
 

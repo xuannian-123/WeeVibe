@@ -212,6 +212,36 @@ describe("决策基准集", () => {
     expect(plan.proposals[0].risks?.find((r) => r.kind === "weather")?.mitigation).toBe("带伞；这家在室内，不受影响");
   });
 
+  // ---------------- 极端情况（docs/DECISION.md 第 5 节）
+
+  it("B14 硬约束绝不拿来协商：清真没有能吃的店时，不问任何人，只建议发起人换品类", async () => {
+    const ms = people(5, (i) => (i === 0 ? { dietTags: ["清真"] } : {}));
+    const { plan, asks } = await decide([{ id: "bbq", name: "炭火烤肉", type: "餐饮服务;中餐厅;烧烤" }], rows(5, () => [10]), ms);
+    expect(asks).toEqual([]);
+    expect(plan.diagnosis?.uncared).toBe(1);
+    expect(plan.diagnosis?.reasons.join("")).toMatch(/忌口或硬性要求/);
+    expect(plan.diagnosis?.suggestions.join("")).toMatch(/换个品类/);
+  });
+
+  it("B15 让步账：两个人都能让一步时，先问最近没让过步的那个", async () => {
+    // P0 20:00 门禁、P1 19:30 才出发：要么问 P0 少待一会儿，要么问 P1 晚到一点
+    const ms = people(6, (i) => (i === 0 ? { availability: day("17:00", "20:00") } : i === 1 ? { availability: day("19:30") } : {}));
+    const run = async (concessions: Record<string, number>) => {
+      const s = spec({ dates: [DATE], earliest: "18:30", latest: "19:30", durationMinutes: 120, category: "聚餐", poiKeywords: ["餐厅"], budgetPerPerson: undefined });
+      const j = mkJu(s, generateSlots(s), { id: "bench" });
+      return planJu(j, ms, fakeMap([{ id: "a", name: "甲餐厅", type: "餐饮服务;中餐厅;餐厅" }], rows(6, () => [5])), {
+        auditSecret: "bench",
+        now: new Date("2030-10-30T10:00:00+08:00"),
+        concessions,
+      });
+    };
+    const a = await run({ p0: 3 });
+    const b = await run({ p1: 3 });
+    expect(a.asks.map((x) => x.memberId)).toEqual(["p1"]);
+    expect(b.asks.map((x) => x.memberId)).toEqual(["p0"]);
+    expect(a.asks[0].kind).toBe("selfTime");
+  });
+
   it("B9 推荐理由只用公开信息：不出现任何人的私密预算或需求原文", async () => {
     const ms = people(5, (i) => (i === 0 ? { budgetMax: 67, notes: ["最近手头紧"], needs: [need({ t: "quiet" }, "ambience")] } : {}));
     const { plan } = await decide([{ id: "a", name: "甲店", costPerPerson: 90 }], rows(5, () => [20]), ms);

@@ -223,6 +223,13 @@ export function useMockJu(id: string, key: string): JuHook {
         });
         return [];
       },
+      answerAsk: async (askId, yes) => {
+        await wait(300);
+        patchMe((_me, p) => {
+          const a = (p.asks ?? []).find((x) => x.id === askId);
+          if (a) a.status = yes ? "yes" : "no";
+        });
+      },
       setStatus: async (status) => {
         await wait(300);
         patchMe((me) => {

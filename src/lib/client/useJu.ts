@@ -22,6 +22,8 @@ export type JuActions = {
   feel: (round: number, feel: RoundFeel) => Promise<void>;
   /** v4 #20 返回双方都觉得聊得来的名字 */
   clicked: (memberIds: string[]) => Promise<string[]>;
+  /** v5 回答局长私下问的是 / 否问题（答完会触发重算，所以刷新整个视图） */
+  answerAsk: (askId: string, yes: boolean) => Promise<void>;
   setStatus: (status: "in" | "out") => Promise<void>;
   vote: (proposalId: string) => Promise<void>;
   verify: () => Promise<VerifyResult>;
@@ -243,6 +245,12 @@ export function useJu(id: string): JuHook {
         const cur = stateRef.current;
         if (cur) commit({ ...cur, mine: { experiences: [], unread: 0, matchNames: [], ...cur.mine, clickNames: r.clickNames } });
         return r.clickNames;
+      },
+      answerAsk: async (askId, yes) => {
+        needMe();
+        const r = await api.answerAsk(id, askId, yes ? "yes" : "no");
+        applyMe(r.me);
+        kick.current();
       },
       setStatus: async (status) => {
         const mid = store.getMember(id);

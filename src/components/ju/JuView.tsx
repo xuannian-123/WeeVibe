@@ -17,6 +17,7 @@ import { LeaveLink, WaitingView } from "./Waiting";
 import { PlansView } from "./Plans";
 import { ConfirmedView } from "./Confirmed";
 import { InboxBanner, InboxBell, InboxDrawer, useInbox } from "./Inbox";
+import { AskCard } from "./Ask";
 
 export function TopBar({ status, offline, right }: { status?: string; offline?: boolean; right?: ReactNode }) {
   return (
@@ -183,6 +184,7 @@ export function JuView({
       {me && !immersive && !managing && (
         <InboxBanner notices={inbox.notices} status={ju.status} onOpen={() => setInboxOpen(true)} />
       )}
+      {me && !immersive && !managing && <AskCard me={me} actions={actions} />}
 
       {managing ? (
         <div className="mb-10 mt-4">{panel}</div>

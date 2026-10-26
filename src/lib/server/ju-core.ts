@@ -2,6 +2,7 @@
 // 所以反事实检验测到的，就是线上真实跑的那一份逻辑。
 import { pushNotice } from "./after/inbox";
 import { autofillFromProfile, planJu } from "../planner";
+import type { AskDraft } from "../planner/repair";
 import type { JuPrivate, PlanSnapshot } from "../db";
 import type {
   DietTag,
@@ -10,6 +11,7 @@ import type {
   MapProvider,
   Member,
   MemberPrivate,
+  NegotiationAsk,
   Notice,
   Plan,
   Profile,
@@ -245,6 +247,8 @@ export type PlanDeps = {
   now: Date;
   /** memberId -> 账本（从档案取） */
   ledgers: Record<string, LedgerEntry[]>;
+  /** v5 让步账：memberId -> 最近答应过让步的次数 */
+  concessions?: Record<string, number>;
   /** 公开 LLM 润色（B1 polishPlan）；不传 = 规则版 */
   polish?: (facts: PublicFacts, plan: Plan) => Promise<Plan>;
   /** 是否发群公告（反事实检验里也发，因为公告是公开输出的一部分） */
@@ -311,6 +315,7 @@ export async function runPlanner(
   map: MapProvider,
   ledgers: Record<string, LedgerEntry[]>,
   now: Date,
+  concessions: Record<string, number> = {},
 ) {
   if (!ju.admin?.auditSecret) throw new HttpError(500, "局缺少审计密钥");
   return planJu(ju, inOnly(members), map, {
@@ -318,6 +323,7 @@ export async function runPlanner(
     onTrace: (kind, text) => appendTraceAt(ju, kind, text, now),
     ledgers,
     now,
+    concessions,
   });
 }
 
@@ -344,12 +350,12 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
 
   let result: Awaited<ReturnType<typeof planJu>>;
   try {
-    result = await runPlanner(ju, ins, recordingMap(deps.map, mapLog), deps.ledgers, now);
+    result = await runPlanner(ju, ins, recordingMap(deps.map, mapLog), deps.ledgers, now, deps.concessions ?? {});
   } catch (e) {
     if (e instanceof HttpError) throw e;
     throw new HttpError(422, (e as Error)?.message || "出方案失败");
   }
-  const { plan, mine } = result;
+  const { plan, mine, asks } = result;
 
   let polished: Plan;
   if (deps.polish) {
@@ -374,7 +380,14 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
   for (const [mid, pid] of Object.entries(prevVotes ?? {})) if (inIds.has(mid) && ids.has(pid)) ju.votes[mid] = pid;
 
   priv.mine = mine;
-  const snapshot: PlanSnapshot = { ju: snapJu, members: snapMembers, ledgers: deps.ledgers, now: now.toISOString(), mapLog };
+  const snapshot: PlanSnapshot = {
+    ju: snapJu,
+    members: snapMembers,
+    ledgers: deps.ledgers,
+    now: now.toISOString(),
+    mapLog,
+    ...(deps.concessions && Object.keys(deps.concessions).length ? { concessions: deps.concessions } : {}),
+  };
   priv.snapshot = snapshot;
   priv.pendingMembers = [];
   ju.pendingChanges = 0;
@@ -382,11 +395,59 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
 
   if (deps.announce !== false) announceAt(ju, planText(publicFacts(ju, members), replan), now);
   expireNudges(members);
+  issueAsks(ins, asks, now);
   for (const m of ins) {
     if (ju.votes[m.id]) continue;
     notify(m, "nudge", replan ? "局长更新了方案，去看看还投不投原来那个？" : `局长出了 ${polished.proposals.length} 个方案，去投一票吧，过半就自动定局。`, now);
   }
 }
+
+// ---------------------------------------------------------------- v5 协商：局长私下问
+
+/** 把规划器给的问题草稿私下发出去（站内信 + 私聊里的是 / 否按钮）。只进本人 private */
+export function issueAsks(members: Member[], drafts: AskDraft[], now: Date): number {
+  let n = 0;
+  for (const d of drafts) {
+    const m = members.find((x) => x.id === d.memberId);
+    if (!m) continue;
+    const p = (m.private ??= emptyPrivate());
+    if ((p.asks ?? []).some((a) => a.status === "pending")) continue;
+    const ask: NegotiationAsk = {
+      id: `a${(p.asks?.length ?? 0) + 1}`,
+      kind: d.kind,
+      text: d.text,
+      ...(d.relax ? { relax: d.relax } : {}),
+      ...(d.needKey ? { needKey: d.needKey } : {}),
+      status: "pending",
+      at: now.toISOString(),
+    };
+    p.asks = [...(p.asks ?? []), ask];
+    notify(m, "ask", `局长私下问你一件事：${d.text}`, now);
+    n++;
+  }
+  return n;
+}
+
+/** 本人回答了：答应就放宽（时间门槛 / 这次不计较某条软偏好）；所有问题都答完了就重算 */
+export function applyAnswer(m: Member, askId: string, yes: boolean, now: Date): NegotiationAsk {
+  const p = (m.private ??= emptyPrivate());
+  const ask = (p.asks ?? []).find((a) => a.id === askId);
+  if (!ask) throw new HttpError(404, "没有这个问题");
+  if (ask.status !== "pending") throw new HttpError(409, "这个问题已经回答过了");
+  ask.status = yes ? "yes" : "no";
+  ask.answeredAt = now.toISOString();
+  if (yes && ask.relax) {
+    p.relax = {
+      maxLateMin: Math.max(p.relax?.maxLateMin ?? 0, ask.relax.maxLateMin ?? 0) || undefined,
+      minStayMin: Math.min(p.relax?.minStayMin ?? 60, ask.relax.minStayMin ?? 60),
+    };
+    if (!p.relax.maxLateMin) delete p.relax.maxLateMin;
+  }
+  if (yes && ask.needKey) p.waived = [...new Set([...(p.waived ?? []), ask.needKey])];
+  return ask;
+}
+
+export const pendingAsks = (members: Member[]) => members.some((m) => (m.private?.asks ?? []).some((a) => a.status === "pending"));
 
 // ---------------------------------------------------------------- 投票 / 定局
 

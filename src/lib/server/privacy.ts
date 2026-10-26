@@ -494,6 +494,10 @@ const FORBIDDEN_KEYS = [
   "clickMatches",
   "decoys",
   "seatSnapshot",
+  // v5 协商
+  "asks",
+  "relax",
+  "waived",
 ];
 
 function forbiddenKeys(x: unknown, path = "", out: string[] = []): string[] {

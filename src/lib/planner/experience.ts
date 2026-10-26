@@ -66,8 +66,11 @@ export function publicExperience(member: Member, slot: Slot, commuteMin: number)
     stayEnd = Math.min(end, leaveAt);
   }
   const stay = stayEnd - arrive;
-  const minStay = Math.min(MIN_STAY_MIN, end - start);
-  if (late > ABSENT_LATE_MIN || stay < minStay) return absent();
+  // v5 协商：本人同意过"晚到一点 / 少待一会儿也来"，门槛按本人的来（来不来是现场看得见的事实，本身不算泄露）
+  const relax = member.private?.relax;
+  const maxLate = Math.max(ABSENT_LATE_MIN, relax?.maxLateMin ?? 0);
+  const minStay = Math.min(MIN_STAY_MIN, end - start, relax?.minStayMin ?? MIN_STAY_MIN);
+  if (late > maxLate || stay < minStay) return absent();
 
   const early = Math.max(0, end - stayEnd);
   let u = 100;
@@ -93,6 +96,25 @@ export function publicExperience(member: Member, slot: Slot, commuteMin: number)
     utility: Math.round(clamp(u, 0, 100)),
     notes,
   };
+}
+
+/** v5 协商用：这个人在这个时间会晚到多久、能待多久（不管门槛）。那天不行时 dayOk = false */
+export function timeFit(member: Member, slot: Slot, commuteMin: number): { dayOk: boolean; late: number; stay: number; leaveAt?: string } {
+  const commute = Math.max(0, Math.round(commuteMin));
+  const { date, start, end } = slotTimes(slot);
+  const day = dayAvailability(member, date);
+  if (!day) return { dayOk: false, late: 0, stay: 0 };
+  const from = hmToMin(day.from) ?? 0;
+  const arrive = Math.max(start, from + commute);
+  let stayEnd = end;
+  let leaveAt: string | undefined;
+  const hbRaw = hmToMin(day.homeBy);
+  if (hbRaw !== undefined) {
+    const hb = hbRaw <= from || (hbRaw < 12 * 60 && start >= 12 * 60) ? hbRaw + 1440 : hbRaw;
+    stayEnd = Math.min(end, hb - commute);
+    leaveAt = minToHm(stayEnd);
+  }
+  return { dayOk: true, late: arrive - start, stay: stayEnd - arrive, ...(leaveAt ? { leaveAt } : {}) };
 }
 
 /** 饭点排队：吃饭的地方 + 17:30–19:30 开始 + 评分 ≥ 4.5（公开因素，所有人一样） */
@@ -139,6 +161,9 @@ export type PrivateFlags = {
   hard: boolean;
 };
 
+/** v5 协商用：一条软偏好在这个方案里扣了多少分（只在服务端内部用，不出接口） */
+export type SoftCost = { key: string; cost: number; text: string; detail: string };
+
 /** 本人在这个方案里几点离开（当天分钟，可 > 1440） */
 function stayEndOf(pub: Experience, slot: Slot): number {
   const { start, end } = slotTimes(slot);
@@ -169,16 +194,18 @@ export function experienceDetail(
   poi: Poi,
   commuteMin: number,
   ctx: PlanContext,
-): { pub: Experience; mine: { utility: number; notes: string[]; needs: NeedResult[]; cared: boolean }; flags: PrivateFlags } {
+): { pub: Experience; mine: { utility: number; notes: string[]; needs: NeedResult[]; cared: boolean }; flags: PrivateFlags; soft: SoftCost[] } {
   const pub = publicExperience(member, slot, commuteMin);
   const flags: PrivateFlags = { overBudget: false, dietConflict: false, yuanyang: false, hard: false };
   const results: NeedResult[] = [];
+  const soft: SoftCost[] = [];
   if (pub.status === "absent") {
     results.push({ text: "这个时间能来", result: "unmet", detail: "这个时间你来不了" });
-    return { pub, mine: { utility: 0, notes: ["这个时间你来不了"], needs: results, cared: false }, flags };
+    return { pub, mine: { utility: 0, notes: ["这个时间你来不了"], needs: results, cared: false }, flags, soft };
   }
 
   const p = member.private;
+  const waived = new Set(p?.waived ?? []);
   const notes: string[] = [];
   let u = pub.utility;
   const food = isFoodPoi(poi);
@@ -197,7 +224,11 @@ export function experienceDetail(
       const degree = budgetDegree(cost, p.budgetMax);
       const text = `人均 ${p.budgetMax} 以内`;
       if (degree > 0) {
-        u -= softPenalty("money", p.budgetStrength ?? 2, degree);
+        const cost0 = softPenalty("money", p.budgetStrength ?? 2, degree);
+        if (!waived.has("budget")) {
+          u -= cost0;
+          soft.push({ key: "budget", cost: cost0, text, detail: `这家人均 ${cost}，比你说的多 ${cost - p.budgetMax}` });
+        }
         flags.overBudget = true;
         notes.push(`人均 ${cost}，超出你说的 ${p.budgetMax}`);
         results.push({ text, result: degree < 0.5 ? "partial" : "unmet", detail: `这家人均 ${cost}` });
@@ -258,7 +289,11 @@ export function experienceDetail(
   for (const n of p?.needs ?? []) {
     const ev = evaluateRule(n.rule, needCtx);
     if (n.kind === "hard" && ev.degree > 0) flags.hard = true;
-    else if (ev.degree > 0) u -= softPenalty(n.dim, n.strength, ev.degree);
+    else if (ev.degree > 0 && !waived.has(n.id)) {
+      const c = softPenalty(n.dim, n.strength, ev.degree);
+      u -= c;
+      soft.push({ key: n.id, cost: c, text: n.text, detail: ev.detail });
+    }
     if (ev.result === "unmet" || ev.result === "partial") notes.push(`你说「${n.text}」：${ev.detail}`);
     results.push({ text: n.text, result: n.kind === "hard" && ev.degree > 0 ? "unmet" : ev.result, detail: ev.detail });
   }
@@ -273,5 +308,5 @@ export function experienceDetail(
   }
 
   const utility = Math.round(clamp(u, 0, 100));
-  return { pub, mine: { utility, notes, needs: results, cared: !flags.hard && utility >= CARE_FLOOR }, flags };
+  return { pub, mine: { utility, notes, needs: results, cared: !flags.hard && utility >= CARE_FLOOR }, flags, soft };
 }

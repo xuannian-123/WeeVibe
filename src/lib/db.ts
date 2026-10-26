@@ -150,6 +150,8 @@ export type PlanSnapshot = {
   now: string;
   /** 地图调用记录：key = 方法 + 参数的 JSON，value = 返回值。复算时回放，避免实时路况让哈希对不上 */
   mapLog: Record<string, unknown>;
+  /** v5 让步账（影响诊断里"正在协调几人"，复算要用同一份） */
+  concessions?: Record<string, number>;
 };
 
 export type JuPrivate = {
