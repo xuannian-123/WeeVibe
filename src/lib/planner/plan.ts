@@ -8,6 +8,7 @@ import type {
   MapProvider,
   Member,
   MyExperience,
+  NeedResult,
   Plan,
   Poi,
   Proposal,
@@ -51,9 +52,17 @@ export type Candidate = {
   slot: Slot;
   poi: Poi;
   pubs: Experience[];
-  mines: { utility: number; notes: string[] }[];
+  mines: { utility: number; notes: string[]; needs: NeedResult[]; cared: boolean }[];
   flags: PrivateFlags[];
   attend: number;
+  /** v5 第一级：被照顾到的人数（能来 + 硬约束满足 + 满意度 ≥ 保底线） */
+  cared: number;
+  /** 被照顾到的人的公平权重之和（人数相同时，之前吃亏多的人被照顾到算得多一点） */
+  caredW: number;
+  /** v5 第二级：每人的加权损失 w_i·(100 − u_i)，从大到小（来不了 = 损失 100·w_i） */
+  losses: number[];
+  /** v5 第三级：纳什福利 Σ log(1 + u_i) */
+  nash: number;
   /** 到场者里最低的（含私密）满意度 */
   minU: number;
   avgU: number;
@@ -169,7 +178,7 @@ export function evaluateCandidate(
   fallbackCost: number,
 ): Candidate {
   const pubs: Experience[] = [];
-  const mines: { utility: number; notes: string[] }[] = [];
+  const mines: Candidate["mines"] = [];
   const flags: PrivateFlags[] = [];
   members.forEach((m, i) => {
     const d = experienceDetail(m, slot, poi, commutes[i], ctx);
@@ -179,6 +188,9 @@ export function evaluateCandidate(
   });
   const here = members.map((_, i) => i).filter((i) => pubs[i].status !== "absent");
   const attend = here.length;
+  const caredIdx = members.map((_, i) => i).filter((i) => mines[i].cared);
+  const losses = members.map((_, i) => weights[i] * (100 - (pubs[i].status === "absent" ? 0 : mines[i].utility))).sort((a, b) => b - a);
+  const nash = members.reduce((s, _, i) => s + Math.log(1 + (pubs[i].status === "absent" ? 0 : mines[i].utility)), 0);
   const us = here.map((i) => mines[i].utility);
   const minU = attend ? Math.min(...us) : 0;
   const avgU = attend ? Math.round(us.reduce((s, u) => s + u, 0) / attend) : 0;
@@ -195,6 +207,10 @@ export function evaluateCandidate(
     mines,
     flags,
     attend,
+    cared: caredIdx.length,
+    caredW: Math.round(caredIdx.reduce((s, i) => s + weights[i], 0) * 100) / 100,
+    losses: losses.map((l) => Math.round(l * 10) / 10),
+    nash: Math.round(nash * 1000) / 1000,
     minU,
     avgU,
     wMin,
@@ -213,6 +229,33 @@ export function dominates(a: Candidate, b: Candidate): boolean {
 
 export function paretoFront(cands: Candidate[]): Candidate[] {
   return cands.filter((c) => !cands.some((o) => o !== c && dominates(o, c)));
+}
+
+// ---------------- 决策准则（docs/DECISION.md 第 4 节）----------------
+
+/** leximin 里差距多少以内算打平：避免为了零点几分牺牲整体。不能太大：大家都还不错时满意度挤在 85–99，
+ *  3 分的容差会把公平账本（之前吃亏多的人权重更高）的作用整个吞掉 */
+export const LEXIMIN_EPS = 1;
+
+/**
+ * 三级准则：先保底，再求好。返回负数 = a 更好。
+ * 0. 主角来不了的方案永远排最后
+ * 1. 照顾到的人最多；人数相同看公平权重之和
+ * 2. 最吃亏的人损失最小（逐个比较从大到小的加权损失，差距 ≤ 3 算打平）
+ * 3. 纳什福利最大（大家都还不错，胜过几个人特别爽）
+ * 最后按候选下标（确定性）
+ */
+export function decisionCompare(a: Candidate, b: Candidate): number {
+  if (a.vetoed !== b.vetoed) return a.vetoed ? 1 : -1;
+  if (a.cared !== b.cared) return b.cared - a.cared;
+  if (Math.abs(a.caredW - b.caredW) > 1e-9) return b.caredW - a.caredW;
+  const n = Math.min(a.losses.length, b.losses.length);
+  for (let i = 0; i < n; i++) {
+    const d = a.losses[i] - b.losses[i];
+    if (Math.abs(d) > LEXIMIN_EPS) return d;
+  }
+  if (Math.abs(a.nash - b.nash) > 1e-9) return b.nash - a.nash;
+  return a.idx - b.idx;
 }
 
 // ---------------- 方案挑选 ----------------
@@ -257,10 +300,10 @@ export function meaningfullyDifferent(a: Candidate, b: Candidate): boolean {
   return !sameSlot && Math.abs(ta.start - tb.start) >= 60;
 }
 
-/** 在前沿上挑 2–3 个标签不同的方案；推荐的（综合分最高）排第一 */
+/** 推荐 = 三级准则的第一名（在全部候选里挑）；备选在前沿上挑 1–2 个标签不同、有实质差异的 */
 export function pickProposals(front: Candidate[], pool: Candidate[]): { c: Candidate; label: ProposalLabel }[] {
-  if (front.length === 0) return [];
-  const rec = [...front].sort(CRIT.balanced)[0];
+  if (front.length === 0 && pool.length === 0) return [];
+  const rec = [...pool].sort(decisionCompare)[0] ?? [...front].sort(CRIT.balanced)[0];
   const chosen: { c: Candidate; label: ProposalLabel }[] = [{ c: rec, label: "balanced" }];
   for (const label of ["most-people", "cheapest", "most-comfortable"] as ProposalLabel[]) {
     if (chosen.length >= MAX_PROPOSALS) break;
@@ -385,7 +428,29 @@ export function toProposal(
     tradeoffs,
     highlights,
     recommended,
+    cared: c.cared,
   };
+}
+
+/**
+ * 推荐理由：三级准则各一句（docs/DECISION.md 第 6 节"解释"）。
+ * 隐私：只用公开体验（迟到 / 早走 / 通勤，本来就公开）和聚合人数，绝不提任何人的私密因素。
+ */
+export function whyLines(c: Candidate, members: Member[]): string[] {
+  const n = members.length;
+  const out: string[] = [];
+  out.push(c.cared === n ? `${n} 个人都照顾到了` : `照顾到 ${c.cared}/${n} 人`);
+  const here = c.pubs.filter((e) => e.status !== "absent");
+  const absent = n - here.length;
+  if (here.length) {
+    // 公开满意度最低的那位（只看公开因素）
+    const worst = [...here].sort((a, b) => a.utility - b.utility || cmpStr(a.memberId, b.memberId))[0];
+    const maxCommute = Math.max(...here.map((e) => e.commuteMin));
+    if (worst.status === "full") out.push(`每个到场的人都全程在，最远的路上 ${maxCommute} 分钟`);
+    else out.push(`最吃亏的朋友也只是${worst.notes.filter((x) => !/路上/.test(x)).join("、") || `路上 ${worst.commuteMin} 分钟`}`);
+  }
+  if (absent) out.push(`${absent} 位朋友这个时间来不了`);
+  return out;
 }
 
 /** 约束的聚合说明：只有 1 人有某约束时只说"有人" */
@@ -581,10 +646,11 @@ export async function planJu(
   trace("decide", `挑出 ${proposals.length} 个标签不同的方案：${proposals.map((p) => p.labelText).join(" / ")}`);
 
   const top = proposals[0];
+  const why = whyLines(rec, inMembers);
+  trace("decide", `三级准则：先看照顾到几个人（${rec.cared}/${n}），再看最吃亏的人，最后看大家整体`);
   const recommendation =
-    `推荐「${top.labelText}」：${slotLabel(top.slot.start)} 在${top.poi.name}，${top.headline}。` +
-    `综合分 ${top.score}，到场的人里最低满意度也有 ${top.minUtility}` +
-    (caredCount && rec.pubs.some((e, i) => weights[i] >= CARED_WEIGHT && e.status !== "absent") ? "，也照顾了之前吃亏多的朋友。" : "。");
+    `推荐「${top.labelText}」：${slotLabel(top.slot.start)} 在${top.poi.name}。${why.join("；")}` +
+    (caredCount && rec.pubs.some((e, i) => weights[i] >= CARED_WEIGHT && e.status !== "absent") ? "；也照顾了之前吃亏多的朋友。" : "。");
   const caredFor = caredCount ? `这次优先照顾了前几次跑得最远的 ${caredCount} 位朋友` : undefined;
   const maxCost = Math.max(0, ...pois.map((p) => p.costPerPerson ?? 0)) || undefined;
   const constraintSummaries = constraintSummariesFor(inMembers, ju, maxCost);
@@ -598,7 +664,7 @@ export async function planJu(
     paretoSize: front.length,
     algorithmVersion: ALGORITHM_VERSION,
   };
-  const body = { proposals, recommendation, caredFor, constraintSummaries, center };
+  const body = { proposals, recommendation, why, caredFor, constraintSummaries, center };
   audit.outputHash = outputHashOf({ ...body, audit });
   const plan: Plan = { ...body, audit, computedAt: (opts.now ?? new Date()).toISOString() };
   if (!caredFor) delete plan.caredFor;
@@ -607,7 +673,13 @@ export async function planJu(
 
   const mine: Record<string, MyExperience[]> = {};
   inMembers.forEach((m, i) => {
-    mine[m.id] = picked.map((p, k) => ({ proposalId: proposals[k].id, utility: p.c.mines[i].utility, notes: p.c.mines[i].notes }));
+    mine[m.id] = picked.map((p, k) => ({
+      proposalId: proposals[k].id,
+      utility: p.c.mines[i].utility,
+      notes: p.c.mines[i].notes,
+      needs: p.c.mines[i].needs,
+      cared: p.c.mines[i].cared,
+    }));
   });
   return { plan, mine };
 }

@@ -1,7 +1,8 @@
 // 单人 × 单候选的体验：公开一份（只用公开因素），私密一份（叠加预算 / 忌口 / 刷卡 / 备注 / 排队）。
 // 隐私硬规则：publicExperience 的入参里根本没有 poi 和预算等私密字段，类型上就碰不到。
-import type { DayAvailability, Experience, JuSpec, Member, Poi, Slot, SwipeVerdict } from "../types";
+import type { DayAvailability, DietTag, Experience, JuSpec, Member, NeedResult, Poi, Slot, SwipeVerdict } from "../types";
 import { dietConflictReason, isHotpot } from "./diet";
+import { evaluateRule, softPenalty } from "./needs";
 import { bjParts, chainName, clamp, hmToMin, isFoodPoi, minToHm } from "./util";
 
 /** experienceFor 的上下文 */
@@ -102,12 +103,17 @@ export function queueMinutes(slot: Slot, poi: Poi): number {
   return (poi.rating ?? 0) >= 4.5 ? 20 : 0;
 }
 
-/** 私密预算扣分：超 30% 以内温和，超 30% 重扣；永远不会让人 absent */
-export function budgetPenalty(cost: number, budget: number): number {
+/** 私密预算的违反程度：超出 60% 算完全违反；永远不会让人 absent（v3 隐私规则：花费不设硬约束） */
+export function budgetDegree(cost: number, budget: number): number {
   if (!(budget > 0) || cost <= budget) return 0;
-  const over = (cost - budget) / budget;
-  return over <= 0.3 ? over * 60 : Math.min(60, 18 + (over - 0.3) * 120);
+  return Math.min(1, (cost - budget) / budget / 0.6);
 }
+
+/** "被照顾到"的保底线（docs/DECISION.md 3.3） */
+export const CARE_FLOOR = 50;
+
+/** 忌口里的硬约束：吃不了就是吃不了；其余忌口是强度 2 的软偏好 */
+export const HARD_DIET: DietTag[] = ["清真", "素食"];
 
 /** 找这家店（或同品牌分店）的刷卡表态 */
 export function swipeFor(member: Member, poi: Poi, ctx: PlanContext): { v: SwipeVerdict; sameShop: boolean } | undefined {
@@ -123,17 +129,23 @@ export function swipeFor(member: Member, poi: Poi, ctx: PlanContext): { v: Swipe
   return undefined;
 }
 
-type NoteRule = { kw: RegExp; hit: (poi: Poi, slot: Slot, commute: number) => boolean; delta: number; note: string };
-/** 私密备注关键词（原话只在本人视图里出现，这里只生成给本人的提示） */
-const NOTE_RULES: NoteRule[] = [
-  { kw: /减肥|油腻|清淡|别太油|太油/, hit: (p) => /火锅|烧烤|烤肉|串|炸/.test(p.name + p.type), delta: -8, note: "你说想吃清淡点，这家偏油" },
-  { kw: /安静|太吵|怕吵/, hit: (p) => /KTV|烧烤|大排档|酒吧|串/i.test(p.name + p.type), delta: -8, note: "你想安静点，这家可能比较吵" },
-  { kw: /远|累|不想跑/, hit: (_p, _s, c) => c > 30, delta: -8, note: "你说不想跑太远，这家路上有点久" },
-  { kw: /早点回|早点走|明天早/, hit: (_p, s) => slotTimes(s).start >= 19 * 60 + 30, delta: -6, note: "你想早点回，这个时间偏晚" },
-];
-
 /** 内部聚合用的私密标记（只用来数人数，绝不单独出现在公开文案里） */
-export type PrivateFlags = { overBudget: boolean; dietConflict: boolean; yuanyang: boolean; verdict?: SwipeVerdict };
+export type PrivateFlags = {
+  overBudget: boolean;
+  dietConflict: boolean;
+  yuanyang: boolean;
+  verdict?: SwipeVerdict;
+  /** v5：有硬约束没满足（清真 / 素食的店不对、"最多一小时"的通勤超了）——人可能还来，但不算被照顾到 */
+  hard: boolean;
+};
+
+/** 本人在这个方案里几点离开（当天分钟，可 > 1440） */
+function stayEndOf(pub: Experience, slot: Slot): number {
+  const { start, end } = slotTimes(slot);
+  const leave = hmToMin(pub.leaveAt);
+  if (leave === undefined) return end;
+  return leave < start - 6 * 60 ? leave + 1440 : leave;
+}
 
 /**
  * 某个成员在某个候选（slot × poi）下的体验。
@@ -145,7 +157,7 @@ export function experienceFor(
   poi: Poi,
   commuteMin: number,
   ctx: PlanContext,
-): { pub: Experience; mine: { utility: number; notes: string[] } } {
+): { pub: Experience; mine: { utility: number; notes: string[]; needs: NeedResult[]; cared: boolean } } {
   const { pub, mine } = experienceDetail(member, slot, poi, commuteMin, ctx);
   return { pub, mine };
 }
@@ -157,26 +169,42 @@ export function experienceDetail(
   poi: Poi,
   commuteMin: number,
   ctx: PlanContext,
-): { pub: Experience; mine: { utility: number; notes: string[] }; flags: PrivateFlags } {
+): { pub: Experience; mine: { utility: number; notes: string[]; needs: NeedResult[]; cared: boolean }; flags: PrivateFlags } {
   const pub = publicExperience(member, slot, commuteMin);
-  const flags: PrivateFlags = { overBudget: false, dietConflict: false, yuanyang: false };
-  if (pub.status === "absent") return { pub, mine: { utility: 0, notes: ["这个时间你来不了"] }, flags };
+  const flags: PrivateFlags = { overBudget: false, dietConflict: false, yuanyang: false, hard: false };
+  const results: NeedResult[] = [];
+  if (pub.status === "absent") {
+    results.push({ text: "这个时间能来", result: "unmet", detail: "这个时间你来不了" });
+    return { pub, mine: { utility: 0, notes: ["这个时间你来不了"], needs: results, cared: false }, flags };
+  }
 
   const p = member.private;
   const notes: string[] = [];
   let u = pub.utility;
   const food = isFoodPoi(poi);
 
-  // 1. 预算：私下说的优先；没说就按发起人公开的人均，放宽 20% 轻扣
+  // 0. 时间：能来，晚到 / 早走如实说
+  results.push({
+    text: "这个时间能来",
+    result: pub.status === "full" ? "met" : "partial",
+    detail: pub.status === "full" ? "全程都在" : pub.notes.join("，"),
+  });
+
+  // 1. 预算：私下说的优先（按在意程度扣分）；没说就按发起人公开的人均，放宽 20% 轻扣
   const cost = poi.costPerPerson;
   if (cost !== undefined) {
     if (p?.budgetMax !== undefined && p.budgetMax > 0) {
-      const pen = budgetPenalty(cost, p.budgetMax);
-      if (pen > 0) {
-        u -= pen;
+      const degree = budgetDegree(cost, p.budgetMax);
+      const text = `人均 ${p.budgetMax} 以内`;
+      if (degree > 0) {
+        u -= softPenalty("money", p.budgetStrength ?? 2, degree);
         flags.overBudget = true;
         notes.push(`人均 ${cost}，超出你说的 ${p.budgetMax}`);
-      } else notes.push(`人均 ${cost}，在你的预算内`);
+        results.push({ text, result: degree < 0.5 ? "partial" : "unmet", detail: `这家人均 ${cost}` });
+      } else {
+        notes.push(`人均 ${cost}，在你的预算内`);
+        results.push({ text, result: "met", detail: `这家人均 ${cost}` });
+      }
     } else if (ctx.spec.budgetPerPerson && ctx.spec.budgetPerPerson > 0) {
       const over = (cost - ctx.spec.budgetPerPerson) / ctx.spec.budgetPerPerson;
       if (over > 0.2) {
@@ -186,20 +214,24 @@ export function experienceDetail(
     }
   }
 
-  // 2. 忌口：火锅 + 不吃辣 → 鸳鸯锅，只轻扣
-  if (food) {
-    for (const tag of [...new Set(p?.dietTags ?? [])]) {
-      const reason = dietConflictReason(tag, poi);
-      if (!reason) continue;
-      if (tag === "不吃辣" && (isHotpot(poi) || /火锅/.test(ctx.spec.category))) {
-        u -= 6;
-        flags.yuanyang = true;
-        notes.push("有鸳鸯锅，你可以吃清汤那边");
-      } else {
-        u -= 35;
-        flags.dietConflict = true;
-        notes.push(`${reason}，和你的忌口（${tag}）冲突`);
-      }
+  // 2. 忌口：清真 / 素食是硬约束；火锅 + 不吃辣 → 鸳鸯锅，只轻扣；其余冲突按强度 2 扣
+  for (const tag of [...new Set(p?.dietTags ?? [])]) {
+    const reason = food ? dietConflictReason(tag, poi) : undefined;
+    if (!reason) {
+      results.push({ text: tag, result: "met", detail: food ? "这家不冲突" : "不是吃饭的地方" });
+      continue;
+    }
+    if (tag === "不吃辣" && (isHotpot(poi) || /火锅/.test(ctx.spec.category))) {
+      u -= 6;
+      flags.yuanyang = true;
+      notes.push("有鸳鸯锅，你可以吃清汤那边");
+      results.push({ text: tag, result: "met", detail: "点鸳鸯锅，你吃清汤那边" });
+    } else {
+      u -= softPenalty("food", 2, 1);
+      flags.dietConflict = true;
+      if (HARD_DIET.includes(tag)) flags.hard = true;
+      notes.push(`${reason}，和你的忌口（${tag}）冲突`);
+      results.push({ text: tag, result: "unmet", detail: reason });
     }
   }
 
@@ -220,32 +252,26 @@ export function experienceDetail(
     }
   }
 
-  // 4. 私密备注关键词
-  const noteText = (p?.notes ?? []).join(" ");
-  if (noteText) {
-    for (const r of NOTE_RULES) {
-      if (r.kw.test(noteText) && r.hit(poi, slot, pub.commuteMin)) {
-        u += r.delta;
-        notes.push(r.note);
-      }
-    }
-    // "想吃 X"：店名 / 类型里有 X 就加分
-    const want = /想吃([一-龥A-Za-z]{2,4}?)/.exec(noteText)?.[1];
-    if (want && `${poi.name}${poi.type}`.includes(want)) {
-      u += 6;
-      notes.push(`你说想吃${want}，这家正好`);
-    }
+  // 4. 其他需求（私聊抽出来的）：硬的不满足 = 没被照顾到；软的按 强度 × 违反程度 × 维度上限 扣分
+  const q = queueMinutes(slot, poi);
+  const needCtx = { poi, commuteMin: pub.commuteMin, stayEndMin: stayEndOf(pub, slot), queueMin: q };
+  for (const n of p?.needs ?? []) {
+    const ev = evaluateRule(n.rule, needCtx);
+    if (n.kind === "hard" && ev.degree > 0) flags.hard = true;
+    else if (ev.degree > 0) u -= softPenalty(n.dim, n.strength, ev.degree);
+    if (ev.result === "unmet" || ev.result === "partial") notes.push(`你说「${n.text}」：${ev.detail}`);
+    results.push({ text: n.text, result: n.kind === "hard" && ev.degree > 0 ? "unmet" : ev.result, detail: ev.detail });
   }
 
   // 5. 口碑：评分高的店大家都更满意（公开信息，但只进内部满意度，不进公开 utility）
   if (poi.rating !== undefined) u += clamp((poi.rating - 4.2) * 12, -8, 8);
 
-  // 6. 饭点排队（怕排队的人扣双倍）
-  const q = queueMinutes(slot, poi);
+  // 6. 饭点排队：所有人轻扣（特别怕排队的人由上面的 noQueue 需求再扣）
   if (q > 0) {
-    u -= /排队/.test(noteText) ? 10 : 5;
+    u -= 5;
     notes.push(`饭点可能要排队约 ${q} 分钟`);
   }
 
-  return { pub, mine: { utility: Math.round(clamp(u, 0, 100)), notes }, flags };
+  const utility = Math.round(clamp(u, 0, 100));
+  return { pub, mine: { utility, notes, needs: results, cared: !flags.hard && utility >= CARE_FLOOR }, flags };
 }

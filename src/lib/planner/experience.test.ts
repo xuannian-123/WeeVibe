@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Poi, Slot } from "../types";
+import type { Need, Poi, Slot } from "../types";
 import { experienceFor, publicExperience } from "./index";
 import { member, spec } from "./testutil";
 import { bjIso } from "./util";
@@ -81,14 +81,24 @@ describe("私密体验（叠加预算 / 忌口 / 刷卡 / 备注 / 排队）", (
     expect(u(plain) - u(pass)).toBe(18);
   });
 
-  it("私密备注关键词 + 饭点排队", () => {
-    const diet = member("A", 0, 0, { priv: { ...base, notes: ["这周减肥，别太油"] } });
-    const e = experienceFor(diet, slot("20:00"), hotpot, 10, ctx).mine;
-    expect(e.notes).toContain("你说想吃清淡点，这家偏油");
+  it("v5 需求：按 强度 × 违反程度 × 维度上限 扣分，并逐条解释；饭点排队所有人轻扣", () => {
+    const need = (rule: Need["rule"], dim: Need["dim"], strength: Need["strength"] = 2, kind: Need["kind"] = "soft"): Need => ({
+      id: `n-${rule.t}`, dim, kind, strength, rule, text: rule.t, source: "chat", at: "2026-10-22T10:00:00+08:00",
+    });
+    const plain = experienceFor(member("A", 0, 0, { priv: base }), slot("20:00"), hotpot, 10, ctx).mine;
+    const light = experienceFor(member("B", 0, 0, { priv: { ...base, needs: [need({ t: "lightFood" }, "food")] } }), slot("20:00"), hotpot, 10, ctx).mine;
+    expect(plain.utility - light.utility).toBe(35); // food 上限 35 × 强度 2 × 完全违反
+    expect(light.needs?.find((r) => r.text === "lightFood")?.result).toBe("unmet");
+    // 饭点排队：所有人扣 5；特别怕排队的人再按 noQueue 扣
     const popular = { ...hotpot, rating: 4.7 };
-    const q = experienceFor(member("B", 0, 0, { priv: base }), slot("18:30"), popular, 10, ctx).mine;
+    const q = experienceFor(member("C", 0, 0, { priv: base }), slot("18:30"), popular, 10, ctx).mine;
     expect(q.notes).toContain("饭点可能要排队约 20 分钟");
-    const hate = experienceFor(member("C", 0, 0, { priv: { ...base, notes: ["最怕排队"] } }), slot("18:30"), popular, 10, ctx).mine;
-    expect(q.utility - hate.utility).toBe(5);
+    const hate = experienceFor(member("D", 0, 0, { priv: { ...base, needs: [need({ t: "noQueue" }, "time", 1)] } }), slot("18:30"), popular, 10, ctx).mine;
+    expect(q.utility - hate.utility).toBe(12); // time 上限 30 × 强度 1（0.4）
+    // 硬需求不满足：人还能来，但不算被照顾到
+    const far = experienceFor(member("E", 0, 0, { priv: { ...base, needs: [need({ t: "maxCommute", minutes: 5 }, "travel", 2, "hard")] } }), slot("20:00"), hotpot, 10, ctx);
+    expect(far.pub.status).not.toBe("absent");
+    expect(far.mine.cared).toBe(false);
+    expect(plain.cared).toBe(true);
   });
 });

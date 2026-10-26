@@ -125,13 +125,13 @@ describe("演示场景：36space 火锅局", () => {
     const { members, ledgers, priciest } = await scenario();
     const trace: string[] = [];
     const { plan, mine } = await planJu(j, members, map, { ...opts, ledgers, onTrace: (_k, t) => trace.push(t) });
-    // 去掉她的预算和刷卡再算一次：会推荐超出她预算 30% 的贵店
+    // 去掉她的预算和刷卡再算一次：推荐会更贵（她的私密预算确实起了作用）
     const noPriv = members.map((m) =>
       m.id === "demo-lin" ? { ...m, private: { ...m.private!, budgetMax: undefined, swipes: {} } } : m,
     );
     const loose = (await planJu(j, noPriv, map, { ...opts, ledgers })).plan;
     const tooPricey = (c?: number) => (c ?? 0) > 80 * 1.3;
-    expect(loose.proposals.some((p) => tooPricey(p.poi.costPerPerson))).toBe(true);
+    expect(loose.proposals[0].poi.costPerPerson!).toBeGreaterThan(plan.proposals[0].poi.costPerPerson!);
     expect(plan.proposals.some((p) => tooPricey(p.poi.costPerPerson))).toBe(false);
     expect(plan.proposals.some((p) => p.poi.id === priciest.id)).toBe(false);
     // 公开文案：只说"有人预算偏紧"，不点名、不出现她的数字

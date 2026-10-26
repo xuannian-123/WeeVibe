@@ -337,6 +337,8 @@ export type Proposal = {
   /** LLM 润色的一句话 */
   blurb?: string;
   recommended: boolean;
+  /** v5：被照顾到的人数（能来 + 硬约束满足 + 满意度 ≥ 保底线；内部含私密因素算，只公开聚合数） */
+  cared?: number;
 };
 
 /** #9 可复核的拍板：同样输入一定得到同样结论 */
@@ -358,6 +360,8 @@ export type Plan = {
   proposals: Proposal[]; // 2-3 个，彼此有实质差异
   /** 局长为什么推荐那个（公开安全） */
   recommendation: string;
+  /** v5：推荐理由，三级准则各一句（公开安全：只用公开因素和聚合数） */
+  why?: string[];
   /** #10 跨局公平的公开说明（聚合），如 "这次优先照顾了前几次跑得最远的 1 位朋友" */
   caredFor?: string;
   /** 聚合后的约束说明，公开安全；只有 1 人有某约束时只说"有人"，不给能反推的细节 */
