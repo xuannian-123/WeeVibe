@@ -74,3 +74,5 @@ export * from './capacity';
 export * from './deadline';
 
 export * from './booking';
+
+export * from './navigation';

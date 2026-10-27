@@ -15,10 +15,13 @@ import { Action, Notice, Panel } from '../../components/ui';
 import './activity-create.css';
 import { RebookEditor } from '../rebook/RebookEditor';
 import { PreparationEditor } from './preparation-editor';
+import { VenueEditor } from './venue-editor';
 
 export default function Editor() {
   const rebook = Taro.getCurrentInstance?.().router?.params.rebook;
   const preparation = Taro.getCurrentInstance?.().router?.params.preparation;
+  const venue = Taro.getCurrentInstance?.().router?.params.venue;
+  if (venue !== undefined) return <VenueEditor sourceId={venue}/>;
   if (preparation !== undefined) return <PreparationEditor sourceId={preparation} />;
   return rebook === undefined ? <OrdinaryEditor /> : <RebookEditor key={rebook} sourceId={rebook} />;
 }

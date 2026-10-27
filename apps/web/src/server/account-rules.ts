@@ -1,12 +1,14 @@
-export const emptyProfile = { nickname: '', birthday: '', gender: '未设置', zodiac: '', mbti: '', signature: '', introduction: '' };
+import { profilePresentationSchema } from '@weevibe/contracts';
+const legacyProfile = { nickname: '', birthday: '', gender: '未设置', zodiac: '', mbti: '', signature: '', introduction: '' };
+export const emptyProfile = { ...legacyProfile, ...profilePresentationSchema.parse({}) };
 export type PrivateProfileInput = typeof emptyProfile;
-const limits: Record<keyof PrivateProfileInput, number> = { nickname: 32, birthday: 10, gender: 8, zodiac: 8, mbti: 4, signature: 100, introduction: 500 };
+const limits: Record<keyof typeof legacyProfile, number> = { nickname: 32, birthday: 10, gender: 8, zodiac: 8, mbti: 4, signature: 100, introduction: 500 };
 export function parsePrivateProfile(input: unknown, now = new Date()): PrivateProfileInput {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('个人信息格式不正确');
   const source = input as Record<string, unknown>;
-  if (Object.keys(source).some(key => !Object.prototype.hasOwnProperty.call(limits, key))) throw new Error('含不支持的资料字段');
+  if (Object.keys(source).some(key => !Object.prototype.hasOwnProperty.call(limits, key) && !profilePresentationSchema.keyof().options.includes(key as never))) throw new Error('含不支持的资料字段');
   const value = { ...emptyProfile };
-  for (const key of Object.keys(limits) as (keyof PrivateProfileInput)[]) {
+  for (const key of Object.keys(limits) as (keyof typeof legacyProfile)[]) {
     if (source[key] === undefined) continue;
     if (typeof source[key] !== 'string') throw new Error('资料字段应为文字');
     const text = (source[key] as string).trim();
@@ -17,7 +19,8 @@ export function parsePrivateProfile(input: unknown, now = new Date()): PrivatePr
   if (!['', '未设置', '不愿透露', '男', '女', '其他'].includes(value.gender)) throw new Error('性别选项不正确');
   if (value.mbti && !/^[IE][NS][FT][JP]$/.test(value.mbti)) throw new Error('MBTI格式不正确');
   if (value.zodiac && !['白羊座','金牛座','双子座','巨蟹座','狮子座','处女座','天秤座','天蝎座','射手座','摩羯座','水瓶座','双鱼座'].includes(value.zodiac)) throw new Error('星座选项不正确');
-  return value;
+  const extra = Object.fromEntries(profilePresentationSchema.keyof().options.filter(k => source[k] !== undefined).map(k => [k, source[k]]));
+  return { ...value, ...profilePresentationSchema.parse(extra) };
 }
 export function participationDisplayStatus(segments: { startsAt: Date; endsAt: Date; cancelledAt: Date | null }[], cancelled: boolean, now: Date) {
   const active = segments.filter(s => !s.cancelledAt);

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { Messages } from '../apps/miniprogram/src/features/shell/messages';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
@@ -15,7 +16,9 @@ vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>mocks.token,tr
 vi.mock('../apps/miniprogram/src/platform/avatar',()=>({loadAvatar:vi.fn().mockResolvedValue(undefined),uploadAvatar:vi.fn()}));
 vi.mock('../apps/miniprogram/src/features/team',()=>({TeamCreate:()=>createElement('div',{},'team editor')}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:()=>'',setStorageSync:vi.fn(),reLaunch:vi.fn(),navigateTo:mocks.navigate,showToast:mocks.toast},useDidShow:(fn:()=>void)=>{mocks.show=fn;},useDidHide:()=>{},useUnload:()=>{}}));
-vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Button:(p:any)=>createElement('button',{onClick:p.onClick,disabled:p.disabled},p.children),Text:(p:any)=>createElement('span',{onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{onClick:p.onClick},p.children),Input:(p:any)=>createElement('input',{value:p.value,placeholder:p.placeholder,onInput:(e:any)=>p.onInput?.({detail:{value:e.currentTarget.value}})}),Textarea:(p:any)=>createElement('textarea',{value:p.value,onInput:(e:any)=>p.onInput?.({detail:{value:e.currentTarget.value}})}),Picker:(p:any)=>createElement('div',{},p.children),Image:()=>null}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({
+ Switch:(p:any)=>createElement('input',{type:'checkbox',checked:p.checked,disabled:p.disabled,onChange:(e:any)=>p.onChange?.({detail:{value:e.currentTarget.checked}})}),
+ ScrollView:(p:any)=>createElement('div',{className:p.className},p.children),Button:(p:any)=>createElement('button',{onClick:p.onClick,disabled:p.disabled},p.children),Text:(p:any)=>createElement('span',{onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{onClick:p.onClick},p.children),Input:(p:any)=>createElement('input',{value:p.value,placeholder:p.placeholder,onInput:(e:any)=>p.onInput?.({detail:{value:e.currentTarget.value}})}),Textarea:(p:any)=>createElement('textarea',{value:p.value,onInput:(e:any)=>p.onInput?.({detail:{value:e.currentTarget.value}})}),Picker:(p:any)=>createElement('div',{},p.children),Image:()=>null}));
 import { accountActor, accountActivity, accountVenue, emptyAccountFixture } from './account-fixtures';
 import Home from '../apps/miniprogram/src/pages/index/index';
 import {ProfileForm} from '../apps/miniprogram/src/features/shell/profile';
@@ -65,10 +68,10 @@ describe('account mutations do not manufacture success or lose current local sta
   await render(createElement(ProfileForm,{ownerSession:mocks.token,initial:{nickname:'A私人昵称'},saved:mocks.saved,close:mocks.close}));let finish!:(value:unknown)=>void;mocks.transport.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));await click('保存资料');mocks.token='session-b';await act(async()=>finish({status:200,body:emptyAccountFixture()}));expect(mocks.saved).not.toHaveBeenCalled();expect(mocks.close).not.toHaveBeenCalled();
  });
  it('leaves a message unread and does not navigate when its read-mark success is incompatible',async()=>{
-  const value={...emptyAccountFixture(),messages:[{id:`application:${accountActor}:approved`,activity_id:accountActivity,title:'审批测试通知',created_at:'2030-01-01T00:00:00Z',read:false}]};
-  mocks.me.mockResolvedValueOnce({user_id:accountActor});mocks.transport.mockResolvedValueOnce({status:200,body:value});const host=await render(createElement(Home));await act(async()=>{mocks.show!();await Promise.resolve();});
-  const tab=Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('消息'))!;await act(async()=>tab.click());mocks.transport.mockResolvedValueOnce({status:200,body:{ok:true}});const notice=Array.from(host.querySelectorAll('span')).find(s=>s.textContent==='● 审批测试通知')!;await act(async()=>{notice.click();await Promise.resolve();});
-  expect(host.textContent).toContain('● 审批测试通知');expect(host.textContent).toContain('响应无法验证');expect(mocks.navigate).not.toHaveBeenCalled();
+  const value={messages:[{id:`application:${accountActor}:approved`,activity_id:accountActivity,title:'审批测试通知',summary:'报名已通过',created_at:'2030-01-01T00:00:00Z',read:false,pending:false,status:'已加入',section:'activity' as const}],unread_count:1,pending_count:0,server_time:'2030-01-01T00:00:00Z',limit:100 as const};
+  const changed=vi.fn();const host=await render(createElement(Messages,{value,session:mocks.token,error:'',refresh:()=>{},changed}));mocks.transport.mockResolvedValueOnce({status:200,body:{ok:true}});
+  const notice=Array.from(host.querySelectorAll('button')).find(s=>s.textContent?.includes('审批测试通知'))!;await act(async()=>{notice.click();await Promise.resolve();});
+  expect(host.textContent).toContain('审批测试通知');expect(host.textContent).toContain('响应无法验证');expect(mocks.navigate).not.toHaveBeenCalled();expect(changed).not.toHaveBeenCalled();
  });
 });
 
@@ -93,7 +96,7 @@ it('binds profile initial data to its source session rather than the currently m
 
 it('keeps unsaved profile input during a same-account background refresh failure',async()=>{
  const value=emptyAccountFixture();value.profile.nickname='服务器昵称';mocks.me.mockResolvedValueOnce({user_id:accountActor});mocks.transport.mockResolvedValueOnce({status:200,body:value});const host=await render(createElement(Home));await act(async()=>{mocks.show!();await Promise.resolve();});
- const tab=Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='○我的')!;await act(async()=>tab.click());const entry=Array.from(host.querySelectorAll('span')).find(s=>s.textContent==='个人信息')!;await act(async()=>entry.click());const input=host.querySelector('input')!;await act(async()=>{input.value='本机未保存昵称';input.dispatchEvent(new Event('input',{bubbles:true}));});
+ const tab=Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='○我的')!;await act(async()=>tab.click());const entry=Array.from(host.querySelectorAll('button')).find(s=>s.textContent==='编辑资料')!;await act(async()=>entry.click());const input=host.querySelector('input')!;await act(async()=>{input.value='本机未保存昵称';input.dispatchEvent(new Event('input',{bubbles:true}));});
  mocks.me.mockResolvedValueOnce({user_id:accountActor});mocks.transport.mockResolvedValueOnce({status:404,body:'<html>missing</html>'});await act(async()=>{mocks.show!();await Promise.resolve();});
  expect(host.querySelector('input')?.value).toBe('本机未保存昵称');expect(host.textContent).toContain('HTTP 404');expect(mocks.token).toBe('session-a');
 });

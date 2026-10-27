@@ -15,11 +15,18 @@ const fixturePoi = { id: 'fixture-id', name: '测试场馆', typecode: '080118',
 const good = (extra: object) => new Response(JSON.stringify({ status: '1', infocode: '10000', ...extra }), { headers: { 'Content-Type': 'application/json' } });
 const fixedNow = () => new Date('2026-10-24T08:00:00Z');
 function provider(response: () => Response = () => good({ pois: [] })) {
-  const fetcher = vi.fn(async () => response());
+  const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response());
   return { fetcher, service: createAmapProvider({ fetch: fetcher, getKey: () => KEY, now: fixedNow }) };
 }
 
 describe('AMap provider: offline only', () => {
+  it('returns bounded real-photo fields and rejects credential-bearing or unsafe image URLs', async () => {
+    const { service, fetcher } = provider(() => good({ pois: [{ ...fixturePoi, adname:'浦东新区', photos:[{url:'https://store.is.autonavi.com/example.jpg',title:'场馆图片'},{url:'http://unsafe.test/image.jpg'},{url:`https://images.test/${KEY}.jpg`}] }] }));
+    const result = await service.search('verified-user', search);
+    expect(result.venues[0].photos).toEqual([{url:'https://store.is.autonavi.com/example.jpg',title:'场馆图片'}]);
+    expect(result.venues[0].district).toBe('浦东新区');expect(JSON.stringify(result)).not.toContain(KEY);
+    expect(new URL(String(fetcher.mock.calls[0][0])).searchParams.get('show_fields')).toBe('business,photos');
+  });
   it('rejects swapped, wrong CRS, outside range and excess precision coordinates', () => {
     for (const v of [ { ...center, longitude: 31, latitude: 121 }, { ...center, crs: 'WGS84' },
       { ...center, longitude: 181 }, { ...center, latitude: -1 }, { ...center, longitude: 121.4514457 }, { ...center, longitude: '121.45' } ]) {

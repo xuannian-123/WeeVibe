@@ -120,6 +120,11 @@ export function createAmapProvider(options: ProviderOptions = {}) {
         || category === 'sport' && !code.startsWith('08') || category === 'restaurant' && !code.startsWith('05')
         || radius !== undefined && distance !== null && distance > radius) { excluded_count++; continue; }
       const business = object(poi.business) ?? {};
+      const photos = (Array.isArray(poi.photos) ? poi.photos : []).slice(0, 3).flatMap(raw => {
+        const photo = object(raw), value = photo && clean(photo.url);
+        if (!value || value.includes('[REDACTED]')) return [];
+        try { const url = new URL(value); if (url.protocol !== 'https:' || url.username || url.password || url.searchParams.has('key') || !url.hostname.includes('.') || /^(?:localhost|127\.|10\.|192\.168\.)/.test(url.hostname)) return []; return [{ url: url.toString(), title: clean(photo?.title)?.slice(0, 200) ?? null }]; } catch { return []; }
+      });
       const sourced = (v: unknown) => ({ value: clean(v), source, verification: clean(v) ? 'api_returned_not_merchant_confirmed' as const : 'unknown' as const });
       venues.push({ provider: 'amap', provider_id: clean(poi.id)!, name: clean(poi.name)!, address: clean(poi.address),
         category_code: code, category_text: clean(poi.type), location: location.data, source,
@@ -127,6 +132,7 @@ export function createAmapProvider(options: ProviderOptions = {}) {
         reference_cost: { ...sourced(business.cost), currency: 'CNY', unit: code.startsWith('05') ? 'person' : null, is_transaction_quote: false },
         search_distance_m: distance, search_distance_kind: 'search_distance_not_walk_route',
         inventory: 'unknown', booking: 'unknown', suitability: 'not_merchant_verified',
+        ...(clean(poi.adname) ? { district: clean(poi.adname)!.slice(0, 100) } : {}), ...(photos.length ? { photos } : {}),
       });
     }
     return { source, venues, excluded_count, pagination: false };
@@ -136,13 +142,13 @@ export function createAmapProvider(options: ProviderOptions = {}) {
       const parsed = venueSearchSchema.safeParse(input);
       if (!parsed.success) throw new AmapError('INVALID_INPUT');
       const v = parsed.data;
-      return places(userId, TEXT, { keywords: v.keyword, region: v.region, city_limit: 'true', show_fields: 'business', page_size: String(v.page_size), page_num: '1', ...(v.category && typeMap[v.category] ? { types: typeMap[v.category]! } : {}) }, v.category);
+      return places(userId, TEXT, { keywords: v.keyword, region: v.region, city_limit: 'true', show_fields: 'business,photos', page_size: String(v.page_size), page_num: '1', ...(v.category && typeMap[v.category] ? { types: typeMap[v.category]! } : {}) }, v.category);
     },
     async nearby(userId: string, input: unknown): Promise<VenueList> {
       const parsed = venueNearbySchema.safeParse(input);
       if (!parsed.success) throw new AmapError('INVALID_INPUT');
       const v = parsed.data;
-      return places(userId, AROUND, { location: encode(v.center), radius: String(v.radius_m), sortrule: 'distance', show_fields: 'business', page_size: String(v.page_size), page_num: '1',
+      return places(userId, AROUND, { location: encode(v.center), radius: String(v.radius_m), sortrule: 'distance', show_fields: 'business,photos', page_size: String(v.page_size), page_num: '1',
         ...(typeMap[v.category] ? { types: typeMap[v.category]! } : {}),
         ...(v.keyword || defaultKeyword[v.category] ? { keywords: v.keyword ?? defaultKeyword[v.category]! } : {}),
       }, v.category, v.radius_m);

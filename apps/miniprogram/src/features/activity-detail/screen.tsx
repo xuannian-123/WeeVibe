@@ -1,5 +1,5 @@
 import Taro from '@tarojs/taro';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, View } from '@tarojs/components';
 import { BRAND_NAME } from '../../brand';
 import { Action, Notice, Panel } from '../../components/ui';
@@ -39,6 +39,8 @@ export default function ActivityDetailScreen() {
   const [capacityBusy, setCapacityBusy] = useState(false);
   const [deadlineBusy, setDeadlineBusy] = useState(false);
   const [bookingBusy, setBookingBusy] = useState(false);
+  const messageSection=Taro.getCurrentInstance?.().router?.params.section;
+  useEffect(()=>{if(!detail||!['applications','arrangement','handover','activity'].includes(String(messageSection)))return;const timer=setTimeout(()=>{try{void Taro.pageScrollTo?.({selector:`#activity-${messageSection}`,duration:250})?.catch(()=>{});}catch{}},250);return()=>clearTimeout(timer);},[detail?.activity_id,messageSection]);
   const anyBusy = applications.anyBusy || participationBusy || invitationBusy || formationBusy || arrangementBusy || withdrawalBusy || cancellationBusy || handoverBusy || rebookBusy || mainSegmentBusy || capacityBusy || deadlineBusy || bookingBusy;
   const otherWriteBusy = participationBusy || invitationBusy || formationBusy || arrangementBusy || withdrawalBusy || cancellationBusy || handoverBusy || rebookBusy || mainSegmentBusy || capacityBusy || deadlineBusy || bookingBusy;
   const applicationState = { ...applications, anyBusy, fresh: applications.fresh && !otherWriteBusy,
@@ -47,8 +49,8 @@ export default function ActivityDetailScreen() {
     apply: { ...applications.apply, send: async (...args: Parameters<typeof applications.apply.send>) => { if (!otherWriteBusy) await applications.apply.send(...args); } },
     decision: { ...applications.decision, send: async (...args: Parameters<typeof applications.decision.send>) => { if (!otherWriteBusy) await applications.decision.send(...args); } }
   };
-  if (!id) return <View className="screen activity-page"><Panel title="没有找到这个活动"><Notice>活动入口不完整，请向朋友重新获取邀请。</Notice><Action onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>返回首页</Action></Panel></View>;
-  return <View className="screen activity-page">
+  if (!id) return <View id="activity-activity" className="screen activity-page"><Panel title="没有找到这个活动"><Notice>活动入口不完整，请向朋友重新获取邀请。</Notice><Action onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>返回首页</Action></Panel></View>;
+  return <View id="activity-activity" className="screen activity-page">
     <View className="activity-hero">
       <Text className="activity-eyebrow">{BRAND_NAME} · 一起出发</Text>
       <Text className="activity-title">{detail?.name ?? '活动详情'}</Text>
@@ -68,11 +70,11 @@ export default function ActivityDetailScreen() {
 
     {detail && <FormationPanel key={`formation:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !arrangementBusy && !withdrawalBusy && !cancellationBusy && !handoverBusy && !rebookBusy && !mainSegmentBusy && !login.busy && !capacityBusy && !deadlineBusy && !bookingBusy} anyBusy={anyBusy || login.busy} refresh={read.refresh} onBusyChange={setFormationBusy} />}
 
-    {detail && <ArrangementPanel key={`arrangement:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !formationBusy && !withdrawalBusy && !cancellationBusy && !handoverBusy && !rebookBusy && !mainSegmentBusy && !login.busy && !capacityBusy && !deadlineBusy && !bookingBusy} anyBusy={anyBusy || login.busy} refresh={read.refresh} onBusyChange={setArrangementBusy} />}
+    {detail && <View id="activity-arrangement"><ArrangementPanel key={`arrangement:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !formationBusy && !withdrawalBusy && !cancellationBusy && !handoverBusy && !rebookBusy && !mainSegmentBusy && !login.busy && !capacityBusy && !deadlineBusy && !bookingBusy} anyBusy={anyBusy || login.busy} refresh={read.refresh} onBusyChange={setArrangementBusy} /></View>}
 
     {detail && attributions && <AttributionPanel detail={detail} state={attributions} />}
 
-    {detail && <ApprovalPanel detail={detail} state={applicationState} />}
+    {detail && <View id="activity-applications"><ApprovalPanel detail={detail} state={applicationState} /></View>}
 
     {detail && <MyParticipationPanel detail={detail} state={applicationState} />}
 
@@ -96,7 +98,7 @@ export default function ActivityDetailScreen() {
 
     {detail && <CancellationPanel key={`cancellation:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !formationBusy && !arrangementBusy && !withdrawalBusy && !handoverBusy && !rebookBusy && !mainSegmentBusy && !login.busy && !capacityBusy && !deadlineBusy && !bookingBusy} anyBusy={anyBusy || login.busy} refresh={read.refresh} onBusyChange={setCancellationBusy} />}
 
-    {detail && <HandoverPanel key={`handover:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !formationBusy && !arrangementBusy && !withdrawalBusy && !cancellationBusy && !rebookBusy && !mainSegmentBusy && !login.busy && !capacityBusy && !deadlineBusy && !bookingBusy} anyBusy={anyBusy || login.busy} refresh={read.refresh} onBusyChange={setHandoverBusy} />}
+    {detail && <View id="activity-handover"><HandoverPanel key={`handover:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !formationBusy && !arrangementBusy && !withdrawalBusy && !cancellationBusy && !rebookBusy && !mainSegmentBusy && !login.busy && !capacityBusy && !deadlineBusy && !bookingBusy} anyBusy={anyBusy || login.busy} refresh={read.refresh} onBusyChange={setHandoverBusy} /></View>}
 
     {detail && <RebookPanel key={`rebook:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !formationBusy && !arrangementBusy && !withdrawalBusy && !cancellationBusy && !handoverBusy && !mainSegmentBusy && !login.busy && !capacityBusy && !deadlineBusy && !bookingBusy} anyBusy={anyBusy || login.busy} onBusyChange={setRebookBusy} />}
 
