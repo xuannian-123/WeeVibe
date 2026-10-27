@@ -9,7 +9,9 @@ permissions:
 
 jobs:
   package:
-    if: github.event.repository.private == false
+    # Private repositories may package only on an explicit manual dispatch.
+    # Check included Actions minutes/storage before dispatch; this never deploys.
+    if: github.event_name == 'workflow_dispatch' || github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
