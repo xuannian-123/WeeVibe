@@ -13,25 +13,28 @@ import { errorText } from '../../platform/page-state';
 export function Messages({ value, session, error, refresh, changed, initialPendingOnly=false, filterChanged }: { initialPendingOnly?:boolean; filterChanged?:(value:boolean)=>void; value?: InboxSnapshot; session?: string; error: string; refresh: () => void | Promise<void>; changed: (v: InboxSnapshot) => void }) {
   const [pendingOnly, setPendingOnly] = useState(initialPendingOnly), [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
   const [refreshing,setRefreshing]=useState(false);const refreshLock=useRef(false);
-  const lock = useRef(false); const source = useRef(session), active = useRef(true);
-  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
-  useDidHide(() => { active.current = false; }); useDidShow(() => { active.current = true; });
+  const lock = useRef(false); const source = useRef(session), active = useRef(true), mounted=useRef(true), epoch=useRef(0);
+  useEffect(() => { active.current = true; mounted.current=true; return () => { active.current = false; mounted.current=false; epoch.current++; }; }, []);
+  useDidHide(() => { active.current = false; epoch.current++; }); useDidShow(() => { active.current = true; });
   const valid = () => active.current && source.current === session && session === getToken();
+  const ownState=()=>mounted.current&&source.current===session&&session===getToken();
   function selectFilter(value:boolean){setPendingOnly(value);if(valid())filterChanged?.(value);}
   async function mark(id?: string) {
     if (lock.current || refreshLock.current || !valid() || !session) return; lock.current = true; setBusy(true); setNotice('');
+    const ticket=epoch.current, current=()=>valid()&&epoch.current===ticket;
     try {
-      const next = await requestInbox(session, id ? { action: 'read', message_id: id } : { action: 'read-all' }); if (!valid()) return; changed(next);
+      const next = await requestInbox(session, id ? { action: 'read', message_id: id } : { action: 'read-all' }); if (!current()) return; changed(next);
       const message = value?.messages.find(m => m.id === id); if (!message) return;
       const url = message.requirement_id ? `/pages/requirements/index?id=${message.requirement_id}` : message.activity_id ? `/pages/activity/index?id=${message.activity_id}&section=${message.section}` : '';
-      if (url && valid()) await Taro.navigateTo({ url });
-    } catch (e) { if (valid()) setNotice(errorText(e)); } finally { lock.current = false; if (valid()) setBusy(false); }
+      if (url && current()) await Taro.navigateTo({ url });
+    } catch (e) { if (current()) setNotice(errorText(e)); } finally { lock.current = false; if (ownState()) setBusy(false); }
   }
   async function reload(){
     if(refreshLock.current||lock.current||!valid())return;
     refreshLock.current=true;setRefreshing(true);setNotice('');
-    try{await refresh();}catch{if(valid())setNotice('消息刷新未完成，可以稍后重试。');}
-    finally{refreshLock.current=false;if(valid())setRefreshing(false);}
+    const ticket=epoch.current;
+    try{await refresh();}catch{if(valid()&&epoch.current===ticket)setNotice('消息刷新未完成，可以稍后重试。');}
+    finally{refreshLock.current=false;if(ownState())setRefreshing(false);}
   }
   const messages = value?.messages.filter(m => !pendingOnly || m.pending) ?? [];
   return <View className="wv-messages"><View className="wv-messages-header"><Text className="wv-title">消息</Text><Button className="wv-link" disabled={busy || refreshing || !value || !value.unread_count} onClick={() => void mark()}>全部已读</Button></View>
