@@ -15,7 +15,7 @@ vi.mock('../apps/miniprogram/src/platform/avatar', () => ({ loadAvatar: async ()
 vi.mock('../apps/miniprogram/src/features/team', () => ({ TeamCreate: () => null }));
 vi.mock('../apps/miniprogram/src/features/shell/inspiration', () => ({ Inspiration: () => null }));
 vi.mock('../apps/miniprogram/src/features/shell/profile', () => ({ ProfileForm: () => null }));
-vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: { getStorageSync: () => '', navigateTo: h.navigate, reLaunch: h.relaunch }, useDidShow: (fn: () => void) => h.show.push(fn), useDidHide: (fn: () => void) => h.hide.push(fn), useUnload: (fn: () => void) => h.unload.push(fn) }));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: { getStorageSync: () => '', setStorageSync: vi.fn(), navigateTo: h.navigate, reLaunch: h.relaunch }, useDidShow: (fn: () => void) => h.show.push(fn), useDidHide: (fn: () => void) => h.hide.push(fn), useUnload: (fn: () => void) => h.unload.push(fn) }));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components', () => ({
   View: (p: any) => createElement('div', { className: p.className, onClick: p.onClick }, p.children), Text: (p: any) => createElement('span', { onClick: p.onClick }, p.children),
   Button: (p: any) => createElement('button', { onClick: p.onClick, disabled: p.disabled }, p.children), Input: () => null, Image: () => null,
