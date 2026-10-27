@@ -62,6 +62,14 @@ export function requireAdmin(req: Request, juId: string): void {
   }
 }
 
+/** 请求者的公网 IP（nginx 传 X-Real-IP / X-Forwarded-For）；内网 / 本机地址返回 undefined */
+export function clientIpOf(req: Request): string | undefined {
+  const raw = req.headers.get("x-real-ip") || (req.headers.get("x-forwarded-for") ?? "").split(",")[0] || "";
+  const ip = raw.trim();
+  if (!ip || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1|fc|fd|localhost)/i.test(ip)) return undefined;
+  return ip;
+}
+
 /** 从请求头取出调用者身份（成员 token / 发起人 token），交给 firewall.publicState 判断 */
 export function viewerOf(req: Request): { memberToken?: string; adminToken?: string } {
   const memberToken = req.headers.get("x-member-token") ?? undefined;

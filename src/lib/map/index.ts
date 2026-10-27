@@ -14,7 +14,7 @@ export const MAP_UNAVAILABLE = "地图服务暂时不可用";
  * - searchAround：绝不降级（虚构店铺不能当真店推荐），重试 1 次后抛出"地图服务暂时不可用"
  * - weather：失败返回 []（当作"没有预报"），不降级到编出来的天气
  */
-type CoreMethod = Exclude<keyof MapProvider, "weather">;
+type CoreMethod = Exclude<keyof MapProvider, "weather" | "cityOfIp" | "cityAt">;
 
 export function withFallback(primary: MapProvider, fallback: MapProvider, name = "amap"): MapProvider {
   const wrap =
@@ -44,6 +44,21 @@ export function withFallback(primary: MapProvider, fallback: MapProvider, name =
     },
     commute: wrap("commute") as MapProvider["commute"],
     transitRoute: wrap("transitRoute") as MapProvider["transitRoute"],
+    // 城市猜不到就当不知道，由调用方兜底
+    cityOfIp: async (ip) => {
+      try {
+        return primary.cityOfIp ? await primary.cityOfIp(ip) : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    cityAt: async (p) => {
+      try {
+        return primary.cityAt ? await primary.cityAt(p) : undefined;
+      } catch {
+        return undefined;
+      }
+    },
     // 天气拿不到就当"未知"（返回 []），绝不降级成编出来的天气
     weather: async (center) => {
       if (!primary.weather) return [];

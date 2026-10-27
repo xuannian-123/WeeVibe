@@ -258,7 +258,7 @@ export type PlanDeps = {
 type MapLog = Record<string, unknown>;
 
 /** 包一层地图：记录每次调用的返回值，复算时回放 */
-type CoreMethod = Exclude<keyof MapProvider, "weather">;
+type CoreMethod = Exclude<keyof MapProvider, "weather" | "cityOfIp" | "cityAt">;
 
 export function recordingMap(map: MapProvider, log: MapLog): MapProvider {
   const wrap =

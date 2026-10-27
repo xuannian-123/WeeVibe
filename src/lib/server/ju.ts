@@ -58,6 +58,22 @@ export function defaultCity(): string {
   return (process.env.DEMO_CITY ?? "").trim() || "上海";
 }
 
+/** 发起人那句话没提城市时用哪个城市：先按 IP 猜（全国），猜不到再用兜底城市 */
+export async function cityGuess(ip: string | undefined): Promise<{ city: string; from: "ip" | "default" }> {
+  if (ip) {
+    const map = getMapProvider();
+    const c = map.cityOfIp ? await map.cityOfIp(ip).catch(() => undefined) : undefined;
+    if (c) return { city: c, from: "ip" };
+  }
+  return { city: defaultCity(), from: "default" };
+}
+
+/** 城市是不是发起人亲口说的：原话里出现了这个城市名 */
+export function withCityFrom(spec: JuSpec, text: string, guessed: "ip" | "default"): JuSpec {
+  const said = !!spec.city && text.includes(spec.city.replace(/市$/, ""));
+  return { ...spec, cityFrom: said ? "said" : guessed };
+}
+
 export type Viewer = { memberToken?: string; adminToken?: string };
 
 // ---------------------------------------------------------------- 锁
@@ -217,17 +233,21 @@ export function planDeps(members: Member[]): AdvanceDeps {
 
 // ---------------------------------------------------------------- 解析 / 建局
 
-export async function previewParse(prompt: string): Promise<{ title: string; spec: JuSpec; slots: Slot[] }> {
-  const { title, spec } = await parsePrompt(prompt, new Date(), defaultCity());
-  return { title, spec, slots: generateSlots(spec) };
+export async function previewParse(prompt: string, ip?: string): Promise<{ title: string; spec: JuSpec; slots: Slot[] }> {
+  const g = await cityGuess(ip);
+  const parsed = await parsePrompt(prompt, new Date(), g.city);
+  const spec = withCityFrom(parsed.spec, prompt, g.from);
+  return { title: parsed.title, spec, slots: generateSlots(spec) };
 }
 
-export async function previewScreenshot(image: string): Promise<ChatScreenshotParse & { slots: Slot[] }> {
-  const r = await parseChatScreenshot(image, new Date(), defaultCity());
-  return { ...r, slots: generateSlots(r.spec) };
+export async function previewScreenshot(image: string, ip?: string): Promise<ChatScreenshotParse & { slots: Slot[] }> {
+  const g = await cityGuess(ip);
+  const r = await parseChatScreenshot(image, new Date(), g.city);
+  const spec: JuSpec = { ...r.spec, cityFrom: r.spec.city === g.city ? g.from : "said" };
+  return { ...r, spec, slots: generateSlots(spec) };
 }
 
-export async function createJu(input: CreateJuInput, extra: { prevJuId?: string } = {}): Promise<{
+export async function createJu(input: CreateJuInput, extra: { prevJuId?: string; ip?: string } = {}): Promise<{
   id: string;
   adminToken: string;
   tierLinks: { tier: number; label: string; token: string }[];
@@ -240,8 +260,9 @@ export async function createJu(input: CreateJuInput, extra: { prevJuId?: string 
     title = input.title ?? `${spec.category}局`;
   } else {
     if (!input.prompt) throw new HttpError(400, "请说一句话描述这个局，或者直接传 spec");
-    const parsed = await parsePrompt(input.prompt, now, defaultCity());
-    spec = parsed.spec;
+    const g = await cityGuess(extra.ip);
+    const parsed = await parsePrompt(input.prompt, now, g.city);
+    spec = withCityFrom(parsed.spec, input.prompt, g.from);
     title = input.title ?? parsed.title;
   }
   const slots = generateSlots(spec);

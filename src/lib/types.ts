@@ -23,6 +23,8 @@ export type JuSpec = {
   latest: string;
   durationMinutes: number;
   city: string;
+  /** 城市是怎么定的：said = 发起人亲口说的；ip = 按发起人的网络位置猜的；location = 按第一个人给的出发地校正的；default = 兜底 */
+  cityFrom?: "said" | "ip" | "location" | "default";
   notes?: string;
 };
 
@@ -876,4 +878,8 @@ export interface MapProvider {
   transitRoute(origin: LatLng, dest: LatLng, city: string): Promise<{ minutes: number; steps: string[] }>;
   /** v5：集合点附近的天气预报（可选；拿不到返回 []，当作"未知"） */
   weather?(center: LatLng): Promise<WeatherDay[]>;
+  /** 按 IP 猜城市（全国；拿不到返回 undefined） */
+  cityOfIp?(ip: string): Promise<string | undefined>;
+  /** 坐标在哪个城市（全国；直辖市返回"北京"这样的名字） */
+  cityAt?(p: LatLng): Promise<string | undefined>;
 }

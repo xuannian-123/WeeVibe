@@ -20,6 +20,7 @@ import { HttpError } from "./http";
 import { AVATARS, isAdminToken, loadJu, loadMembers, mutateJu, type MutateCtx, type Viewer } from "./ju";
 import {
   admitStatus,
+  appendTraceAt,
   autofillMember,
   emptyPrivate,
   evalQuorum,
@@ -332,6 +333,7 @@ export async function chat(juId: string, token: string, body: ChatBody): Promise
   });
 
   // 2) 锁外：私聊一轮。刚回答完确认问题时，这句"对 / 不是"不再当成新内容，局长直接接着问下一项
+  const map = getMapProvider();
   const r0 = await chatTurn({
     ju: s1.ju,
     me: s1.me,
@@ -339,8 +341,17 @@ export async function chat(juId: string, token: string, body: ChatBody): Promise
     userText: s1.confirmAck ? "" : text,
     quorumPending: s1.quorumPending,
     now: s1.now,
+    // 私聊里说的地名：用高德地理编码（全国），按局的城市优先
+    resolvePlace: async (q) => (await map.searchPlaces(q, s1.ju.spec.city))[0],
   });
   const r = s1.confirmAck ? { ...r0, reply: `${s1.confirmAck}${r0.reply}`, patch: {} } : r0;
+
+  // 城市没被发起人亲口说过：用第一个真实出发地校正（比如按 IP 猜成了上海，人其实在北京）
+  const loc = widget.location ?? r.patch?.location;
+  const cityFix =
+    loc && s1.ju.spec.cityFrom !== "said" && s1.ju.spec.cityFrom !== "location" && !s1.ju.plan && map.cityAt
+      ? await map.cityAt(loc).catch(() => undefined)
+      : undefined;
 
   // 3) 锁内：应用抽取结果（组件已经给了的字段以组件为准），记下局长的回复，推进入局阶段
   return mutateJu(juId, (ctx) => {
@@ -348,6 +359,11 @@ export async function chat(juId: string, token: string, body: ChatBody): Promise
     const patch: ChatPatch = { ...(r.patch ?? {}) };
     for (const k of WIDGET_KEYS) if (widget[k] !== undefined) delete patch[k];
     applyPatch(ctx, me, patch, s1.profile);
+    if (cityFix && ctx.ju.spec.cityFrom !== "said" && ctx.ju.spec.cityFrom !== "location" && !ctx.ju.plan) {
+      const was = ctx.ju.spec.city;
+      ctx.ju.spec = { ...ctx.ju.spec, city: cityFix, cityFrom: "location" };
+      if (was !== cityFix) appendTraceAt(ctx.ju, "listen", `按大家的出发地，这个局在${cityFix}`, ctx.now);
+    }
     // 从自然语言里推断出硬约束（门禁 / 清真 / "最多一小时"）：先回问确认，这一轮不往下问。
     // 确认之前按硬约束算——把门禁当软偏好可能把人排到门禁之后，那比多问一句糟得多
     const hard = body.text && !r.done ? hardToConfirm(me, patch) : undefined;

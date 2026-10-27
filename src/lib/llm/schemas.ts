@@ -18,6 +18,7 @@ export const juSpecSchema = z
     latest: hhmm,
     durationMinutes: z.number().int().min(15).max(24 * 60),
     city: z.string().trim().min(1).max(20),
+    cityFrom: z.enum(["said", "ip", "location", "default"]).optional(),
     notes: z.string().max(200).optional(),
   })
   .refine((s) => s.earliest <= s.latest, { message: "earliest 不能晚于 latest" });

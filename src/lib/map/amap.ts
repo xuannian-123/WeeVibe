@@ -142,6 +142,8 @@ type RegeoResp = AmapBase & {
       township?: unknown;
       neighborhood?: { name?: unknown };
       adcode?: unknown;
+      city?: unknown;
+      province?: unknown;
       building?: { name?: unknown };
       streetNumber?: { street?: unknown; number?: unknown };
     };
@@ -290,6 +292,13 @@ export function pickRegeoLabel(data: RegeoResp): string {
 
 const weatherCache = new Map<string, { at: number; days: WeatherDay[] }>();
 
+/** "北京市" → "北京"、"苏州市" → "苏州"；空 / 非法返回 undefined */
+export function normalizeCity(raw: string): string | undefined {
+  const s = raw.trim();
+  if (!s || s === "[]") return undefined;
+  return s.replace(/(特别行政区|自治州|地区|盟|市)$/, "") || undefined;
+}
+
 // ---------- Provider ----------
 export function createAmapProvider(key: string): MapProvider {
   return {
@@ -298,7 +307,8 @@ export function createAmapProvider(key: string): MapProvider {
       if (!keywords) return [];
       const data = await amapGet<InputTipsResp>(
         "/v3/assistant/inputtips",
-        { keywords, city: city?.trim() || undefined, citylimit: "true", datatype: "all" },
+        // 城市只做优先，不做限制：异地出发的朋友也搜得到自己的出发地
+        { keywords, city: city?.trim() || undefined, citylimit: "false", datatype: "all" },
         key,
       );
       const out: Place[] = [];
@@ -309,6 +319,18 @@ export function createAmapProvider(key: string): MapProvider {
         out.push({ label: name, ...loc });
       }
       return out;
+    },
+
+    async cityOfIp(ip: string): Promise<string | undefined> {
+      const data = await amapGet<AmapBase & { city?: unknown; province?: unknown }>("/v3/ip", { ip }, key);
+      return normalizeCity(str(data.city) || str(data.province));
+    },
+
+    async cityAt(p: LatLng): Promise<string | undefined> {
+      const data = await amapGet<RegeoResp>("/v3/geocode/regeo", { location: fmtLocation(p), extensions: "base" }, key);
+      const c = data.regeocode?.addressComponent;
+      // 直辖市的 city 字段是空数组，用 province
+      return normalizeCity(str(c?.city) || str(c?.province));
     },
 
     async weather(center: LatLng): Promise<WeatherDay[]> {

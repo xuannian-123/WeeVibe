@@ -18,7 +18,33 @@ export type ChatCtx = {
   userText: string | null;
   quorumPending: boolean;
   now: Date;
+  /** 地名 → 坐标（全国，服务端用高德地理编码实现）。不传就只用内置小词典 */
+  resolvePlace?: (query: string) => Promise<Place | undefined>;
 };
+
+/** 内置地名小词典只有上海的地点：只在上海的局里用，别把北京的"南站"认成上海南站 */
+function useDict(ctx: ChatCtx): boolean {
+  return !ctx.ju.spec.city || ctx.ju.spec.city.includes("上海");
+}
+
+/** "我从中关村出发" → "中关村"：去掉前后的客套，剩下的当地名去查 */
+export function placeQueryOf(text: string): string | undefined {
+  const q = text
+    .trim()
+    .replace(/[。！!，,～~]+$/g, "")
+    .replace(/^(我|俺|人)?(现在|今天|这周|一般)?(从|在|住在?|位于|就在)/, "")
+    .replace(/(出发|过去|过来|这边|那边|附近|一带|上班|上学|住)$/, "")
+    .trim();
+  if (q.length < 2 || q.length > 30) return undefined;
+  if (AFFIRM_RE.test(q) || NOTHING_RE.test(q) || AUTOFILL_RE.test(q)) return undefined;
+  // 必须像个地名才去查：否则"这周在减肥别太油"会被当成地名，私密备注变成公开的"出发地"
+  if (!PLACE_LIKE_RE.test(q)) return undefined;
+  return q;
+}
+
+/** 地名特征：路名 / 站 / 学校 / 小区 / 商圈 / 行政区…… */
+const PLACE_LIKE_RE =
+  /路|街|道|巷|站|大学|学院|校区|中学|小学|园|区|广场|大厦|中心|小区|公寓|宿舍|花园|村|镇|县|市|门|楼|号|城|湾|港|机场|酒店|医院|公司|商场|地铁|寺|桥|湖|江|河|山|塔|府|苑|庭|里|坊|厂|基地|科技|软件|产业|东|西|南|北/;
 
 export type ChatStep = ChatAsk;
 /** ask = 局长这一轮问的是哪一项（存进聊天记录，下一轮据此判断"问过什么"） */
@@ -284,8 +310,8 @@ export function ruleExtract(text: string, ctx: ChatCtx, pending: ChatStep | unde
   const nm = t.match(/(?:我叫|叫我)\s*([一-龥A-Za-z]{1,6})/);
   if (nm) patch.name = nm[1];
 
-  // 地点：说了地名；或老朋友确认“还是那儿”
-  const place = lookupPlace(t);
+  // 地点：说了地名；或老朋友确认“还是那儿”（小词典只在上海的局里用，其他城市由 chatTurn 调高德地理编码）
+  const place = useDict(ctx) ? lookupPlace(t) : undefined;
   if (place) patch.location = place;
   else if (pending === "location" && ctx.profile?.lastLocation && (AFFIRM_RE.test(s) || /还是那|老地方/.test(s))) {
     patch.location = { ...ctx.profile.lastLocation };
@@ -709,7 +735,7 @@ function mergePatch(rule: ChatPatch, llm: ReturnType<typeof llmChatSchema.parse>
     if (llm.rsvp === "yes" || (/不|没|算了|下次|鸽/.test(text) && !CONDITIONAL_RE.test(strip(text)))) out.rsvp = llm.rsvp;
   }
   if (out.rsvp === "no") return { rsvp: "no" };
-  if (!out.location && llm.placeName) {
+  if (!out.location && llm.placeName && useDict(ctx)) {
     const place = lookupPlace(llm.placeName);
     if (place) out.location = place;
   }
@@ -765,6 +791,16 @@ export async function chatTurn(ctx: ChatCtx): Promise<ChatResult> {
   const pending = h.pending ?? (h.opening ? undefined : nextStep(ctx, viewOf(ctx.me, {}), h.asked));
   const text = ctx.userText ?? "";
   const rulePatch = ruleExtract(text, ctx, pending);
+  // 正在问出发地、小词典没认出来：整句当地名去查（全国）
+  // 这句话已经被识别成别的信息（预算 / 忌口 / 时间 / 需求 / 备注）就不当地名
+  const otherInfo = !!(rulePatch.budgetMax || rulePatch.dietTags || rulePatch.availability || rulePatch.needs || rulePatch.note || rulePatch.billFacts || rulePatch.wantsAutofill);
+  if (!rulePatch.location && pending === "location" && ctx.resolvePlace && rulePatch.rsvp !== "no" && !otherInfo) {
+    const q = placeQueryOf(text);
+    if (q) {
+      const pl = await ctx.resolvePlace(q).catch(() => undefined);
+      if (pl) rulePatch.location = pl;
+    }
+  }
   const rule = composeRule(ctx, rulePatch, h);
   // 开场白走规则（入局要快）；没有 LLM、或用户什么都没说时也走规则
   if (currentProvider() === "rules" || ctx.userText === null || !text.trim()) return rule;
@@ -807,6 +843,11 @@ export async function chatTurn(ctx: ChatCtx): Promise<ChatResult> {
     const raw = await callLlmJson({ system, user, schema: llmChatJsonSchema, maxTokens: 1200 });
     const out = llmChatSchema.parse(raw);
     const patch = mergePatch(rulePatch, out, ctx, text);
+    // 大模型听出了地名、词典里没有：查高德（全国）
+    if (!patch.location && out.placeName && ctx.resolvePlace) {
+      const pl = await ctx.resolvePlace(out.placeName).catch(() => undefined);
+      if (pl) patch.location = pl;
+    }
     const composed = composeRule(ctx, patch, h);
     if (patch.rsvp === "no") return composed;
     if (ctx.me.intake !== "chatting") return { ...composed, reply: out.reply };
