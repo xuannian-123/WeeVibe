@@ -21,8 +21,20 @@ export function applyToActivity(activityId: string, actorId: string, input: Appl
       targets: { some: { segmentId: { in: input.segments.map(s => s.segment_id) } } }
     } });
     if (overlapping) throw new ServiceError('APPLICATION_ALREADY_PENDING', 409, '所选环节已有待处理申请，请勿重复申请');
+    // Existing public invitation sources remain usable after their inviter exits.
+    // This is attribution only: it cannot bypass the ordinary application rules.
+    if (input.invitation_source_id !== undefined) {
+      const source = await tx.invitationSource.findFirst({
+        where: { id: input.invitation_source_id, activityId }, select: { id: true, activityId: true }
+      });
+      if (!source || source.id !== input.invitation_source_id || source.activityId !== activityId)
+        throw new ServiceError('INVALID_INPUT', 409, '邀请入口与此活动不匹配，请重新打开活动入口');
+      // The source read is awaited under the lock: do not accept a cutoff crossed while it resolves.
+      checkSelectedSegments(activity.segments, input.segments, actorId, new Date());
+    }
     const application = await tx.activityApplication.create({ data: {
-      activityId, applicantUserId: actorId, displayName: input.display_name ?? null
+      activityId, applicantUserId: actorId, displayName: input.display_name ?? null,
+      ...(input.invitation_source_id !== undefined ? { invitationSourceId: input.invitation_source_id } : {})
     } });
     await tx.applicationTarget.createMany({ data: input.segments.map(s => ({ activityId, applicationId: application.id, segmentId: s.segment_id, acceptedPlanRevision: s.plan_revision })) });
     const updated = await tx.activity.update({ where: { id: activityId }, data: { revision: { increment: 1 } } });

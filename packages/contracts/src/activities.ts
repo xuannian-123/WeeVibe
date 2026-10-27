@@ -53,11 +53,20 @@ export const selectedSegmentVersionSchema = z.object({ segment_id: activityIdSch
 export const applyToActivityInputSchema = z.object({
   idempotency_key: idempotencyKeySchema, expected_revision: positiveInt,
   segments: z.array(selectedSegmentVersionSchema).min(1),
-  display_name: z.string().trim().min(1).max(40).optional()
+  display_name: z.string().trim().min(1).max(40).optional(),
+  // Public entry provenance only; never identity proof or an admission credential.
+  invitation_source_id: activityIdSchema.optional()
 }).strict().refine(a => new Set(a.segments.map(s => s.segment_id)).size === a.segments.length, '不得重复选择环节');
 export const decideApplicationInputSchema = z.object({
   idempotency_key: idempotencyKeySchema, expected_revision: positiveInt,
   decision: z.enum(['approve', 'reject'])
+}).strict();
+// Withdrawal affects one whole pending application, never an existing seat.
+export const withdrawApplicationInputSchema = z.object({
+  idempotency_key: idempotencyKeySchema, expected_revision: positiveInt
+}).strict();
+export const cancelActivityInputSchema = z.object({
+  idempotency_key: idempotencyKeySchema, expected_revision: positiveInt
 }).strict();
 
 export const activityApplicationSchema = z.object({
@@ -80,7 +89,7 @@ export const activityDetailSchema = z.object({
   }).strict()),
   viewer: z.object({
     user_id: activityIdSchema.nullable(), is_manager: z.boolean(),
-    participations: z.array(z.object({ segment_id: activityIdSchema, status: z.enum(['joined', 'awaiting_acceptance', 'exited']), accepted_plan_revision: positiveInt.nullable() }).strict()),
+    participations: z.array(z.object({ segment_id: activityIdSchema, status: z.enum(['joined', 'awaiting_acceptance', 'exited']), accepted_plan_revision: positiveInt.nullable(), late_arrival_at: instant.nullable().optional(), late_notice_at: instant.nullable().optional() }).strict()),
     applications: z.array(activityApplicationSchema)
   }).strict(),
   // All applications are omitted for non-managers, including anonymous viewers.
@@ -90,4 +99,6 @@ export const activityDetailSchema = z.object({
 export type CreateActivityInput = z.infer<typeof createActivityInputSchema>;
 export type ApplyToActivityInput = z.infer<typeof applyToActivityInputSchema>;
 export type DecideApplicationInput = z.infer<typeof decideApplicationInputSchema>;
+export type WithdrawApplicationInput = z.infer<typeof withdrawApplicationInputSchema>;
+export type CancelActivityInput = z.infer<typeof cancelActivityInputSchema>;
 export type ActivityDetail = z.infer<typeof activityDetailSchema>;

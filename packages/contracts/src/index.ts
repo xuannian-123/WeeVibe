@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const errorCodes = ['INVALID_INPUT', 'NOT_CONFIGURED', 'UNAUTHENTICATED', 'UPSTREAM_UNAVAILABLE', 'DATABASE_UNAVAILABLE', 'INTERNAL_ERROR', 'NOT_FOUND', 'FORBIDDEN', 'VERSION_CONFLICT', 'ARRANGEMENT_STALE', 'CAPACITY_FULL', 'SEGMENT_APPLICATION_CLOSED', 'ACTIVITY_CANCELLED', 'ALREADY_JOINED', 'APPLICATION_ALREADY_PENDING', 'APPLICATION_ALREADY_DECIDED', 'IDEMPOTENCY_CONFLICT', 'CONCURRENT_MODIFICATION'] as const;
+export const errorCodes = ['INVALID_INPUT', 'NOT_CONFIGURED', 'UNAUTHENTICATED', 'UPSTREAM_UNAVAILABLE', 'DATABASE_UNAVAILABLE', 'INTERNAL_ERROR', 'NOT_FOUND', 'FORBIDDEN', 'VERSION_CONFLICT', 'ARRANGEMENT_STALE', 'CAPACITY_FULL', 'SEGMENT_APPLICATION_CLOSED', 'ACTIVITY_CANCELLED', 'ALREADY_JOINED', 'APPLICATION_ALREADY_PENDING', 'APPLICATION_ALREADY_DECIDED', 'IDEMPOTENCY_CONFLICT', 'CONCURRENT_MODIFICATION', 'FORMATION_NOT_READY', 'FORMATION_RULE_UNCONFIRMED', 'ARRANGEMENT_HISTORY_UNAVAILABLE', 'ARRANGEMENT_ACCEPTANCE_CLOSED', 'WITHDRAWAL_RULE_UNCONFIRMED', 'CANCELLATION_RULE_UNCONFIRMED', 'HANDOVER_SCOPE_UNAVAILABLE', 'HANDOVER_ALREADY_PENDING', 'HANDOVER_ALREADY_RESOLVED', 'REBOOK_SCOPE_UNAVAILABLE', 'TODOS_SNAPSHOT_CHANGED', 'MAIN_SEGMENT_SCOPE_UNAVAILABLE', 'ROSTER_LIMIT_EXCEEDED', 'ROSTER_UNAVAILABLE', 'CAPACITY_BELOW_OCCUPIED', 'CAPACITY_BELOW_MINIMUM', 'CAPACITY_CHANGE_CLOSED', 'CAPACITY_SCOPE_UNAVAILABLE', 'DEADLINE_SCOPE_UNAVAILABLE', 'DEADLINE_EXTENSION_CLOSED', 'DEADLINE_OUT_OF_RANGE', 'BOOKING_SCOPE_UNAVAILABLE', 'BOOKING_DECLARATION_CLOSED'] as const;
 export const apiErrorSchema = z.object({ error: z.object({ code: z.enum(errorCodes), message: z.string() }), request_id: z.string() });
 export type ErrorCode = typeof errorCodes[number];
 export const healthSchema = z.object({
@@ -42,3 +42,35 @@ export * from './ai';
 export * from './ai-creation';
 export * from './limits';
 export * from './cloud-http';
+
+export * from './requirements';
+
+export * from "./requirements-api";
+
+export * from './city';
+
+export * from './avatar';
+export * from './participation-actions';
+export * from './account-activities';
+
+export * from './formation';
+
+export * from './arrangement';
+
+export * from './coordination-source';
+
+export * from './handover';
+
+export * from './rebook';
+
+export * from './todos';
+
+export * from './main-segment';
+
+export * from './roster';
+
+export * from './capacity';
+
+export * from './deadline';
+
+export * from './booking';

@@ -1,0 +1,18 @@
+import { useEffect, useRef, useState } from 'react';
+import Taro from '@tarojs/taro';
+import { Button, Text, View } from '@tarojs/components';
+import type { RequirementList, RequirementSnapshot } from '@weevibe/contracts';
+import { ApiClientError } from '@weevibe/api-client';
+import { requestRequirement, listRequirements } from '../../platform/requirements-api';
+import { CollectionEditor } from '../requirements/collection-editor';
+import { blankRequirementDraft } from '../requirements/draft-editor';
+import { beijingLabel } from '../requirements/answer-state';
+import '../requirements/requirements.css';
+export function TeamCreate({onClose}:{onClose:()=>void}) {
+  const [list,setList]=useState<RequirementList>();const [selected,setSelected]=useState<RequirementSnapshot>();const [creating,setCreating]=useState(false);const [busy,setBusy]=useState(false);const [notice,setNotice]=useState('');const epoch=useRef(0);const mounted=useRef(true);
+  async function load(){const ticket=++epoch.current;setBusy(true);setNotice('');try{const next=await listRequirements();if(mounted.current&&ticket===epoch.current)setList(next);}catch(e){if(mounted.current&&ticket===epoch.current)setNotice(e instanceof ApiClientError?e.message:'未取得服务器草稿，请重试。');}finally{if(mounted.current&&ticket===epoch.current)setBusy(false);}}
+  useEffect(()=>{mounted.current=true;void load();return()=>{mounted.current=false;epoch.current++;};},[]);
+  async function open(id:string){if(busy)return;const ticket=++epoch.current;setBusy(true);setNotice('');try{const next=await requestRequirement(`/api/v1/requirements/${id}`);if(mounted.current&&ticket===epoch.current){setSelected(next);setCreating(false);}}catch(e){if(mounted.current&&ticket===epoch.current)setNotice(e instanceof ApiClientError?e.message:'读取草稿失败，请重试。');}finally{if(mounted.current&&ticket===epoch.current)setBusy(false);}}
+  async function back(){if(creating||selected){const confirm=await Taro.showModal({title:'返回草稿列表？',content:'尚未保存的修改会离开当前编辑页。已保存到服务器的草稿会保留。',confirmText:'返回列表'});if(!confirm.confirm)return;setSelected(undefined);setCreating(false);void load();}else onClose();}
+  return <View className="req-page"><View className="req-top"><Button className="req-back" onClick={()=>void back()}>‹ {creating||selected?'草稿列表':'返回'}</Button><Text className="req-tag">大型团建</Text></View><Text className="req-title">一起，把团建安排好</Text><Text className="req-subtitle">先收集想法，再由管理者确定安排。</Text>{notice&&<View className="req-notice"><Text selectable>{notice}</Text></View>}{creating||selected?<CollectionEditor key={selected?.collection.id || 'new'} kind="team" initial={selected?.collection.draft || blankRequirementDraft()} initialSnapshot={selected} saved={next=>{setSelected(next);setCreating(false);}}/>:<View><View className="req-notice">草稿由服务器按账号保存。群成员权限尚未验证，暂不能正式发布；没有生成活动、答卷或虚构统计。</View><Button className="req-button" disabled={busy} onClick={()=>setCreating(true)}>＋ 新建团建草稿</Button><Button className="req-button secondary" disabled={busy} onClick={()=>void load()}>{busy?'读取中…':'刷新我的草稿'}</Button>{list?.collections.filter(item=>item.kind==='team'&&item.is_manager).map(item=><View key={item.id} className="req-card mint" onClick={()=>void open(item.id)}><Text className="req-heading">{item.title || '未命名团建草稿'}</Text><Text className="req-muted">服务器草稿 · 更新于 {beijingLabel(item.updated_at)}</Text><Text className="req-muted">继续编辑　›</Text></View>)}{list&&!list.collections.some(item=>item.kind==='team'&&item.is_manager)&&<View className="req-empty">还没有服务器团建草稿</View>}<Text className="req-muted">最多显示最近 {list?.limit || 50} 条需求记录。草稿不是已发布活动。</Text></View>}</View>;
+}

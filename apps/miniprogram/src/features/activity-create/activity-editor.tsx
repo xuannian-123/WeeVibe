@@ -4,9 +4,10 @@ import { Action, Field, Panel } from '../../components/ui';
 import { emptySegment, feeOptions, segmentName, typeOptions, type ActivityForm, type SegmentForm } from './form';
 import { AiCreate } from './ai-create';
 import { VenuePicker } from './venue-picker';
+import { checkValue, rebookCheckReady, type RebookChecks } from '../rebook/draft';
 import './activity-editor.css';
 
-export function ActivityEditor({ value, onChange, disabled }: { value: ActivityForm; onChange: (value: ActivityForm) => void; disabled: boolean }) {
+export function ActivityEditor({ value, onChange, disabled, rebook }: { value: ActivityForm; onChange: (value: ActivityForm) => void; disabled: boolean; rebook?: { checks: RebookChecks; confirm: (ref: string, kind: 'location' | 'fee') => void } }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const changeSegment = (ref: string, patch: Partial<SegmentForm>) => onChange({ ...value, segments: value.segments.map(s => s.ref === ref ? { ...s, ...patch } : s) });
   function reorder(index: number, offset: number) {
@@ -16,15 +17,15 @@ export function ActivityEditor({ value, onChange, disabled }: { value: ActivityF
   }
   const dateTime = (s: SegmentForm, dateField: 'startDate' | 'endDate' | 'deadlineDate', timeField: 'startTime' | 'endTime' | 'deadlineTime', label: string) =>
     <View className="field"><Text className="field-label">{label}</Text><View className="date-time-row">
-      <Picker mode="date" value={s[dateField] || (dateField === 'endDate' ? s.startDate : '')} disabled={disabled} onChange={e => changeSegment(s.ref, { [dateField]: e.detail.value })}>
-        <Button className="picker-trigger" disabled={disabled}>{s[dateField] || (dateField === 'endDate' ? s.startDate : '') || '选择日期'}</Button>
+      <Picker mode="date" value={s[dateField] || (!rebook && dateField === 'endDate' ? s.startDate : '')} disabled={disabled} onChange={e => changeSegment(s.ref, { [dateField]: e.detail.value })}>
+        <Button className="picker-trigger" disabled={disabled}>{s[dateField] || (!rebook && dateField === 'endDate' ? s.startDate : '') || '选择日期'}</Button>
       </Picker>
       <Picker mode="time" value={s[timeField]} disabled={disabled} onChange={e => changeSegment(s.ref, { [timeField]: e.detail.value })}>
         <Button className="picker-trigger" disabled={disabled}>{s[timeField] || '选择时间'}</Button>
       </Picker>
     </View></View>;
   return <View>
-    <AiCreate value={value} onApply={onChange} disabled={disabled} />
+    {!rebook && <AiCreate value={value} onApply={onChange} disabled={disabled} />}
     <Panel title="这次想一起做什么？">
       <Field label="活动名称" value={value.name} disabled={disabled} onChange={name => onChange({ ...value, name })} placeholder="例如：周末打球，再一起吃饭" />
       <Text className="caption">先约一件事也可以。有后续安排时，再添加环节。</Text>
@@ -36,16 +37,27 @@ export function ActivityEditor({ value, onChange, disabled }: { value: ActivityF
         {value.segments.length > 1 && <Field label="这段做什么" value={s.name} disabled={disabled} onChange={name => changeSegment(s.ref, { name })} placeholder="例如：羽毛球、聚餐" />}
         {dateTime(s, 'startDate', 'startTime', '什么时候开始')}
         {dateTime(s, 'endDate', 'endTime', '预计什么时候结束')}
-        <Text className="caption">结束默认同一天；跨天时可点日期修改。时间均为北京时间。</Text>
+        <Text className="caption">{rebook ? '再约须重新明确设置全部日期和时间，均为北京时间；不会继承旧日期或默认截止。' : '结束默认同一天；跨天时可点日期修改。时间均为北京时间。'}</Text>
+        {rebook && <View>
+          <Action disabled={disabled || !s.startDate} onClick={() => changeSegment(s.ref, { endDate: s.startDate })}>结束日期设为本次开始日</Action>
+          {dateTime(s, 'deadlineDate', 'deadlineTime', '本次报名截止（必须重新设置）')}
+          <Action disabled={disabled || !s.startDate || !s.startTime} onClick={() => changeSegment(s.ref, { deadlineDate: s.startDate, deadlineTime: s.startTime })}>明确选择本次开始时截止</Action>
+        </View>}
         <Field label="在哪里集合" value={s.place} disabled={disabled} onChange={place => changeSegment(s.ref, { place, venue: undefined })} placeholder="填写大家能找到的场地或集合点" />
         <VenuePicker segment={s} disabled={disabled} onSelect={venue => changeSegment(s.ref, { place: venue.name, address: venue.address ?? '', venue })} />
+        {rebook && <View>
+          <Text className="caption">先设置未来开始和结束时间，再逐段核对；这是本次草稿检查，不代表商家确认、已预订或已付款。修改时段会撤销两类核对，修改地点或费用会撤销对应核对。</Text>
+          <Action disabled={disabled || !s.place.trim() || !rebookCheckReady(s)} onClick={() => rebook.confirm(s.ref, 'location')}>{rebook.checks[s.ref]?.location === checkValue(s, 'location') ? '本段地点已核对' : '我已核对本段新日期的地点'}</Action>
+          <Text className="caption">参考费用：{s.feeUnit === 'unknown' ? '未知（不是免费）' : `${s.amount || '待填写'} 元 / ${feeOptions.find(f => f.value === s.feeUnit)?.label ?? '待核对'}`} {s.feeNote}</Text>
+          <Action disabled={disabled || !rebookCheckReady(s)} onClick={() => rebook.confirm(s.ref, 'fee')}>{rebook.checks[s.ref]?.fee === checkValue(s, 'fee') ? '本段费用已核对' : '我已核对本段参考费用（可仍未知）'}</Action>
+        </View>}
         <View className="form-pair">
           <Field label="至少几人成行" value={s.minimum} numeric disabled={disabled} onChange={minimum => changeSegment(s.ref, { minimum })} placeholder="人数" />
           <Field label="最多多少人" value={s.capacity} numeric disabled={disabled} onChange={capacity => changeSegment(s.ref, { capacity })} placeholder="人数" />
         </View>
         <View className="setting-summary">
           <Text>{s.feeUnit === 'unknown' ? '费用待确认' : '已设置参考费用'}</Text>
-          <Text>{customDeadline ? `截止 ${s.deadlineDate} ${s.deadlineTime}` : '报名至本段开始时'}</Text>
+          <Text>{customDeadline ? `截止 ${s.deadlineDate} ${s.deadlineTime}` : rebook ? '待重新设置报名截止' : '报名至本段开始时'}</Text>
         </View>
         <Button className="settings-toggle" onClick={() => setExpanded(current => ({ ...current, [s.ref]: !more }))}>{more ? '收起更多设置 −' : '费用、截止和更多设置 ＋'}</Button>
         {more && <View className="expanded-settings">
@@ -61,13 +73,13 @@ export function ActivityEditor({ value, onChange, disabled }: { value: ActivityF
           <Text className="caption">不确定可以保留“未知”，不会当成免费或已付款。</Text>
           <Field label="费用补充（可选）" value={s.feeNote} disabled={disabled} onChange={feeNote => changeSegment(s.ref, { feeNote })} placeholder="例如：按实际参加人数分摊" />
           <Field label="参加要求（可选）" value={s.requirements} disabled={disabled} onChange={requirements => changeSegment(s.ref, { requirements })} placeholder="需要自带什么、适合什么水平" />
-          <View className="field"><Text className="field-label">报名截止</Text>
+          {!rebook && <View className="field"><Text className="field-label">报名截止</Text>
             {customDeadline ? <View>{dateTime(s, 'deadlineDate', 'deadlineTime', '自定义截止时间')}
               <Action variant="text" disabled={disabled} onClick={() => changeSegment(s.ref, { deadlineDate: '', deadlineTime: '' })}>恢复为本段开始时截止</Action>
             </View> : <View><Text className="caption">默认到本段开始时截止，也可以提前。</Text>
               <Action disabled={disabled || !s.startDate || !s.startTime} onClick={() => changeSegment(s.ref, { deadlineDate: s.startDate, deadlineTime: s.startTime })}>自定义截止时间</Action>
             </View>}
-          </View>
+          </View>}
           {value.segments.length > 1 && <View className="form-pair">
             <Action disabled={disabled || index === 0} onClick={() => reorder(index, -1)}>上移</Action>
             <Action disabled={disabled || index === value.segments.length - 1} onClick={() => reorder(index, 1)}>下移</Action>

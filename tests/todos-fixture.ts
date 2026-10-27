@@ -1,0 +1,26 @@
+import { vi } from 'vitest';
+import { Prisma } from '@prisma/client';
+export const todoId=(n:number)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+export const todoActors={a:todoId(9001),b:todoId(9002),c:todoId(9003)};
+function matches(row:any,where:any):boolean{return Object.entries(where??{}).every(([key,value])=>{
+ if(key==='OR')return(value as any[]).some(w=>matches(row,w));if(key==='AND')return(value as any[]).every(w=>matches(row,w));
+ if(value&&typeof value==='object'&&!Array.isArray(value)&&!(value instanceof Date)){const v=value as any;if('in'in v)return v.in.includes(row[key]);if('some'in v)return(row[key]??[]).some((x:any)=>matches(x,v.some));if('not'in v)return row[key]!==v.not;return matches(row[key]??{},v);}
+ return row[key]===value;
+});}
+function ordered(rows:any[],order:any){const keys=Array.isArray(order)?order:order?[order]:[];return [...rows].sort((a,b)=>{for(const item of keys)for(const[k,dir]of Object.entries(item)){const av=a[k]instanceof Date?a[k].getTime():a[k],bv=b[k]instanceof Date?b[k].getTime():b[k];const diff=typeof av==='number'?av-bv:String(av).localeCompare(String(bv));if(diff)return dir==='desc'?-diff:diff;}return 0;});}
+function project(row:any,select:any):any{if(!select)return structuredClone(row);const result:any={};for(const[k,value]of Object.entries(select)){const v=value as any;if(v===true)result[k]=structuredClone(row[k]);else if(k==='_count'){result[k]={};for(const[relation,q]of Object.entries(v.select))result[k][relation]=(row[relation]??[]).filter((x:any)=>matches(x,(q as any).where)).length;}else if(v?.select){const source=row[k];result[k]=Array.isArray(source)?ordered(source.filter(x=>matches(x,v.where)),v.orderBy).slice(0,v.take??source.length).map(x=>project(x,v.select)):project(source,v.select);}}return result;}
+export function todoActivity(n:number,manager=todoActors.a){const id=todoId(n);return{id,name:`Activity ${n}`,createdAt:new Date('2030-01-01T00:00:00Z'),revision:1,membershipRevision:1,managementRevision:1,currentManagerId:manager,cancelledAt:null,segments:[{id:todoId(10000+n),activityId:id,startsAt:new Date('2030-01-01T12:00:00Z'),endsAt:new Date('2030-01-01T14:00:00Z'),deadlineAt:new Date('2030-01-01T11:00:00Z'),cancelledAt:null,planRevision:2,minimumParticipants:1,participations:[{userId:todoActors.b,status:'joined',acceptedPlanRevision:2,displayName:'PRIVATE_MEMBER_SENTINEL'}]}],applications:[],privateProfile:'PRIVATE_PROFILE',publicAnswers:'PRIVATE_ANSWERS',invitationToken:'PRIVATE_TOKEN'};}
+export function createTodoFixture(){
+ const a=todoActivity(1),b=todoActivity(2,todoActors.b),c=todoActivity(3,todoActors.b),cancelled=todoActivity(4);
+ a.segments[0].minimumParticipants=4;a.segments[0].participations=[{userId:todoActors.b,status:'joined',acceptedPlanRevision:1,displayName:'PRIVATE_MEMBER_SENTINEL'},{userId:todoActors.c,status:'joined',acceptedPlanRevision:2,displayName:'PRIVATE_MEMBER_SENTINEL'},{userId:todoId(9004),status:'joined',acceptedPlanRevision:2,displayName:'PRIVATE_MEMBER_SENTINEL'}];a.applications=[{id:todoId(20001),status:'pending'}] as any;
+ b.segments[0].participations=[{userId:todoActors.a,status:'joined',acceptedPlanRevision:1,displayName:'PRIVATE_MEMBER_SENTINEL'},...b.segments[0].participations];cancelled.cancelledAt=new Date('2030-01-01T09:00:00Z') as any;
+ const f:any={activities:[a,b,c,cancelled],offers:[{id:todoId(30001),activityId:a.id,fromUserId:todoActors.a,toUserId:todoActors.b,fromManagementRevision:1,status:'pending'},{id:todoId(30003),activityId:c.id,fromUserId:todoActors.b,toUserId:todoActors.a,fromManagementRevision:1,status:'pending'}],queryLog:[],transactions:[],afterQuery:null,missingHandover:false};
+ f.db={$transaction:vi.fn(async(action:any,options:any)=>{
+  // Fresh independent immutable database snapshot per RR call. Deliberate live
+  // fixture changes during awaits do not leak into an already-started read.
+  const activities=structuredClone(f.activities),offers=structuredClone(f.offers),queries:any[]=[];let count=0;
+  const record=(model:string,args:any)=>{const entry={model,args:structuredClone(args)};queries.push(entry);f.queryLog.push(entry);count++;if(f.afterQuery)f.afterQuery(count,f);};
+  const tx={managementHandover:{findMany:vi.fn(async(args:any)=>{record('managementHandover',args);if(f.missingHandover)throw new Prisma.PrismaClientKnownRequestError('RAW_MISSING_TABLE',{code:'P2021',clientVersion:'fixture',meta:{table:'public.ManagementHandover'}});const full=offers.map((o:any)=>({...o,activity:activities.find((a:any)=>a.id===o.activityId)}));return ordered(full.filter((o:any)=>matches(o,args.where)),args.orderBy).slice(0,args.take??full.length).map((o:any)=>project(o,args.select));})},activity:{findMany:vi.fn(async(args:any)=>{record('activity',args);return ordered(activities.filter((a:any)=>matches(a,args.where)),args.orderBy).slice(0,args.take??activities.length).map((a:any)=>project(a,args.select));}),update:vi.fn(),create:vi.fn()},privateProfile:{findMany:vi.fn()},requirementSubmission:{findMany:vi.fn()},activityEvent:{create:vi.fn()},activityMutationKey:{findUnique:vi.fn(),create:vi.fn()},messageRead:{upsert:vi.fn()}};
+  f.transactions.push({tx,queries,options,snapshot:{activities,offers}});return action(tx);
+ })};return f;
+}

@@ -45,7 +45,8 @@ export async function activitySnapshot(tx: Tx, activityId: string, actorId: stri
       user_id: actorId, is_manager: isManager,
       participations: actorId ? activity.segments.flatMap(s => s.participations.filter(p => p.userId === actorId).map(p => ({
         segment_id: s.id, status: p.status === 'exited' ? 'exited' : p.acceptedPlanRevision === s.planRevision ? 'joined' : 'awaiting_acceptance',
-        accepted_plan_revision: p.acceptedPlanRevision
+        accepted_plan_revision: p.acceptedPlanRevision,
+        late_arrival_at: p.lateArrivalAt?.toISOString() ?? null, late_notice_at: p.lateNoticeAt?.toISOString() ?? null
       }))) : [],
       applications: visibility.own_applications
     },

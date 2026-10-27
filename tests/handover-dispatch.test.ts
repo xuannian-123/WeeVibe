@@ -1,0 +1,20 @@
+import { beforeEach,describe,expect,it,vi } from 'vitest';
+const h=vi.hoisted(()=>({auth:vi.fn(),read:vi.fn(),create:vi.fn(),command:vi.fn()}));
+vi.mock('../apps/web/src/server/auth',()=>({identityService:{authenticate:h.auth}}));
+vi.mock('../apps/web/src/server/activities/handover',()=>({getHandovers:h.read,createHandover:h.create,commandHandover:h.command}));
+import { GET,POST } from '../apps/web/src/app/api/v1/activities/[activityId]/handovers/route';
+import { GET as detailGET,POST as detailPOST } from '../apps/web/src/app/api/v1/activities/[activityId]/handovers/[handoverId]/route';
+import { ServiceError } from '../apps/web/src/server/http';
+const activity='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',actor='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',offer='cccccccc-cccc-4ccc-8ccc-cccccccccccc',target='dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const params={params:Promise.resolve({activityId:activity.toUpperCase(),handoverId:offer.toUpperCase()})};
+const input={target_user_id:target,expected_revision:3,expected_management_revision:2,idempotency_key:'create-route-key'};
+const body={action:'accept',expected_revision:4,expected_management_revision:2,idempotency_key:'accept-route-key'};
+const request=(data?:unknown)=>new Request('http://localhost/api',{method:data?'POST':'GET',headers:{Authorization:'Bearer offline-session'},...(data?{body:JSON.stringify(data)}:{})});
+beforeEach(()=>{for(const mock of Object.values(h))mock.mockReset();h.auth.mockResolvedValue({user_id:actor});h.read.mockResolvedValue({});h.create.mockResolvedValue({});h.command.mockResolvedValue({});});
+describe('WG06 authenticated route dispatch with isolated service doubles',()=>{
+ it('canonicalizes IDs and dispatches session actor for list and exact historical read',async()=>{expect((await GET(request(),params)).status).toBe(200);expect(h.read).toHaveBeenCalledWith(activity,actor);expect((await detailGET(request(),params)).status).toBe(200);expect(h.read).toHaveBeenCalledWith(activity,actor,offer);});
+ it('validates and dispatches create and designated command without trusting actor payload',async()=>{expect((await POST(request({...input,target_user_id:target.toUpperCase()}),params)).status).toBe(200);expect(h.create).toHaveBeenCalledWith(activity,actor,input);expect((await detailPOST(request(body),params)).status).toBe(200);expect(h.command).toHaveBeenCalledWith(activity,offer,actor,body);});
+ it.each([{actor_user_id:actor},{status:'accepted'},{expires_at:'2030-01-01T00:00:00Z'},{segments:[]}])('rejects forged extra fields before service %j',async extra=>{expect((await POST(request({...input,...extra}),params)).status).toBe(400);expect((await detailPOST(request({...body,...extra}),params)).status).toBe(400);expect(h.command).not.toHaveBeenCalled();expect(h.create).not.toHaveBeenCalled();});
+ it('rejects missing expected management revision and malformed target',async()=>{const{expected_management_revision,...missing}=input;expect((await POST(request(missing),params)).status).toBe(400);expect((await detailGET(request(),{params:Promise.resolve({activityId:activity,handoverId:'../../other'})})).status).toBe(400);});
+ it('maps known scope-unavailable accurately and never exposes raw backend failure',async()=>{h.command.mockRejectedValueOnce(new ServiceError('HANDOVER_SCOPE_UNAVAILABLE',409,'本片资格尚未启用'));let r=await detailPOST(request(body),params);expect(r.status).toBe(409);expect(await r.json()).toMatchObject({error:{code:'HANDOVER_SCOPE_UNAVAILABLE'}});h.command.mockRejectedValueOnce(Error('PRIVATE_RAW_SENTINEL'));r=await detailPOST(request(body),params);expect(r.status).toBe(500);expect(JSON.stringify(await r.json())).not.toContain('PRIVATE_RAW_SENTINEL');});
+});

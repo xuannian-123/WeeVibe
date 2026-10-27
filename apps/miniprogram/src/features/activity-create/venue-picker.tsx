@@ -5,10 +5,20 @@ import type { VenueList, VenueSelection } from '@weevibe/contracts';
 import { venueSelectionSchema } from '@weevibe/contracts';
 import { api } from '../../platform/api';
 import { Action, Field, Notice } from '../../components/ui';
+import { validCity } from '../shell/helpers';
 import type { SegmentForm } from './form';
 
+function initialSearchCity(): string {
+  try {
+    const city: unknown = Taro.getStorageSync('weevibe_selected_city');
+    return typeof city === 'string' && validCity(city) ? city.trim() : '';
+  } catch { return ''; }
+}
+
 export function VenuePicker({ segment, disabled, onSelect }: { segment: SegmentForm; disabled: boolean; onSelect: (venue: VenueSelection) => void }) {
-  const [open, setOpen] = useState(false), [region, setRegion] = useState(''), [keyword, setKeyword] = useState('');
+  // A new picker may use the chosen city as a search default, never as a location
+  // fix or a selected venue. Later city changes must not replace local edits.
+  const [open, setOpen] = useState(false), [region, setRegion] = useState(initialSearchCity), [keyword, setKeyword] = useState('');
   const [result, setResult] = useState<VenueList>(), [message, setMessage] = useState(''), [busy, setBusy] = useState(false);
   const sequence = useRef(0); const blocked = useRef(disabled); blocked.current = disabled;
   const invalidate = () => { sequence.current++; setResult(undefined); setBusy(false); setMessage(''); };
