@@ -76,6 +76,7 @@
 .wv-profile-tools button{display:block;text-align:left;background:none;border-bottom:1px solid #f2f3f5;padding:22px 0;font-size:24px;color:#838a94;line-height:1.8;margin:0;border-radius:0}
 .wv-messages-header{display:flex;align-items:center;justify-content:space-between;padding-top:38px}
 .wv-messages-header .wv-title{font-size:48px}
+.wv-messages .wv-link[disabled]{color:#a0a5ad!important}
 .wv-message-tabs{display:flex;align-items:center;gap:12px;margin:34px 0 22px;border-bottom:1px solid #f0f1f4;padding-bottom:20px}
 .wv-message-tabs button{margin:0;font-size:25px;color:#8c929b;background:none;padding:10px 24px;line-height:1.7;border-radius:17px}
 .wv-message-tabs button.active{background:#f0f1f5;color:#292f38;font-weight:700}
