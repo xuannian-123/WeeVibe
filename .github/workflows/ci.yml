@@ -57,6 +57,8 @@ jobs:
       - run: pnpm typecheck && pnpm test
       - run: pnpm build:api && pnpm build:mini
       - run: pnpm db:migrate
+      - name: Check v38 preparations and privacy in disposable PostgreSQL
+        run: pnpm exec tsx scripts/check-v38-preparation.ts --fixture-only
       - run: node scripts/prepare-cloud-identity-fixture.mjs --fixture-only
       - name: Start standalone and test real PG transactions
         shell: bash

@@ -1,0 +1,112 @@
+// @vitest-environment jsdom
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { createRequire } from 'node:module'; import { resolve } from 'node:path';
+import { applicationDetail, applicantB } from './application-fixtures';
+const req=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json'));
+const {createElement,act}=req('react') as typeof import('../apps/miniprogram/node_modules/@types/react');
+const {createRoot}=req('react-dom/client') as {createRoot:(host:Element)=>{render:(x:ReturnType<typeof createElement>)=>void;unmount:()=>void}};
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+const h=vi.hoisted(()=>({token:'session-a' as string|undefined,save:vi.fn(),export:vi.fn(),context:vi.fn(),draw:vi.fn(),text:vi.fn(),actions:new Map<string,()=>void>(),hide:[] as (()=>void)[],show:[] as (()=>void)[],unload:[] as (()=>void)[],controller:{} as any,peers:{} as Record<string,(busy:boolean)=>void>}));
+vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>h.token}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{
+ nextTick:(fn:()=>void)=>fn(),createCanvasContext:h.context,canvasToTempFilePath:h.export,saveImageToPhotosAlbum:h.save,
+},useDidHide:(fn:()=>void)=>h.hide.push(fn),useDidShow:(fn:()=>void)=>h.show.push(fn),useUnload:(fn:()=>void)=>h.unload.push(fn)}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({
+ View:(p:any)=>createElement('div',{},p.children),Text:(p:any)=>createElement('span',{},p.children),
+ Button:(p:any)=>{h.actions.set(p.children,p.onClick);return createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children);},
+ Canvas:(p:any)=>createElement('canvas',{id:p.id}),Image:(p:any)=>createElement('img',{src:p.src}),Input:()=>null,
+}));
+
+vi.mock('../apps/miniprogram/src/features/activity-detail/use-activity-detail',()=>({useActivityDetail:()=>h.controller}));
+vi.mock('../apps/miniprogram/src/features/activity-detail/itinerary',()=>({Itinerary:()=>null}));
+vi.mock('../apps/miniprogram/src/features/activity-detail/more',()=>({ActivityMore:()=>null}));
+vi.mock('../apps/miniprogram/src/features/applications/panels',()=>({ApplicationForm:()=>null,ApprovalPanel:()=>null,MyParticipationPanel:()=>null}));
+vi.mock('../apps/miniprogram/src/features/roster/RosterPanel',()=>({RosterPanel:()=>null}));
+vi.mock('../apps/miniprogram/src/features/formation/FormationPanel',()=>({FormationPanel:(p:any)=>{h.peers['成局']=p.onBusyChange;return null;}}));
+vi.mock('../apps/miniprogram/src/features/arrangement-change/ArrangementPanel',()=>({ArrangementPanel:(p:any)=>{h.peers['重接受']=p.onBusyChange;return null;}}));
+vi.mock('../apps/miniprogram/src/features/applications/WithdrawalPanel',()=>({WithdrawalPanel:(p:any)=>{h.peers['撤回']=p.onBusyChange;return null;}}));
+vi.mock('../apps/miniprogram/src/features/participation/ParticipationActions',()=>({ParticipationActions:(p:any)=>{h.peers['退出']=p.onBusyChange;return null;}}));
+vi.mock('../apps/miniprogram/src/features/cancellation/CancellationPanel',()=>({CancellationPanel:(p:any)=>{h.peers['取消']=p.onBusyChange;return null;}}));
+vi.mock('../apps/miniprogram/src/features/handover/HandoverPanel',()=>({HandoverPanel:(p:any)=>{h.peers['交接']=p.onBusyChange;return null;}}));
+vi.mock('../apps/miniprogram/src/features/rebook/RebookPanel',()=>({RebookPanel:(p:any)=>{h.peers['再约']=p.onBusyChange;return null;}}));
+vi.mock('../apps/miniprogram/src/features/main-segment/MainSegmentPanel',()=>({MainSegmentPanel:(p:any)=>{h.peers['换主']=p.onBusyChange;return null;}}));
+vi.mock('../apps/miniprogram/src/features/invitations',()=>({InvitationPanel:(p:any)=>{h.peers['邀请']=p.onBusyChange;return null;}}));
+vi.mock('../apps/miniprogram/src/features/capacity/CapacityPanel',()=>({CapacityPanel:(p:any)=>{h.peers['容量']=p.onBusyChange;return null;}}));
+import Screen from '../apps/miniprogram/src/features/activity-detail/screen';
+import { ActivityShareCard } from '../apps/miniprogram/src/features/share-card/ActivityShareCard';
+let host:HTMLDivElement,root:ReturnType<typeof createRoot>;
+const button=(label:string)=>Array.from(host.querySelectorAll('button')).find(x=>x.textContent===label);
+const click=async(label:string)=>{const b=button(label);expect(b, label).toBeDefined();await act(async()=>b!.click());};
+const deferred=<T,>()=>{let resolve!:(x:T)=>void,reject!:(x:unknown)=>void;const promise=new Promise<T>((a,b)=>{resolve=a;reject=b;});return{promise,resolve,reject};};
+async function render(extra:Partial<Parameters<typeof ActivityShareCard>[0]>={}){await act(async()=>root.render(createElement(ActivityShareCard,{detail:applicationDetail(),session:'session-a',fresh:true,...extra})));}
+beforeEach(()=>{
+ h.token='session-a';h.actions.clear();h.hide=[];h.show=[];h.unload=[];h.save.mockReset().mockResolvedValue({errMsg:'saveImageToPhotosAlbum:ok'});h.export.mockReset().mockResolvedValue({tempFilePath:'wxfile://tmp/card.png'});h.draw.mockReset().mockImplementation((_reserve,done)=>done());h.text.mockReset();
+ h.context.mockReset().mockImplementation(()=>({setFillStyle:vi.fn(),fillRect:vi.fn(),setFontSize:vi.fn(),fillText:h.text,draw:h.draw}));
+ host=document.createElement('div');document.body.appendChild(host);root=createRoot(host);
+});
+afterEach(async()=>{await act(async()=>root.unmount());host.remove();vi.useRealTimers();});
+describe('WG08 explicit generation, preview and native save',()=>{
+ it('never generates, saves, requests permission or sends on mount; shows QR limitation',async()=>{await render();expect(h.context).not.toHaveBeenCalled();expect(h.save).not.toHaveBeenCalled();expect(host.textContent).toContain('报名二维码暂不可用');});
+ it('generates the real allowlisted Canvas commands and previews before an explicit successful save',async()=>{await render();await click('生成行程图片');expect(h.context).toHaveBeenCalledTimes(1);expect(h.text.mock.calls.map(x=>x[0]).join('')).toContain('1. 离线环节');expect(host.querySelector('img')?.src).toBe('wxfile://tmp/card.png');expect(h.save).not.toHaveBeenCalled();await click('保存图片到相册');expect(h.save).toHaveBeenCalledWith({filePath:'wxfile://tmp/card.png'});expect(host.textContent).toContain('已保存到相册');});
+ it('closes a preview without saving and ignores its retained old save handler',async()=>{await render();await click('生成行程图片');const old=h.actions.get('保存图片到相册')!;await click('关闭图片预览');await act(async()=>old());expect(h.save).not.toHaveBeenCalled();expect(host.querySelector('img')).toBeNull();expect(button('生成行程图片')?.disabled).toBe(false);await click('生成行程图片');expect(host.querySelector('img')).not.toBeNull();});
+ it('cancels a pending export, suppresses late preview and permits a new generation with a unique canvas ID',async()=>{await render();const pending=deferred<any>();h.export.mockReturnValueOnce(pending.promise);await click('生成行程图片');await click('取消生成');await click('生成行程图片');expect(h.context.mock.calls[0][0]).not.toBe(h.context.mock.calls[1][0]);await act(async()=>pending.resolve({tempFilePath:'wxfile://tmp/OLD.png'}));expect(host.querySelector('img')?.src).toBe('wxfile://tmp/card.png');expect(h.save).not.toHaveBeenCalled();});
+ it('an old draw callback cannot export after cancellation',async()=>{let done!:()=>void;h.draw.mockImplementationOnce((_r,d)=>{done=d;});await render();await click('生成行程图片');await click('取消生成');await act(async()=>done());expect(h.export).not.toHaveBeenCalled();expect(host.querySelector('img')).toBeNull();});
+ it.each(['denied','cancelled','broken'])('does not report success for %s native saves and permits explicit retry',async reason=>{await render();await click('生成行程图片');h.save.mockRejectedValueOnce({errMsg:'PRIVATE_'+reason});await click('保存图片到相册');expect(host.textContent).toContain('保存未确认');expect(host.textContent).not.toContain('已保存到相册');expect(host.textContent).not.toContain('PRIVATE_');await click('保存图片到相册');expect(h.save).toHaveBeenCalledTimes(2);expect(host.textContent).toContain('已保存到相册');});
+ it('rejects malformed native success instead of treating any resolution as saved',async()=>{await render();await click('生成行程图片');h.save.mockResolvedValueOnce({ok:true});await click('保存图片到相册');expect(host.textContent).toContain('保存未确认');expect(host.textContent).not.toContain('已保存到相册');});
+ it('locks duplicate generate and save callbacks synchronously',async()=>{await render();const pending=deferred<any>();h.export.mockReturnValueOnce(pending.promise);const generate=h.actions.get('生成行程图片')!;await act(async()=>{generate();generate();});expect(h.context).toHaveBeenCalledTimes(1);await act(async()=>pending.resolve({tempFilePath:'wxfile://tmp/card.png'}));const saving=deferred<any>();h.save.mockReturnValueOnce(saving.promise);const save=h.actions.get('保存图片到相册')!;await act(async()=>{save();save();});expect(h.save).toHaveBeenCalledTimes(1);expect(button('关闭图片预览')?.disabled).toBe(true);await act(async()=>saving.resolve({errMsg:'saveImageToPhotosAlbum:ok'}));});
+ it('blocks generation when stale, externally busy, mismatched session or invalid source',async()=>{
+  for(const extra of [{fresh:false},{anyBusy:true},{session:'session-b'},{verifiedOutgoingInvitationId:'SECRET'}]){await render(extra);expect(button('生成行程图片')?.disabled).toBe(true);await act(async()=>h.actions.get('生成行程图片')!());}
+  expect(h.context).not.toHaveBeenCalled();expect(h.save).not.toHaveBeenCalled();
+ });
+ it('rejects a stale native save handler after a token changes without waiting for a React rerender',async()=>{await render();await click('生成行程图片');const save=h.actions.get('保存图片到相册')!;h.token='session-b';await act(async()=>save());expect(h.save).not.toHaveBeenCalled();expect(host.textContent).not.toContain('已保存到相册');});
+ it.each(['source','revision','session','fresh','busy'])('invalidates A→B→A %s continuations, not only current equality',async change=>{
+  const pending=deferred<any>();h.export.mockReturnValueOnce(pending.promise);await render();await click('生成行程图片');
+  const d=applicationDetail();d.revision++;
+  await render(change==='source'?{verifiedOutgoingInvitationId:applicantB}:change==='revision'?{detail:d}:change==='session'?{session:'session-b'}:change==='fresh'?{fresh:false}:{anyBusy:true});await render();
+  await act(async()=>pending.resolve({tempFilePath:'wxfile://tmp/OLD.png'}));expect(host.querySelector('img')).toBeNull();expect(h.save).not.toHaveBeenCalled();
+ });
+ it.each(['hide','unload'] as const)('suppresses %s then show late results and makes old image/save invalid',async event=>{
+  await render();await click('生成行程图片');const old=h.actions.get('保存图片到相册')!;await act(async()=>h[event][0]());await act(async()=>h.show[0]());await act(async()=>old());expect(h.save).not.toHaveBeenCalled();expect(host.querySelector('img')).toBeNull();
+ });
+ it('suppresses a late native save success after a source change',async()=>{await render();await click('生成行程图片');const pending=deferred<any>();h.save.mockReturnValueOnce(pending.promise);await click('保存图片到相册');await render({verifiedOutgoingInvitationId:applicantB});await act(async()=>pending.resolve({errMsg:'saveImageToPhotosAlbum:ok'}));expect(host.textContent).not.toContain('已保存到相册');expect(host.querySelector('img')).toBeNull();});
+ it.each([true,false])('closing after a native save outcome=%s never claims no save was requested',async success=>{await render();await click('生成行程图片');if(!success)h.save.mockRejectedValueOnce(new Error('cancel'));await click('保存图片到相册');await click('关闭图片预览');expect(h.save).toHaveBeenCalledTimes(1);expect(host.textContent).toContain('不会自动保存或发送');expect(host.textContent).not.toContain('未请求保存');});
+ it('retained preview close cannot cancel or deny an already handed-off native save',async()=>{await render();await click('生成行程图片');const oldClose=h.actions.get('关闭图片预览')!;const pending=deferred<any>();h.save.mockReturnValueOnce(pending.promise);await click('保存图片到相册');await act(async()=>oldClose());expect(h.save).toHaveBeenCalledTimes(1);expect(host.querySelector('img')).not.toBeNull();expect(button('正在保存…')?.disabled).toBe(true);expect(host.textContent).not.toContain('未请求保存');await act(async()=>pending.resolve({errMsg:'saveImageToPhotosAlbum:ok'}));expect(host.textContent).toContain('已保存到相册');});
+ it('does not let an old save finally unlock a new source save',async()=>{
+  await render();await click('生成行程图片');const first=deferred<any>();h.save.mockReturnValueOnce(first.promise);await click('保存图片到相册');await render({verifiedOutgoingInvitationId:applicantB});await click('生成行程图片');const second=deferred<any>();h.save.mockReturnValueOnce(second.promise);await click('保存图片到相册');await act(async()=>first.resolve({errMsg:'saveImageToPhotosAlbum:ok'}));expect(button('正在保存…')?.disabled).toBe(true);await act(async()=>second.resolve({errMsg:'saveImageToPhotosAlbum:ok'}));expect(host.textContent).toContain('已保存到相册');
+ });
+ it('shows sanitized generation errors, no screenshot fallback, then permits retry',async()=>{await render();h.export.mockRejectedValueOnce(new Error('SECRET_PROVIDER_ERROR'));await click('生成行程图片');expect(host.textContent).toContain('图片生成未完成');expect(host.textContent).not.toContain('SECRET_');expect(host.querySelector('img')).toBeNull();expect(h.save).not.toHaveBeenCalled();await click('生成行程图片');expect(host.querySelector('img')).not.toBeNull();});
+ it('times out a missing draw callback and recovers without an automatic retry',async()=>{vi.useFakeTimers();h.draw.mockImplementationOnce(()=>{});await render();await click('生成行程图片');await act(async()=>vi.advanceTimersByTimeAsync(10001));expect(host.textContent).toContain('图片生成未完成');expect(h.export).not.toHaveBeenCalled();expect(button('生成行程图片')?.disabled).toBe(false);});
+ it('does not use a remote URL as a native generated file',async()=>{await render();h.export.mockResolvedValueOnce({tempFilePath:'https://example.invalid/leak.png'});await click('生成行程图片');expect(host.querySelector('img')).toBeNull();expect(h.save).not.toHaveBeenCalled();expect(host.textContent).toContain('图片生成未完成');});
+ it('accepts the devtools local tmp origin, not just wxfile paths',async()=>{await render();h.export.mockResolvedValueOnce({tempFilePath:'http://tmp/card.png'});await click('生成行程图片');expect(host.querySelector('img')?.src).toBe('http://tmp/card.png');});
+
+ it('retained source-A save and close callbacks cannot lock or clear a newer source-B preview',async()=>{await render();await click('生成行程图片');const oldSave=h.actions.get('保存图片到相册')!;const oldClose=h.actions.get('关闭图片预览')!;await render({verifiedOutgoingInvitationId:applicantB});await click('生成行程图片');await act(async()=>{oldSave();oldClose();});expect(h.save).not.toHaveBeenCalled();expect(host.querySelector('img')).not.toBeNull();expect(button('保存图片到相册')?.disabled).toBe(false);await click('保存图片到相册');expect(h.save).toHaveBeenCalledTimes(1);});
+ it('checks ownership again immediately before native draw and does not export if context creation changed session',async()=>{await render();h.context.mockImplementationOnce(()=>{h.token='session-b';return{setFillStyle:vi.fn(),fillRect:vi.fn(),setFontSize:vi.fn(),fillText:vi.fn(),draw:h.draw};});await click('生成行程图片');expect(h.draw).not.toHaveBeenCalled();expect(h.export).not.toHaveBeenCalled();expect(h.save).not.toHaveBeenCalled();});
+ it('does not revive an unmounted card via a late export',async()=>{const pending=deferred<any>();h.export.mockReturnValueOnce(pending.promise);await render();await click('生成行程图片');await act(async()=>root.unmount());root=createRoot(host);await render();await act(async()=>pending.resolve({tempFilePath:'wxfile://tmp/OLD.png'}));expect(host.querySelector('img')).toBeNull();expect(h.save).not.toHaveBeenCalled();});
+});
+
+const OUTGOING='eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',INCOMING='ffffffff-ffff-4fff-8fff-ffffffffffff';
+function controller(){const d=applicationDetail();return {id:d.activity_id,detail:d,userId:d.viewer.user_id,incomingInvitationId:INCOMING,outgoingInvitationId:OUTGOING,setOutgoingInvitationId:vi.fn(),read:{data:{detail:d,session:h.token},loading:false,error:undefined,refresh:vi.fn()},login:{busy:false,login:vi.fn()},applications:{anyBusy:false,fresh:true,submit:vi.fn(),decide:vi.fn(),apply:{send:vi.fn()},decision:{send:vi.fn()}},showMore:false,setShowMore:vi.fn()};}
+async function screen(reset=false){if(reset)h.controller=controller();await act(async()=>root.render(createElement(Screen)));}
+describe('actual activity Screen share-card composition',()=>{
+ it('mounts one card without automatic native calls, generates and explicitly saves the verified public outgoing source',async()=>{await screen(true);expect(host.querySelectorAll('canvas')).toHaveLength(1);expect(h.context).not.toHaveBeenCalled();expect(h.save).not.toHaveBeenCalled();await click('生成行程图片');const text=h.text.mock.calls.map(c=>c[0]).join('');expect(text).toContain(OUTGOING);expect(text).not.toContain(INCOMING);expect(h.save).not.toHaveBeenCalled();await click('保存图片到相册');expect(h.save).toHaveBeenCalledTimes(1);expect(host.textContent).toContain('已保存到相册');expect(h.controller.applications.submit).not.toHaveBeenCalled();});
+ it('never treats incoming query as verified outgoing source and changing it does not replace an existing preview',async()=>{await screen(true);h.controller.outgoingInvitationId=undefined;await screen();await click('生成行程图片');expect(h.text.mock.calls.map(c=>c[0]).join('')).not.toContain(INCOMING);h.controller.incomingInvitationId=OUTGOING;await screen();expect(host.querySelector('img')).not.toBeNull();expect(h.context).toHaveBeenCalledTimes(1);});
+ it.each(['成局','重接受','撤回','退出','取消','交接','再约','换主','邀请','容量'])('blocks new native operations during %s peer work and works after release',async peer=>{await screen(true);await act(async()=>h.peers[peer](true));expect(button('生成行程图片')?.disabled).toBe(true);await act(async()=>h.actions.get('生成行程图片')!());expect(h.context).not.toHaveBeenCalled();await act(async()=>h.peers[peer](false));await click('生成行程图片');expect(h.context).toHaveBeenCalledTimes(1);expect(host.querySelector('img')).not.toBeNull();});
+ it('drops an old native export when an application starts, without submitting any application itself',async()=>{await screen(true);const wait=deferred<any>();h.export.mockReturnValueOnce(wait.promise);await click('生成行程图片');h.controller.applications.anyBusy=true;await screen();await act(async()=>wait.resolve({tempFilePath:'wxfile://tmp/OLD.png'}));expect(host.querySelector('img')).toBeNull();expect(h.controller.applications.submit).not.toHaveBeenCalled();expect(h.save).not.toHaveBeenCalled();});
+ it('requires a current successful source read and does not turn an account change into a save of the old preview',async()=>{await screen(true);await click('生成行程图片');const old=h.actions.get('保存图片到相册')!;h.token='session-b';h.controller.userId=applicantB;h.controller.detail=applicationDetail(applicantB);h.controller.read.data={detail:h.controller.detail,session:h.token};h.controller.outgoingInvitationId=undefined;await screen();await act(async()=>old());expect(h.save).not.toHaveBeenCalled();expect(host.querySelector('img')).toBeNull();await click('生成行程图片');await click('保存图片到相册');expect(h.save).toHaveBeenCalledTimes(1);});
+ it('does not show an old native success after leaving the screen',async()=>{await screen(true);await click('生成行程图片');const wait=deferred<any>();h.save.mockReturnValueOnce(wait.promise);await click('保存图片到相册');await act(async()=>h.hide.slice().forEach(fn=>fn()));await act(async()=>wait.resolve({errMsg:'saveImageToPhotosAlbum:ok'}));expect(h.save).toHaveBeenCalledTimes(1);expect(host.textContent).not.toContain('已保存到相册');expect(host.querySelector('img')).toBeNull();});
+ it('prevents generation while the original detail read is loading or has failed, then supports manual retry',async()=>{await screen(true);for(const [loading,error] of [[true,undefined],[false,'版本待核对']] as const){h.controller.read.loading=loading;h.controller.read.error=error;await screen();expect(button('生成行程图片')?.disabled).toBe(true);}expect(h.context).not.toHaveBeenCalled();h.controller.read.loading=false;h.controller.read.error=undefined;await screen();await click('生成行程图片');expect(h.context).toHaveBeenCalledTimes(1);});
+});
+
+describe('generated file-path boundary',()=>{
+ it.each(['//example.invalid/card.png','file://example.invalid/card.png','file:////example.invalid/card.png','/\\example.invalid/card.png','/\n/example.invalid/card.png'])('does not render or save a remote-authority native result %s',async path=>{await render();h.export.mockResolvedValueOnce({tempFilePath:path});await click('生成行程图片');expect(host.querySelector('img')).toBeNull();expect(h.save).not.toHaveBeenCalled();expect(host.textContent).toContain('图片生成未完成');});
+});
+
+describe('local canvas export controls',()=>{
+ it.each(['file:///tmp/card.png','/tmp/card.png','wxfile://tmp/card.png','https://tmp/card.png'])('accepts a generated local path %s',async path=>{await render();h.export.mockResolvedValueOnce({tempFilePath:path});await click('生成行程图片');expect(host.querySelector('img')).not.toBeNull();await click('保存图片到相册');expect(h.save).toHaveBeenCalledWith({filePath:path});});
+});
+
+// This pre-existing feature suite isolates the new deadline sibling. Actual composed deadline/peer behavior is covered by deadline-screen-ui and independent full-Screen probes.
+vi.mock('../apps/miniprogram/src/features/deadline/DeadlinePanel', () => ({ DeadlinePanel: () => null }));
+
+// This existing feature suite isolates the booking sibling; booking-screen-ui and independent complete-Screen probes verify the new declaration/history composition.
+vi.mock('../apps/miniprogram/src/features/booking/BookingPanel', () => ({ BookingPanel: () => null }));

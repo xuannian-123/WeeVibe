@@ -1,6 +1,25 @@
 {
-  "name": "@weevibe/web", "version": "0.0.1", "private": true,
-  "scripts": { "dev": "next dev --hostname 127.0.0.1 --port 43188", "build": "next build --webpack", "start": "next start --hostname 127.0.0.1 --port 43188", "typecheck": "tsc --noEmit" },
-  "dependencies": { "@prisma/client": "6.19.3", "@prisma/adapter-pg": "6.19.3", "pg": "8.16.3", "@weevibe/contracts": "workspace:*", "next": "16.4.3", "react": "18.3.1", "react-dom": "18.3.1" },
-  "devDependencies": { "@types/react": "18.3.27", "@types/react-dom": "18.3.7" }
+  "name": "@weevibe/web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1 --port 43188",
+    "build": "next build --webpack",
+    "start": "next start --hostname 127.0.0.1 --port 43188",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "6.19.3",
+    "@prisma/client": "6.19.3",
+    "@weevibe/contracts": "workspace:*",
+    "next": "16.4.3",
+    "pg": "8.16.3",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.27",
+    "@types/react-dom": "18.3.7"
+  }
 }

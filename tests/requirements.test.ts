@@ -1,0 +1,22 @@
+import { describe, expect, it } from 'vitest';
+import { saveRequirementResponse, requirementStatistics, assertQuestionStructureEditable, validateTeamDraft, managerRequirementView, type RequirementCollection } from '../packages/contracts/src/requirements';
+const q = { id: 'q1', title: '菜系', multiple: true, required: true, segment_id: null, options: [{ id: 'a', label: '清淡' }, { id: 'b', label: '川菜' }] };
+const c: RequirementCollection = { revision: 1, deadline_at: '2030-01-02T00:00:00Z', closed_at: null, questions: [q], group_access_required: false };
+const now = Date.parse('2030-01-01T00:00:00Z');
+const answer = { revision: 1, selected_segment_ids: [], answers: [{ question_id: 'q1', option_ids: ['a'], other: null }] };
+describe('requirement domain boundaries (not a deployed persistence adapter)', () => {
+ it('updates one response per actor, no duplicate vote', () => { const first = saveRequirementResponse(c, [], 'u1', answer, now); expect(saveRequirementResponse(c, first, 'u1', answer, now + 1)).toHaveLength(1); });
+ it('keeps other actors answers unchanged', () => { const first = saveRequirementResponse(c, [], 'u1', answer, now); const next = saveRequirementResponse(c, first, 'u2', answer, now); expect(next[0]).toEqual(first[0]); });
+ it('rejects first submit and updates exactly at cutoff', () => { expect(() => saveRequirementResponse(c, [], 'u1', answer, Date.parse(c.deadline_at))).toThrow('截止'); });
+ it('rejects manual closed collection', () => { expect(() => saveRequirementResponse({ ...c, closed_at: '2030-01-01T00:00:00Z' }, [], 'u1', answer, now)).toThrow('截止'); });
+ it('fails closed for unverified group access', () => { expect(() => saveRequirementResponse({ ...c, group_access_required: true }, [], 'u1', answer, now)).toThrow('权限'); });
+ it('rejects stale revisions', () => { expect(() => saveRequirementResponse(c, [], 'u1', { ...answer, revision: 2 }, now)).toThrow('版本'); });
+ it('rejects option from another question', () => { expect(() => saveRequirementResponse(c, [], 'u1', { ...answer, answers: [{ question_id: 'q1', option_ids: ['unknown'], other: null }] }, now)).toThrow('选项'); });
+ it('rejects blank other text', () => { expect(() => saveRequirementResponse(c, [], 'u1', { ...answer, answers: [{ question_id: 'q1', option_ids: [], other: '  ' }] }, now)).toThrow('其他'); });
+ it('single choice other is exclusive', () => { expect(() => saveRequirementResponse({ ...c, questions: [{ ...q, multiple: false }] }, [], 'u1', { ...answer, answers: [{ question_id: 'q1', option_ids: ['a'], other: '烧烤' }] }, now)).toThrow('单选'); });
+ it('multi choice has one respondent and several votes', () => { const result = saveRequirementResponse(c, [], 'u1', { ...answer, answers: [{ question_id: 'q1', option_ids: ['a','b'], other: '烧烤' }] }, now); const s = requirementStatistics(c.questions, result)[0]; expect(s.respondent_count).toBe(1); expect(s.options.map(o => o.count)).toEqual([1,1]); expect(s.other_count).toBe(1); });
+ it('does not require a question for an unselected segment', () => { expect(saveRequirementResponse({ ...c, questions: [{ ...q, segment_id: 'dinner' }] }, [], 'u1', { ...answer, answers: [] }, now)).toHaveLength(1); });
+ it('freezes question structure after first response', () => { expect(() => assertQuestionStructureEditable(1)).toThrow('已有答卷'); });
+ it('rejects duplicated option text', () => { expect(() => validateTeamDraft({ title: '团建', description: '', starts_at: '2030-02-01T00:00:00Z', deadline_at: '2030-01-02T00:00:00Z', timezone: 'Asia/Shanghai', locations: [{ id: 'l1', label: '公园' }], questions: [{ ...q, options: [{ id: 'a', label: '一样' }, { id: 'b', label: '一样' }] }] }, now)).toThrow('重复'); });
+ it('manager projection excludes unexpected private fields', () => { const r = saveRequirementResponse(c, [], 'u1', answer, now)[0]; expect(managerRequirementView({ ...r, departure: 'private' } as typeof r)).not.toHaveProperty('departure'); });
+});

@@ -2,9 +2,11 @@ import { useCallback, useRef, useState } from 'react';
 import Taro, { useDidHide, useDidShow, useUnload } from '@tarojs/taro';
 import { ApiClientError } from '@weevibe/api-client';
 import { api, establishSession, forgetSession, getToken } from './api';
+import { unrecognizedResponseMessage } from './response-error';
 
 export function errorText(error: unknown): string {
   if (!(error instanceof ApiClientError)) return '请求结果无法确认，请刷新核对。若是写入，请保留原请求后重试。';
+  if (error.code === 'INVALID_RESPONSE') return unrecognizedResponseMessage(error.status);
   const messages: Record<string, string> = {
     NOT_CONFIGURED: '尚未配置正式 API 或数据库。不会使用本地活动伪装成功。',
     UNAUTHENTICATED: '尚未登录或会话失效，请重新登录；当前目标和草稿保留。',

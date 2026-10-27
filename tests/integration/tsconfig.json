@@ -1,5 +1,17 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "lib": ["ES2022", "DOM"], "jsx": "preserve" },
-  "include": ["../../scripts/check-postgres-integration.ts", "../../scripts/check-cloud-identity-integration.ts"]
+  "compilerOptions": {
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "jsx": "preserve"
+  },
+  "include": [
+    "../../scripts/check-postgres-integration.ts",
+    "../../scripts/check-cloud-identity-integration.ts",
+    "../../scripts/check-requirements-integration.ts",
+    "../../scripts/check-participation-invitations.ts",
+    "../../scripts/check-v38-preparation.ts"
+  ]
 }

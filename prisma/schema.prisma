@@ -19,6 +19,17 @@ model User {
   participations Participation[]
   mutationKeys ActivityMutationKey[]
   activityEvents ActivityEvent[]
+  privateProfile PrivateProfile?
+  favorites SavedVenue[]
+  messageReads MessageRead[]
+  ownedRequirementCollections RequirementSurvey[]
+  requirementResponses RequirementSubmission[]
+  requirementBudgets RequirementWriteBudget[]
+  avatar UserAvatar?
+  invitationSources InvitationSource[]
+  receivedInvitations ReceivedInvitation[]
+  sentHandovers ManagementHandover[] @relation("HandoverSender")
+  receivedHandovers ManagementHandover[] @relation("HandoverRecipient")
 }
 
 model WechatIdentity {
@@ -112,6 +123,9 @@ model Activity {
   applications ActivityApplication[]
   mutationKeys ActivityMutationKey[]
   events ActivityEvent[]
+  requirementCollection RequirementSurvey?
+  invitationSources InvitationSource[]
+  handovers ManagementHandover[]
 }
 
 model Segment {
@@ -153,12 +167,16 @@ model ActivityApplication {
   status ActivityApplicationStatus @default(pending)
   createdAt DateTime @default(now())
   decidedAt DateTime?
+  // Optional public invitation entry; legacy/direct records are not backfilled.
+  invitationSourceId String? @db.Uuid
+  invitationSource InvitationSource? @relation(fields: [activityId, invitationSourceId], references: [activityId, id], onDelete: NoAction, onUpdate: NoAction)
   targets ApplicationTarget[]
   participations Participation[]
 
   @@unique([activityId, id])
   @@index([activityId, status])
   @@index([applicantUserId])
+  @@index([activityId, invitationSourceId])
 }
 
 model ApplicationTarget {
@@ -188,6 +206,8 @@ model Participation {
   sourceApplication ActivityApplication? @relation(fields: [activityId, sourceApplicationId], references: [activityId, id], onDelete: NoAction, onUpdate: NoAction)
   joinedAt DateTime @default(now())
   exitedAt DateTime?
+  lateArrivalAt DateTime?
+  lateNoticeAt DateTime?
 
   @@unique([segmentId, userId])
   @@index([activityId, userId])
@@ -218,4 +238,141 @@ model ActivityEvent {
   createdAt DateTime @default(now())
 
   @@index([activityId, revision])
+}
+
+// Private self-service data; never included in activity snapshots.
+model PrivateProfile {
+  userId String @id @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  data Json
+  updatedAt DateTime @updatedAt
+}
+
+model SavedVenue {
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerId String
+  data Json
+  createdAt DateTime @default(now())
+  @@id([userId, providerId])
+}
+
+model MessageRead {
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId String
+  readAt DateTime @default(now())
+  @@id([userId, messageId])
+}
+
+// JSON fields are validated by strict shared contracts before persistence.
+model RequirementSurvey {
+  id String @id @default(uuid()) @db.Uuid
+  kind String
+  ownerUserId String @db.Uuid
+  owner User @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  activityId String? @unique @db.Uuid
+  activity Activity? @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  draft Json
+  revision Int @default(1)
+  status String @default("draft")
+  deadlineAt DateTime?
+  closedAt DateTime?
+  finalSelection Json?
+  creationKey String
+  creationHash String @db.Char(64)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  responses RequirementSubmission[]
+  @@unique([ownerUserId, creationKey])
+  @@index([ownerUserId, updatedAt])
+}
+
+model RequirementSubmission {
+  collectionId String @db.Uuid
+  collection RequirementSurvey @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  revision Int
+  // Per-person answer version; independent from the published questionnaire revision.
+  responseVersion Int @default(1)
+  publicAnswers Json
+  privateOrigin Json?
+  updatedAt DateTime @updatedAt
+  @@id([collectionId, userId])
+  @@index([userId, updatedAt])
+}
+
+// At most one current bucket per actor/scope, durable across instances/restarts.
+model RequirementWriteBudget {
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope String
+  bucketStart DateTime
+  count Int
+  @@id([userId, scope])
+}
+
+model UserAvatar {
+  userId String @id @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bytes Bytes
+  contentType String
+  digest String @db.Char(64)
+  updatedAt DateTime @updatedAt
+}
+
+model InvitationSource {
+  id String @id @default(uuid()) @db.Uuid
+  activityId String @db.Uuid
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  inviterUserId String @db.Uuid
+  inviter User @relation(fields: [inviterUserId], references: [id], onDelete: Restrict)
+  inviterDisplayName String?
+  inviterAvatarUrl String?
+  createdAt DateTime @default(now())
+  receivedInvitations ReceivedInvitation[]
+  applications ActivityApplication[]
+  @@unique([activityId, inviterUserId])
+  @@unique([activityId, id])
+}
+
+model ReceivedInvitation {
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invitationId String @db.Uuid
+  invitation InvitationSource @relation(fields: [invitationId], references: [id], onDelete: Restrict)
+  savedAt DateTime @default(now())
+  @@id([userId, invitationId])
+  @@index([userId, savedAt])
+}
+
+
+enum ManagementHandoverStatus {
+  pending
+  accepted
+  rejected
+  withdrawn
+  invalidated
+}
+
+// Partial unique index for one pending/activity and CHECK constraints are maintained
+// by migration SQL; Prisma 6 does not express a predicate-bearing unique index.
+model ManagementHandover {
+  id String @id @default(uuid()) @db.Uuid
+  activityId String @db.Uuid
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  fromUserId String @db.Uuid
+  fromUser User @relation("HandoverSender", fields: [fromUserId], references: [id], onDelete: Restrict)
+  toUserId String @db.Uuid
+  toUser User @relation("HandoverRecipient", fields: [toUserId], references: [id], onDelete: Restrict)
+  fromManagementRevision Int
+  creationKey String
+  status ManagementHandoverStatus @default(pending)
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+
+  @@unique([fromUserId, creationKey])
+  @@index([activityId, createdAt])
+  @@index([toUserId, status])
 }

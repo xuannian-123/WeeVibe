@@ -1,3 +1,2 @@
 import { BRAND_NAME } from './brand';
-
-export default defineAppConfig({ pages: ['pages/index/index', 'pages/editor/index', 'pages/activity/index', 'pages/diagnostics/index'], window: { navigationBarTitleText: BRAND_NAME, navigationBarBackgroundColor: '#f5f7f3', navigationBarTextStyle: 'black', backgroundColor: '#f5f7f3', backgroundTextStyle: 'dark' } });
+export default defineAppConfig({ pages: ['pages/index/index', 'pages/editor/index', 'pages/activity/index', 'pages/diagnostics/index', 'pages/requirements/index'], window: { navigationBarTitleText: BRAND_NAME, navigationBarBackgroundColor: '#ffffff', navigationBarTextStyle: 'black', backgroundColor: '#ffffff', backgroundTextStyle: 'dark' }, permission: { 'scope.userLocation': { desc: '点击附近地点或获取定位时，用于查找你附近的好去处。' } }, requiredPrivateInfos: ['getLocation'] });

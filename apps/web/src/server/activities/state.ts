@@ -3,7 +3,7 @@ import { ServiceError } from '../http';
 
 export type Tx = Prisma.TransactionClient;
 const stateInclude = {
-  segments: { orderBy: { position: 'asc' as const }, include: { participations: { select: { userId: true, status: true, acceptedPlanRevision: true } } } }
+  segments: { orderBy: { position: 'asc' as const }, include: { participations: { select: { userId: true, status: true, acceptedPlanRevision: true, lateArrivalAt: true, lateNoticeAt: true } } } }
 } satisfies Prisma.ActivityInclude;
 
 export async function loadActivity(tx: Tx, id: string) {

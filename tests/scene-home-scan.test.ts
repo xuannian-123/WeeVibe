@@ -1,0 +1,51 @@
+// @vitest-environment jsdom
+import {afterEach,beforeEach,describe,it,expect,vi} from 'vitest';
+import {createRequire} from 'node:module';import {resolve} from 'node:path';
+import {accountActor as A,emptyAccountFixture} from './account-fixtures';
+const req=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json'));
+const {createElement,act,useEffect,useRef}=req('react') as typeof import('../apps/miniprogram/node_modules/@types/react');
+const {createRoot}=req('react-dom/client') as {createRoot:(host:Element)=>{render:(el:ReturnType<typeof createElement>)=>void;unmount:()=>void}};
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+const h=vi.hoisted(()=>({token:'session-a' as string|undefined,scan:vi.fn(),navigate:vi.fn(),login:vi.fn(),show:new Set<()=>void>(),hide:new Set<()=>void>(),unload:new Set<()=>void>()}));
+function lifecycle(set:Set<()=>void>,fn:()=>void){const current=useRef(fn);current.current=fn;useEffect(()=>{const invoke=()=>current.current();set.add(invoke);return()=>{set.delete(invoke);};},[set]);}
+vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>h.token,api:{me:async()=>({user_id:A})},establishSession:h.login,forgetSession:()=>{h.token=undefined;}}));
+vi.mock('../apps/miniprogram/src/platform/account-api',()=>({requestAccount:async()=>emptyAccountFixture()}));
+vi.mock('../apps/miniprogram/src/platform/avatar',()=>({loadAvatar:async()=>undefined}));
+vi.mock('../apps/miniprogram/src/features/todos/TodoPanel',()=>({TodoPanel:()=>null}));
+vi.mock('../apps/miniprogram/src/features/shell/inspiration',()=>({Inspiration:()=>createElement('div',{},'灵感页面')}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:()=>'',setStorageSync:vi.fn(),scanCode:h.scan,navigateTo:h.navigate,reLaunch:vi.fn()},useDidShow:(f:()=>void)=>lifecycle(h.show,f),useDidHide:(f:()=>void)=>lifecycle(h.hide,f),useUnload:(f:()=>void)=>lifecycle(h.unload,f)}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({View:(p:any)=>createElement('div',{onClick:p.onClick},p.children),Text:(p:any)=>createElement('span',{onClick:p.onClick},p.children),Button:(p:any)=>createElement('button',{onClick:p.onClick,disabled:p.disabled,'aria-label':p.ariaLabel},p.children),Input:(p:any)=>createElement('input',{value:p.value,onChange:()=>{}}),Image:()=>null,Picker:(p:any)=>createElement('div',{},p.children),Textarea:()=>null}));
+import Home from '../apps/miniprogram/src/pages/index/index';
+const ID='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',PATH=`pages/activity/index?id=${ID}`;
+let root:ReturnType<typeof createRoot>|undefined;
+function deferred<T>(){let resolve!:(v:T)=>void;let reject!:(e:unknown)=>void;const promise=new Promise<T>((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
+async function render(){if(!root){const host=document.createElement('div');document.body.append(host);root=createRoot(host);}await act(async()=>root!.render(createElement(Home)));}
+function scanner(){const b=document.querySelector('button[aria-label="扫码打开活动"]') as HTMLButtonElement;expect(b).not.toBeNull();return b;}
+async function scan(){await act(async()=>scanner().click());}
+async function leave(event:'hide'|'unload'|'unmount'){await act(async()=>{if(event==='unmount'){root!.unmount();root=undefined;}else h[event].forEach(fn=>fn());});}
+beforeEach(()=>{h.token='session-a';h.show.clear();h.hide.clear();h.unload.clear();h.scan.mockReset().mockResolvedValue({path:PATH});h.navigate.mockReset().mockResolvedValue({errMsg:'navigateTo:ok'});h.login.mockReset();});
+afterEach(async()=>{if(root)await act(async()=>root!.unmount());root=undefined;document.body.innerHTML='';});
+describe('actual Home native scan ownership and dispatch',()=>{
+ it('keeps original explicit id navigation without login or native scan on mount',async()=>{await render();expect(h.scan).not.toHaveBeenCalled();await scan();expect(h.scan).toHaveBeenCalledWith({onlyFromCamera:false});expect(h.navigate).toHaveBeenCalledWith({url:'/'+PATH});expect(h.login).not.toHaveBeenCalled();});
+ it.each(['hide','unload','unmount'] as const)('does not navigate when %s happened while native scan waited',async event=>{await render();const wait=deferred<any>();h.scan.mockReturnValueOnce(wait.promise);await scan();await leave(event);await act(async()=>wait.resolve({path:PATH}));expect(h.navigate).not.toHaveBeenCalled();});
+ it('does not navigate under a different session after native scan returns',async()=>{await render();const wait=deferred<any>();h.scan.mockReturnValueOnce(wait.promise);await scan();h.token='session-b';await act(async()=>wait.resolve({path:PATH}));expect(h.navigate).not.toHaveBeenCalled();});
+ it('locks repeated native scans synchronously',async()=>{await render();const wait=deferred<any>();h.scan.mockReturnValue(wait.promise);await act(async()=>{scanner().click();scanner().click();});expect(h.scan).toHaveBeenCalledTimes(1);await act(async()=>wait.resolve({path:PATH}));expect(h.navigate).toHaveBeenCalledTimes(1);});
+ it('does not replace a newly selected tab with the old native result',async()=>{await render();const wait=deferred<any>();h.scan.mockReturnValueOnce(wait.promise);await scan();const tab=Array.from(document.querySelectorAll('button')).find(b=>b.textContent?.endsWith('灵感'))!;expect(tab).toBeTruthy();await act(async()=>tab.click());await act(async()=>wait.resolve({path:PATH}));expect(h.navigate).not.toHaveBeenCalled();});
+});
+
+describe('Home scan recovery and source epochs',()=>{
+ it('keeps guest scan policy and never invokes login',async()=>{h.token=undefined;await render();await scan();expect(h.navigate).toHaveBeenCalledTimes(1);expect(h.login).not.toHaveBeenCalled();});
+ it('does not revive source session A after an observed A→B→A rerender',async()=>{await render();const wait=deferred<any>();h.scan.mockReturnValueOnce(wait.promise);await scan();h.token='session-b';await render();h.token='session-a';await render();await act(async()=>wait.resolve({path:PATH}));expect(h.navigate).not.toHaveBeenCalled();expect(scanner().disabled).toBe(false);await scan();expect(h.navigate).toHaveBeenCalledTimes(1);});
+ it('does not revive a scan through hide→show',async()=>{await render();const wait=deferred<any>();h.scan.mockReturnValueOnce(wait.promise);await scan();await leave('hide');await act(async()=>h.show.forEach(fn=>fn()));await act(async()=>wait.resolve({path:PATH}));expect(h.navigate).not.toHaveBeenCalled();await scan();expect(h.navigate).toHaveBeenCalledTimes(1);});
+ it.each(['cancel','auth deny','private'])('releases native %s failure without exposing details or automatically retrying',async reason=>{await render();h.scan.mockRejectedValueOnce({errMsg:`scanCode:fail ${reason} PRIVATE_RAW`});await scan();expect(h.navigate).not.toHaveBeenCalled();expect(document.body.textContent).not.toContain('PRIVATE_RAW');expect(scanner().disabled).toBe(false);if(reason==='cancel')expect(document.body.textContent).not.toContain('未完成');else expect(document.body.textContent).toContain('扫码或打开活动未完成');await scan();expect(h.scan).toHaveBeenCalledTimes(2);expect(h.navigate).toHaveBeenCalledTimes(1);});
+ it('reports navigation rejection safely and allows a genuine retry',async()=>{await render();h.navigate.mockRejectedValueOnce(new Error('PRIVATE_NAVIGATION'));await scan();expect(document.body.textContent).toContain('扫码或打开活动未完成');expect(document.body.textContent).not.toContain('PRIVATE_NAVIGATION');expect(scanner().disabled).toBe(false);await scan();expect(h.navigate).toHaveBeenCalledTimes(2);});
+ it.each(['https://evil.invalid/pages/activity/index?id='+ID,PATH+'&unknown=x','javascript:alert(1)',''])('rejects unsupported scan target %j without navigating',async path=>{await render();h.scan.mockResolvedValueOnce({path,result:path});await scan();expect(h.navigate).not.toHaveBeenCalled();expect(document.body.textContent).toContain('这不是支持的 WeeVibe 活动入口');expect(scanner().disabled).toBe(false);});
+ it('ignores a late navigation error and finally after a newer scan owns the lock',async()=>{await render();const oldNav=deferred<any>();h.navigate.mockReturnValueOnce(oldNav.promise);await scan();await act(async()=>Array.from(document.querySelectorAll('button')).find(b=>b.textContent?.endsWith('灵感'))!.click());const next=deferred<any>();h.scan.mockReturnValueOnce(next.promise);await scan();expect(scanner().disabled).toBe(true);await act(async()=>oldNav.reject(new Error('PRIVATE_OLD')));expect(scanner().disabled).toBe(true);expect(document.body.textContent).not.toContain('PRIVATE_OLD');expect(document.body.textContent).not.toContain('未完成');await act(async()=>next.resolve({path:PATH}));expect(h.navigate).toHaveBeenCalledTimes(2);expect(scanner().disabled).toBe(false);});
+ it('does not dispatch if reading the native path itself changes session',async()=>{await render();h.scan.mockResolvedValueOnce({get path(){h.token='session-b';return PATH;}});await scan();expect(h.navigate).not.toHaveBeenCalled();});
+ it('does not treat nonstring native results as valid or show their body',async()=>{await render();h.scan.mockResolvedValueOnce({path:{private:'PRIVATE_NATIVE'}});await scan();expect(h.navigate).not.toHaveBeenCalled();expect(document.body.textContent).not.toContain('PRIVATE_NATIVE');expect(scanner().disabled).toBe(false);});
+});
+
+describe('Home scene whitelist handoff (public resolution occurs only in destination)',()=>{
+ it.each(['eeeeeeeeeeee4eee8eeeeeeeeeeeeeee','EEEEEEEEEEEE4EEE8EEEEEEEEEEEEEEE','%65eeeeeeeeeee4eee8eeeeeeeeeeeeeee'])('hands valid scene %s to the fixed entry page without login',async scene=>{h.token=undefined;await render();h.scan.mockResolvedValueOnce({path:`pages/activity/index?scene=${scene}`});await scan();expect(h.navigate).toHaveBeenCalledWith({url:'/pages/activity/index?scene=eeeeeeeeeeee4eee8eeeeeeeeeeeeeee'});expect(h.login).not.toHaveBeenCalled();});
+ it.each(['eeeeeeeeeeee4eee8eeeeeeeeeeeeeee&id='+ID,'%2565eeeeeeeeeee4eee8eeeeeeeeeeeeeee','eeeeeeeeeeee4eee8eeeeeeeeeeeeeee&unknown=x','bad'])('rejects malformed or mixed scene %s without any navigation',async scene=>{await render();h.scan.mockResolvedValueOnce({path:`pages/activity/index?scene=${scene}`});await scan();expect(h.navigate).not.toHaveBeenCalled();expect(document.body.textContent).toContain('这不是支持的 WeeVibe 活动入口');});
+});
