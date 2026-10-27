@@ -4,10 +4,10 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import type { AccountActivityRecord } from '../packages/contracts/src';
 const requireMini = createRequire(resolve(process.cwd(), 'apps/miniprogram/package.json'));
-const { createElement, act } = requireMini('react') as typeof import('../apps/miniprogram/node_modules/@types/react');
+const { createElement, act, useRef, useEffect } = requireMini('react') as typeof import('../apps/miniprogram/node_modules/@types/react');
 const { createRoot } = requireMini('react-dom/client') as { createRoot: (host: Element) => { render: (element: ReturnType<typeof createElement>) => void; unmount: () => void } };
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const mocks = vi.hoisted(() => ({ token: 'session-a' as string | undefined, request: vi.fn(), me: vi.fn(), open: vi.fn(), relaunch: vi.fn(), onShow: undefined as (() => void) | undefined }));
+const mocks = vi.hoisted(() => ({ token: 'session-a' as string | undefined, request: vi.fn(), me: vi.fn(), open: vi.fn(), relaunch: vi.fn(), onShow: new Set<() => void>() }));
 // Focus this historical suite on the original account boundary. Actual Home +
 // real TodoPanel lifecycle/account isolation is exercised in todos-ui.test.ts.
 vi.mock('../apps/miniprogram/src/features/todos/TodoPanel', () => ({ TodoPanel: () => null }));
@@ -18,7 +18,7 @@ vi.mock('../apps/miniprogram/src/features/team', () => ({ TeamCreate: () => null
 vi.mock('../apps/miniprogram/src/features/shell/inspiration', () => ({ Inspiration: () => null }));
 vi.mock('../apps/miniprogram/src/features/shell/profile', () => ({ ProfileForm: () => null }));
 // Native location lifecycle behavior is exercised with all registered handlers in native-location-ui.test.ts.
-vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: { getStorageSync: () => '', setStorageSync: vi.fn(), navigateTo: mocks.open, reLaunch: mocks.relaunch }, useDidShow: (cb: () => void) => { mocks.onShow = cb; }, useDidHide: () => {}, useUnload: () => {} }));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: { getStorageSync: () => '', setStorageSync: vi.fn(), navigateTo: mocks.open, reLaunch: mocks.relaunch }, useDidShow: (cb: () => void) => { const latest=useRef(cb);latest.current=cb;useEffect(()=>{const run=()=>latest.current();mocks.onShow.add(run);return()=>{mocks.onShow.delete(run);};},[]); }, useDidHide: () => {}, useUnload: () => {} }));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components', () => ({
  Switch:(p:any)=>createElement('input',{type:'checkbox',checked:p.checked,disabled:p.disabled,onChange:(e:any)=>p.onChange?.({detail:{value:e.currentTarget.checked}})}),
  ScrollView:(p:any)=>createElement('div',{className:p.className},p.children),
@@ -33,12 +33,12 @@ function record(num: number, extra: Partial<AccountActivityRecord> = {}): Accoun
   return { activity_id: `${String(num).padStart(8, '0')}-3333-4333-8333-333333333333`, title: `活动-${num}`, timezone: 'Asia/Shanghai', starts_at: '2030-01-02T00:00:00.000Z', ends_at: '2030-01-02T02:00:00.000Z', phase: 'upcoming', time_scope: 'activity', location: '公开场地', cancelled: false, participation_cancelled: false, is_manager: false, joined_segment_count: 0, exited_segment_count: 0, pending_application_count: 0, awaiting_acceptance: false, ...extra };
 }
 let host: HTMLDivElement, root: ReturnType<typeof createRoot>;
-beforeEach(() => { host = document.createElement('div'); document.body.append(host); root = createRoot(host); mocks.token = 'session-a'; mocks.request.mockReset(); mocks.me.mockReset().mockResolvedValue({ user_id: '11111111-1111-4111-8111-111111111111' }); mocks.open.mockReset(); mocks.relaunch.mockReset(); });
+beforeEach(() => { host = document.createElement('div'); document.body.append(host); root = createRoot(host); mocks.token = 'session-a'; mocks.onShow.clear(); mocks.request.mockReset(); mocks.me.mockReset().mockResolvedValue({ user_id: '11111111-1111-4111-8111-111111111111' }); mocks.open.mockReset(); mocks.relaunch.mockReset(); });
 afterEach(async () => { await act(async () => root.unmount()); document.body.innerHTML = ''; });
 const render = (records: AccountActivityRecord[], initialFilter?: 'joined') => act(async () => root.render(createElement(AccountActivityList, { records, initialFilter, onOpen: mocks.open })));
 async function click(text: string) { const button = Array.from(host.querySelectorAll('button')).find(b => b.textContent === text); expect(button).toBeTruthy(); await act(async () => button!.click()); }
 const cards = () => Array.from(host.querySelectorAll('.activity-card'));
-const home = async (data: unknown) => { mocks.request.mockResolvedValue(data); await act(async () => root.render(createElement(Home))); await act(async () => { mocks.onShow?.(); await Promise.resolve(); }); };
+const home = async (data: unknown) => { mocks.request.mockResolvedValue(data); await act(async () => root.render(createElement(Home))); await act(async () => { mocks.onShow.forEach(fn=>fn()); await Promise.resolve(); }); };
 describe('account activity role/status UI (React + Taro mocks, not native WeChat)', () => {
   it('finds all four relationships with filters while manager/participant overlap stays one card', async () => {
     const joined = record(1, { is_manager: true, joined_segment_count: 1, time_scope: 'participation' }), pending = record(2, { pending_application_count: 1 }), exited = record(3, { exited_segment_count: 1 });
