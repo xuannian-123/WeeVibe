@@ -8,14 +8,14 @@ const ReactBase=requireMini('react');
 const {createElement,act}=ReactBase;
 const {createRoot}=requireMini('react-dom/client');
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
-const mocks=vi.hoisted(()=>({navigate:vi.fn(),toast:vi.fn(),search:vi.fn(),token:'session-a',transport:vi.fn(),me:vi.fn(),login:vi.fn(),show:new Set<()=>void>(),saved:vi.fn(),close:vi.fn()}));
+const mocks=vi.hoisted(()=>({navigate:vi.fn(),toast:vi.fn(),search:vi.fn(),token:'session-a',transport:vi.fn(),me:vi.fn(),login:vi.fn(),hide:new Set<()=>void>(),show:new Set<()=>void>(),saved:vi.fn(),close:vi.fn()}));
 // Focus this historical suite on the original account boundary. Actual Home +
 // real TodoPanel lifecycle/account isolation is exercised in todos-ui.test.ts.
 vi.mock('../apps/miniprogram/src/features/todos/TodoPanel', () => ({ TodoPanel: () => null }));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>mocks.token,transport:mocks.transport,api:{me:mocks.me,searchVenues:mocks.search},establishSession:mocks.login,forgetSession:()=>{mocks.token='';}}));
 vi.mock('../apps/miniprogram/src/platform/avatar',()=>({loadAvatar:vi.fn().mockResolvedValue(undefined),uploadAvatar:vi.fn()}));
 vi.mock('../apps/miniprogram/src/features/team',()=>({TeamCreate:()=>createElement('div',{},'team editor')}));
-vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:()=>'',setStorageSync:vi.fn(),reLaunch:vi.fn(),navigateTo:mocks.navigate,showToast:mocks.toast},useDidShow:(fn:()=>void)=>{const latest=ReactBase.useRef(fn);latest.current=fn;ReactBase.useEffect(()=>{const run=()=>latest.current();mocks.show.add(run);return()=>mocks.show.delete(run);},[]);},useDidHide:()=>{},useUnload:()=>{}}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:()=>'',setStorageSync:vi.fn(),reLaunch:vi.fn(),navigateTo:mocks.navigate,showToast:mocks.toast},usePageScroll:()=>{},useDidShow:(fn:()=>void)=>{const latest=ReactBase.useRef(fn);latest.current=fn;ReactBase.useEffect(()=>{const run=()=>latest.current();mocks.show.add(run);return()=>mocks.show.delete(run);},[]);},useDidHide:(fn:()=>void)=>{const latest=ReactBase.useRef(fn);latest.current=fn;ReactBase.useEffect(()=>{const run=()=>latest.current();mocks.hide.add(run);return()=>mocks.hide.delete(run);},[]);},useUnload:()=>{}}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({
  Switch:(p:any)=>createElement('input',{type:'checkbox',checked:p.checked,disabled:p.disabled,onChange:(e:any)=>p.onChange?.({detail:{value:e.currentTarget.checked}})}),
  ScrollView:(p:any)=>createElement('div',{className:p.className},p.children),Button:(p:any)=>createElement('button',{onClick:p.onClick,disabled:p.disabled},p.children),Text:(p:any)=>createElement('span',{onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{onClick:p.onClick},p.children),Input:(p:any)=>createElement('input',{value:p.value,placeholder:p.placeholder,onInput:(e:any)=>p.onInput?.({detail:{value:e.currentTarget.value}})}),Textarea:(p:any)=>createElement('textarea',{value:p.value,onInput:(e:any)=>p.onInput?.({detail:{value:e.currentTarget.value}})}),Picker:(p:any)=>createElement('div',{},p.children),Image:()=>null}));
@@ -26,7 +26,7 @@ import {Inspiration} from '../apps/miniprogram/src/features/shell/inspiration';
 import {ApiClientError} from '../packages/api-client/src';
 class Boundary extends ReactBase.Component {state={failed:false};static getDerivedStateFromError(){return {failed:true};}render(){return this.state.failed?createElement('div',{},'SCREEN_CRASH'):this.props.children;}}
 let root:any;
-afterEach(async()=>{mocks.show.clear();if(root)await act(async()=>root.unmount());root=undefined;document.body.innerHTML='';vi.restoreAllMocks();mocks.token='session-a';mocks.transport.mockReset();mocks.me.mockReset();mocks.login.mockReset();mocks.saved.mockReset();mocks.close.mockReset();mocks.navigate.mockReset();mocks.toast.mockReset();mocks.search.mockReset();});
+afterEach(async()=>{mocks.show.clear();mocks.hide.clear();if(root)await act(async()=>root.unmount());root=undefined;document.body.innerHTML='';vi.restoreAllMocks();mocks.token='session-a';mocks.transport.mockReset();mocks.me.mockReset();mocks.login.mockReset();mocks.saved.mockReset();mocks.close.mockReset();mocks.navigate.mockReset();mocks.toast.mockReset();mocks.search.mockReset();});
 async function render(element:any){vi.spyOn(console,'error').mockImplementation(()=>{});const host=document.createElement('div');document.body.append(host);root=createRoot(host);await act(async()=>root.render(createElement(Boundary,null,element)));return host;}
 async function click(text:string){const button=Array.from(document.querySelectorAll('button')).find(b=>b.textContent===text);expect(button).toBeTruthy();await act(async()=>{button!.click();await Promise.resolve();});}
 describe('account UI recovery: actual components and extension client, fake transport only',()=>{
@@ -96,7 +96,9 @@ it('binds profile initial data to its source session rather than the currently m
 
 it('keeps unsaved profile input during a same-account background refresh failure',async()=>{
  const value=emptyAccountFixture();value.profile.nickname='服务器昵称';mocks.me.mockResolvedValueOnce({user_id:accountActor});mocks.transport.mockResolvedValueOnce({status:200,body:value});const host=await render(createElement(Home));await act(async()=>{mocks.show.forEach(fn=>fn());await Promise.resolve();});
- const tab=Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='○我的')!;await act(async()=>tab.click());const entry=Array.from(host.querySelectorAll('button')).find(s=>s.textContent==='编辑资料')!;await act(async()=>entry.click());const input=host.querySelector('input')!;await act(async()=>{input.value='本机未保存昵称';input.dispatchEvent(new Event('input',{bubbles:true}));});
+ const tab=Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='我的')!;await act(async()=>tab.click());const entry=Array.from(host.querySelectorAll('button')).find(s=>s.textContent==='编辑资料')!;await act(async()=>entry.click());const input=host.querySelector('input')!;await act(async()=>{input.value='本机未保存昵称';input.dispatchEvent(new Event('input',{bubbles:true}));});
  mocks.me.mockResolvedValueOnce({user_id:accountActor});mocks.transport.mockResolvedValueOnce({status:404,body:'<html>missing</html>'});await act(async()=>{mocks.show.forEach(fn=>fn());await Promise.resolve();});
  expect(host.querySelector('input')?.value).toBe('本机未保存昵称');expect(host.textContent).toContain('HTTP 404');expect(mocks.token).toBe('session-a');
 });
+
+it('releases refresh feedback when the request completes while hidden and never replays it on show',async()=>{let finish!:()=>void;const refresh=vi.fn(()=>new Promise<void>(resolve=>{finish=resolve;}));const host=await render(createElement(Messages,{session:mocks.token,error:'',refresh,changed:vi.fn()}));await click('刷新');expect(refresh).toHaveBeenCalledOnce();expect(host.textContent).toContain('刷新中…');await act(async()=>mocks.hide.forEach(fn=>fn()));await act(async()=>finish());await act(async()=>mocks.show.forEach(fn=>fn()));expect(host.textContent).not.toContain('刷新中…');expect(Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='刷新')?.disabled).toBe(false);expect(refresh).toHaveBeenCalledOnce();});

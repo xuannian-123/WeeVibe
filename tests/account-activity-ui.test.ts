@@ -18,7 +18,7 @@ vi.mock('../apps/miniprogram/src/features/team', () => ({ TeamCreate: () => null
 vi.mock('../apps/miniprogram/src/features/shell/inspiration', () => ({ Inspiration: () => null }));
 vi.mock('../apps/miniprogram/src/features/shell/profile', () => ({ ProfileForm: () => null }));
 // Native location lifecycle behavior is exercised with all registered handlers in native-location-ui.test.ts.
-vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: { getStorageSync: () => '', setStorageSync: vi.fn(), navigateTo: mocks.open, reLaunch: mocks.relaunch }, useDidShow: (cb: () => void) => { const latest=useRef(cb);latest.current=cb;useEffect(()=>{const run=()=>latest.current();mocks.onShow.add(run);return()=>{mocks.onShow.delete(run);};},[]); }, useDidHide: () => {}, useUnload: () => {} }));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: { getStorageSync: () => '', setStorageSync: vi.fn(), navigateTo: mocks.open, reLaunch: mocks.relaunch }, usePageScroll:()=>{},useDidShow: (cb: () => void) => { const latest=useRef(cb);latest.current=cb;useEffect(()=>{const run=()=>latest.current();mocks.onShow.add(run);return()=>{mocks.onShow.delete(run);};},[]); }, useDidHide: () => {}, useUnload: () => {} }));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components', () => ({
  Switch:(p:any)=>createElement('input',{type:'checkbox',checked:p.checked,disabled:p.disabled,onChange:(e:any)=>p.onChange?.({detail:{value:e.currentTarget.checked}})}),
  ScrollView:(p:any)=>createElement('div',{className:p.className},p.children),
@@ -73,7 +73,7 @@ describe('account activity role/status UI (React + Taro mocks, not native WeChat
   });
   it('logout clears previous account lists rather than exposing them to the next session', async () => {
     await home({ favorites: [], profile: { nickname: '前账号' }, activities: [], activity_records: [record(1, { is_manager: true })], invitations: [], messages: [] });
-    await click('○我的'); await click('⚙'); await click('退出登录'); await click('↗GO');
+    await click('我的'); await click('设置'); await click('退出登录'); await click('GO');
     expect(host.textContent).not.toContain('活动-1'); expect(host.textContent).toContain('微信登录'); expect(mocks.relaunch).toHaveBeenCalledWith({ url: '/pages/index/index' });
   });
 });

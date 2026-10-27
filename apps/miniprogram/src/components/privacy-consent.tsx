@@ -1,3 +1,4 @@
+import { Sheet } from './sheet';
 import { useEffect, useRef, useState } from 'react';
 import Taro, { useDidHide, useDidShow, useUnload } from '@tarojs/taro';
 import { Button, Text, View } from '@tarojs/components';
@@ -32,11 +33,11 @@ export function PrivacyConsent() {
   }, []);
   const hide = () => { active.current = false; finish(); }; useDidHide(hide); useUnload(hide); useDidShow(() => { active.current = true; });
   if (!open) return null;
-  return <View className="wv-overlay wv-privacy-overlay"><View className="wv-sheet wv-privacy-sheet">
-    <Text className="wv-title">先了解信息如何使用</Text><Text className="wv-muted">头像和昵称用于展示你主动填写的个人资料；位置信息只在你主动使用定位时获取，用于识别城市、查找附近地点，不用于展示私人出发位置。</Text>
+  return <Sheet title="先了解信息如何使用" close={()=>finish()} className="wv-privacy-sheet" overlayClassName="wv-privacy-overlay">
+    <Text className="wv-muted">头像和昵称用于展示你主动填写的个人资料；位置信息只在你主动使用定位时获取，用于识别城市、查找附近地点，不用于展示私人出发位置。</Text>
     <Button className="wv-link" onClick={() => Taro.openPrivacyContract({ fail: () => { if (active.current) setNotice('暂时无法打开隐私指引，请稍后重试。'); } })}>阅读《{contract.replace(/[《》]/g, '')}》</Button>
     {notice && <Text className="wv-muted">{notice}</Text>}
     <Button id="weevibe-privacy-agree" className="action action-primary" openType="agreePrivacyAuthorization" onAgreePrivacyAuthorization={() => finish(true)}>同意并继续</Button>
     <Button className="action action-text" onClick={() => finish()}>暂不同意</Button>
-  </View></View>;
+  </Sheet>;
 }

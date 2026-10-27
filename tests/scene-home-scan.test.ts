@@ -13,7 +13,7 @@ vi.mock('../apps/miniprogram/src/platform/account-api',()=>({requestAccount:asyn
 vi.mock('../apps/miniprogram/src/platform/avatar',()=>({loadAvatar:async()=>undefined}));
 vi.mock('../apps/miniprogram/src/features/todos/TodoPanel',()=>({TodoPanel:()=>null}));
 vi.mock('../apps/miniprogram/src/features/shell/inspiration',()=>({Inspiration:()=>createElement('div',{},'灵感页面')}));
-vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:()=>'',setStorageSync:vi.fn(),scanCode:h.scan,navigateTo:h.navigate,reLaunch:vi.fn()},useDidShow:(f:()=>void)=>lifecycle(h.show,f),useDidHide:(f:()=>void)=>lifecycle(h.hide,f),useUnload:(f:()=>void)=>lifecycle(h.unload,f)}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:()=>'',setStorageSync:vi.fn(),scanCode:h.scan,navigateTo:h.navigate,reLaunch:vi.fn()},usePageScroll:()=>{},useDidShow:(f:()=>void)=>lifecycle(h.show,f),useDidHide:(f:()=>void)=>lifecycle(h.hide,f),useUnload:(f:()=>void)=>lifecycle(h.unload,f)}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({View:(p:any)=>createElement('div',{onClick:p.onClick},p.children),Text:(p:any)=>createElement('span',{onClick:p.onClick},p.children),Button:(p:any)=>createElement('button',{onClick:p.onClick,disabled:p.disabled,'aria-label':p.ariaLabel},p.children),Input:(p:any)=>createElement('input',{value:p.value,onChange:()=>{}}),Image:()=>null,Picker:(p:any)=>createElement('div',{},p.children),Textarea:()=>null}));
 import Home from '../apps/miniprogram/src/pages/index/index';
 const ID='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',PATH=`pages/activity/index?id=${ID}`;
