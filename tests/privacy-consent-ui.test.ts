@@ -6,7 +6,7 @@ const req=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json')),
 const h=vi.hoisted(()=>({token:'A',listener:undefined as any,agree:undefined as any,hide:[] as (()=>void)[]}));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>h.token}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{onNeedPrivacyAuthorization:(fn:any)=>{h.listener=fn;},getPrivacySetting:({success}:any)=>success({privacyContractName:'WeeVibe 用户隐私保护指引'}),openPrivacyContract:vi.fn()},useDidHide:(fn:any)=>h.hide.push(fn),useDidShow:()=>{},useUnload:()=>{}}));
-vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({View:(p:any)=>createElement('div',{},p.children),Text:(p:any)=>createElement('span',{},p.children),Button:(p:any)=>{if(p.openType==='agreePrivacyAuthorization')h.agree=p.onAgreePrivacyAuthorization;return createElement('button',{onClick:p.onClick},p.children);}}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Image:()=>null,ScrollView:(p:any)=>createElement('div',{},p.children),View:(p:any)=>createElement('div',{},p.children),Text:(p:any)=>createElement('span',{},p.children),Button:(p:any)=>{if(p.openType==='agreePrivacyAuthorization')h.agree=p.onAgreePrivacyAuthorization;return createElement('button',{onClick:p.onClick},p.children);}}));
 import { PrivacyConsent } from '../apps/miniprogram/src/components/privacy-consent';
 let root:any,host:HTMLDivElement;
 beforeEach(async()=>{h.token='A';h.hide=[];host=document.createElement('div');document.body.append(host);root=createRoot(host);await act(async()=>root.render(createElement(PrivacyConsent)));});

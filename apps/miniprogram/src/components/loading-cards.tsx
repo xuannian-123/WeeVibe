@@ -1,0 +1,2 @@
+import { Text, View } from '@tarojs/components';
+export function LoadingCards({grid=false,label='正在加载…'}:{grid?:boolean;label?:string}) { return <View className={grid?'wv-skeleton-grid':'wv-skeleton-list'}><Text className="wv-sr-only">{label}</Text>{[0,1].map(i=><View className="wv-skeleton-card" key={i}>{grid&&<View className="wv-skeleton-photo"/>}<View className="wv-skeleton-line wide"/><View className="wv-skeleton-line"/><View className="wv-skeleton-line short"/></View>)}</View>; }
