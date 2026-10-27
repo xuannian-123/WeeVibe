@@ -113,3 +113,19 @@
 .wv-profile-cover.mint{background:linear-gradient(125deg,#effbf5,#dff4e9)}
 .wv-profile-cover.peach{background:linear-gradient(125deg,#fff4eb,#ffe7d8)}
 .wv-profile-cover.lilac{background:linear-gradient(125deg,#f2f2ff,#e5e9ff)}
+.wv-shell .wv-top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
+.wv-top .wv-city{justify-self:start;min-width:0}
+.wv-top-spacer{justify-self:end;width:56px;height:56px}
+.wv-identity-editor{padding:24px;background:#f7f9f8;border-radius:24px}
+.wv-identity-row{display:flex;align-items:center;gap:28px;margin:24px 0}
+.wv-identity-row .wv-avatar-button{margin:0;flex:none}
+.wv-identity-actions{flex:1;min-width:0}
+.wv-identity-actions .action{margin:0 0 12px;font-size:25px}
+.wv-profile-editor .field input{box-sizing:border-box;width:100%;min-height:84px}
+.wv-nickname-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
+.wv-nickname-heading .field-label{margin:0}
+.wv-privacy-overlay{z-index:200;align-items:center;padding:30px;box-sizing:border-box}
+.wv-privacy-sheet{border-radius:30px;padding:34px;max-height:85vh}
+.wv-privacy-sheet .wv-title{font-size:36px;margin-bottom:20px}
+.wv-privacy-sheet .wv-link{white-space:normal;margin:22px 0!important;text-align:left}
+.wv-location-help{padding:20px;background:#f7f9f8;border-radius:20px;margin:16px 0}

@@ -28,6 +28,7 @@ export async function uploadAvatar(path:string, expectedToken:string|undefined) 
   if(base64.length>56000) throw new ApiClientError('INVALID_INPUT','头像仍过大，请选择较小图片后重试',400);
   if(getToken()!==token) throw new ApiClientError('UNAUTHENTICATED','账号已切换，未上传',401);
   const result=avatarResultSchema.parse(await extensionRequest('/api/v1/account/avatar','POST',{base64}));
+  if(getToken()!==token) throw new ApiClientError('UNAUTHENTICATED','账号已变化，未展示原账号的头像结果',401);
   if(!result.avatar) throw new ApiClientError('INVALID_RESPONSE','头像未保存，请重试',0);
   return localAvatar(user.user_id,result.avatar);
 }
