@@ -18,7 +18,7 @@ vi.mock('../apps/miniprogram/src/features/team', () => ({ TeamCreate: () => null
 vi.mock('../apps/miniprogram/src/features/shell/inspiration', () => ({ Inspiration: () => null }));
 vi.mock('../apps/miniprogram/src/features/shell/profile', () => ({ ProfileForm: () => null }));
 // Native location lifecycle behavior is exercised with all registered handlers in native-location-ui.test.ts.
-vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: { getStorageSync: () => '', navigateTo: mocks.open, reLaunch: mocks.relaunch }, useDidShow: (cb: () => void) => { mocks.onShow = cb; }, useDidHide: () => {}, useUnload: () => {} }));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: { getStorageSync: () => '', setStorageSync: vi.fn(), navigateTo: mocks.open, reLaunch: mocks.relaunch }, useDidShow: (cb: () => void) => { mocks.onShow = cb; }, useDidHide: () => {}, useUnload: () => {} }));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components', () => ({
   Button: (p: Record<string, unknown>) => createElement('button', { onClick: p.onClick, disabled: p.disabled, className: p.className }, p.children as never),
   Text: (p: Record<string, unknown>) => createElement('span', { className: p.className, onClick: p.onClick }, p.children as never),

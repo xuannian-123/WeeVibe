@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import Taro, { useDidHide, useDidShow, useUnload } from '@tarojs/taro';
 import { ApiClientError } from '@weevibe/api-client';
-import { api, establishSession, forgetSession, getToken } from './api';
+import { establishSession, forgetSession, getToken } from './api';
+import { automaticUser, resumeAutomaticLogin } from './automatic-session';
 import { unrecognizedResponseMessage } from './response-error';
 
 export function errorText(error: unknown): string {
@@ -48,7 +49,7 @@ export function usePageRead<T>(loader: () => Promise<T>, enabled = true, options
   const read = useCallback(async (background = false) => {
     clear();
     if (!visible.current || !enabledRef.current) return;
-    const epoch = ++seq.current;
+    const epoch = ++seq.current, sourceSession = getToken();
     if (!background) setLoading(true);
     let canPoll = true;
     try {
@@ -57,7 +58,7 @@ export function usePageRead<T>(loader: () => Promise<T>, enabled = true, options
       setData(next); setError(''); failures.current = 0;
     } catch (e) {
       if (!visible.current || epoch !== seq.current) return;
-      if (e instanceof ApiClientError && e.code === 'UNAUTHENTICATED') { forgetSession(); canPoll = false; }
+      if (e instanceof ApiClientError && e.code === 'UNAUTHENTICATED') { if (getToken() === sourceSession) forgetSession(); canPoll = false; }
       setError(errorText(e)); failures.current++;
     } finally {
       if (visible.current && epoch === seq.current) {
@@ -81,7 +82,7 @@ export function useLogin(onSuccess: () => Promise<unknown>) {
   useDidShow(() => { alive.current = true; setBusy(locked.current); }); useDidHide(() => { alive.current = false; }); useUnload(() => { alive.current = false; });
   async function login() {
     if (locked.current) return; locked.current = true; setBusy(true); setError('');
-    try { await establishSession(); if (alive.current) await onSuccess(); }
+    try { await establishSession(); resumeAutomaticLogin(); if (alive.current) await onSuccess(); }
     catch (e) { if (alive.current) setError(errorText(e)); }
     finally { locked.current = false; if (alive.current) setBusy(false); }
   }
@@ -89,8 +90,7 @@ export function useLogin(onSuccess: () => Promise<unknown>) {
 }
 
 export async function requireUser() {
-  if (!getToken()) throw new ApiClientError('UNAUTHENTICATED', '尚未登录', 401);
-  return api.me();
+  return (await automaticUser()).user;
 }
 
 export { newKey } from './local-id';
