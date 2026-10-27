@@ -1,11 +1,7 @@
 /** Real PostgreSQL, explicit disposable CI fixture only. No WeChat or suppliers. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { getDb } from '../apps/web/src/server/db';
-import { createRequirement, commandRequirement, getRequirement, listRequirements } from '../apps/web/src/server/requirements/service';
-import { createActivity } from '../apps/web/src/server/activities/create';
-import { applyToActivity, decideApplication } from '../apps/web/src/server/activities/applications';
-import { getActivityRoster } from '../apps/web/src/server/activities/roster';
+import { createRequire } from 'node:module';
 import { type RequirementResponseInput, type TeamDraft } from '../packages/contracts/src';
 
 assert.ok(process.argv.includes('--fixture-only'), 'Explicit fixture-only argument required');
@@ -17,6 +13,14 @@ assert.equal(target.hostname, '127.0.0.1'); assert.equal(target.port, '5432');
 assert.equal(target.pathname, '/weevibe_acceptance_ci');
 assert.ok(!target.hash);
 for (const [key, value] of target.searchParams) assert.ok(key === 'schema' && value === 'public');
+// apps/web is a CommonJS package. Match the existing real-PG CLI's loader;
+// ESM named imports from its TS sources are not portable under Node 24/tsx.
+const loadServer = createRequire(import.meta.url);
+const { getDb } = loadServer('../apps/web/src/server/db.ts') as typeof import('../apps/web/src/server/db');
+const { createRequirement, commandRequirement, getRequirement, listRequirements } = loadServer('../apps/web/src/server/requirements/service.ts') as typeof import('../apps/web/src/server/requirements/service');
+const { createActivity } = loadServer('../apps/web/src/server/activities/create.ts') as typeof import('../apps/web/src/server/activities/create');
+const { applyToActivity, decideApplication } = loadServer('../apps/web/src/server/activities/applications.ts') as typeof import('../apps/web/src/server/activities/applications');
+const { getActivityRoster } = loadServer('../apps/web/src/server/activities/roster.ts') as typeof import('../apps/web/src/server/activities/roster');
 const db = getDb(), key = () => `v38-fixture-${randomUUID()}`;
 const checks: string[] = [];
 function pass(name: string) { checks.push(name); console.log(`PASS ${name}`); }
