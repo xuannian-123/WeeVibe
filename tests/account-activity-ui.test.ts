@@ -20,6 +20,8 @@ vi.mock('../apps/miniprogram/src/features/shell/profile', () => ({ ProfileForm: 
 // Native location lifecycle behavior is exercised with all registered handlers in native-location-ui.test.ts.
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: { getStorageSync: () => '', setStorageSync: vi.fn(), navigateTo: mocks.open, reLaunch: mocks.relaunch }, useDidShow: (cb: () => void) => { mocks.onShow = cb; }, useDidHide: () => {}, useUnload: () => {} }));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components', () => ({
+ Switch:(p:any)=>createElement('input',{type:'checkbox',checked:p.checked,disabled:p.disabled,onChange:(e:any)=>p.onChange?.({detail:{value:e.currentTarget.checked}})}),
+ ScrollView:(p:any)=>createElement('div',{className:p.className},p.children),
   Button: (p: Record<string, unknown>) => createElement('button', { onClick: p.onClick, disabled: p.disabled, className: p.className }, p.children as never),
   Text: (p: Record<string, unknown>) => createElement('span', { className: p.className, onClick: p.onClick }, p.children as never),
   View: (p: Record<string, unknown>) => createElement('div', { onClick: p.onClick, className: p.className }, p.children as never),
@@ -63,7 +65,7 @@ describe('account activity role/status UI (React + Taro mocks, not native WeChat
   it('integrates the new account field on GO without promoting pending to legacy participation', async () => {
     await home({ favorites: [], profile: {}, activities: [], activity_records: [record(1, { is_manager: true }), record(2, { pending_application_count: 1 })], invitations: [], messages: [] });
     expect(cards()).toHaveLength(2); expect(host.textContent).toContain('我在管理'); expect(host.textContent).not.toContain('当前后端仅提供');
-    await click('待审批'); await act(async () => (cards()[0] as HTMLElement).click()); expect(mocks.open).toHaveBeenCalledWith({ url: '/pages/activity/index?id=00000002-3333-4333-8333-333333333333' });
+    await click('查看全部　›'); await click('待审批'); await act(async () => (cards()[0] as HTMLElement).click()); expect(mocks.open).toHaveBeenCalledWith({ url: '/pages/activity/index?id=00000002-3333-4333-8333-333333333333' });
   });
   it('older backend falls back only to real joined activities with an explicit incomplete-list warning', async () => {
     await home({ favorites: [], profile: {}, activities: [{ activity_id: record(1).activity_id, title: '旧后端已参加', starts_at: record(1).starts_at, ends_at: record(1).ends_at, timezone: 'Asia/Shanghai', status: '待参加', location: '场地' }], invitations: [], messages: [] });
@@ -71,7 +73,7 @@ describe('account activity role/status UI (React + Taro mocks, not native WeChat
   });
   it('logout clears previous account lists rather than exposing them to the next session', async () => {
     await home({ favorites: [], profile: { nickname: '前账号' }, activities: [], activity_records: [record(1, { is_manager: true })], invitations: [], messages: [] });
-    await click('○我的'); await click('⚙ 设置'); await click('退出登录'); await click('↗GO');
+    await click('○我的'); await click('⚙'); await click('退出登录'); await click('↗GO');
     expect(host.textContent).not.toContain('活动-1'); expect(host.textContent).toContain('微信登录'); expect(mocks.relaunch).toHaveBeenCalledWith({ url: '/pages/index/index' });
   });
 });

@@ -34,6 +34,8 @@ export const venueSchema = z.object({
   search_distance_m: z.number().nonnegative().nullable(), search_distance_kind: z.literal('search_distance_not_walk_route'),
   inventory: z.literal('unknown'), booking: z.literal('unknown'),
   suitability: z.literal('not_merchant_verified'),
+  district: z.string().max(100).optional(),
+  photos: z.array(z.object({ url: z.url().max(2000).refine(s => s.startsWith('https://')), title: z.string().max(200).nullable() }).strict()).max(3).optional(),
 });
 export const venueListSchema = z.object({
   source: venueSourceSchema, venues: z.array(venueSchema), excluded_count: z.number().int().nonnegative(),

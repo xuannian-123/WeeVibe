@@ -6,6 +6,7 @@ import type { ActivityDetail, PublicRosterSnapshot } from '@weevibe/contracts';
 import { Action, Notice, Panel } from '../../components/ui';
 import { getToken } from '../../platform/api';
 import { readActivityRoster, rosterError } from './api';
+import { MemberDirectory } from './MemberDirectory';
 
 type Props = { detail: ActivityDetail; session?: string; fresh: boolean; refresh: () => unknown };
 export function RosterPanel({ detail, session, fresh, refresh }: Props) {
@@ -47,6 +48,6 @@ export function RosterPanel({ detail, session, fresh, refresh }: Props) {
         {s.members?.length === 0 && <Text>此环节当前没有占位成员。</Text>}
         {s.members?.map((m, index) => <View key={index}><Text>{m.display_name || '未填写报名名'}</Text><Text> · {m.status === 'joined' ? '已加入 · 已接受当前安排' : '保位待接受当前安排'}</Text></View>)}
       </View>}
-    </View>)}</View>}
+    </View>)}{current.segments.some(s => s.availability === 'available') && <MemberDirectory key={source} activityId={detail.activity_id} session={session} fresh={fresh}/>}</View>}
   </Panel>;
 }

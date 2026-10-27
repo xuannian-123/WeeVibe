@@ -1,0 +1,114 @@
+.wv-shell .wv-top{margin-bottom:18px}
+.wv-home-intro{padding:42px 0 44px;position:relative}
+.wv-home-intro .wv-title{font-size:60px;white-space:pre-line;line-height:1.42}
+.wv-home-intro .wv-subtitle{font-size:24px;color:#92969d}
+.wv-home-intro .wv-eyebrow{font-size:18px;color:#969ca3;margin-bottom:22px;letter-spacing:4px}
+.wv-home-spark{position:absolute;right:28px;top:94px;color:#d1dfd7;font-size:90px;line-height:1}
+.wv-home-paths{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.wv-home-path{position:relative;text-align:left;white-space:normal;min-height:282px;margin:0!important;border:0!important;border-radius:40px;padding:30px!important;line-height:1.5!important}
+.wv-home-path .wv-card-title{font-size:33px;margin:18px 0 8px}
+.wv-home-path .wv-muted{font-size:20px;margin:0;color:#8c827a}
+.wv-home-path-icon{font-size:48px;color:#bd8871;display:block}
+.wv-home-path.mint .wv-home-path-icon{color:#56977e}
+.wv-path-arrow{position:absolute;right:30px;top:35px;color:#8b9f93;font-size:27px}
+.wv-home-ai-inline{display:flex;gap:14px;align-items:center;padding:28px 6px 34px;color:#8a8b98;font-size:22px;line-height:1.7}
+.wv-home-ai-inline text:first-child{padding:2px 8px;background:#f0edf8;color:#8b83a3;border-radius:7px;font-size:18px}
+.wv-recent-activity{display:block;white-space:normal;text-align:left;background:#fff;border:1px solid #edf0f2;border-radius:34px;padding:32px;margin:0 0 22px;line-height:1.5}
+.wv-recent-activity .wv-card-title{font-size:28px;flex:1}
+.wv-recent-activity .wv-status{font-size:18px;padding:0 12px;background:#edf7f1;color:#4d8c70;border-radius:10px;height:36px;line-height:36px}
+.wv-recent-activity .wv-muted{font-size:22px;margin:12px 0}
+.wv-recent-activity .wv-card-footer{border-top:1px solid #f1f2f4;padding-top:20px;font-size:21px;margin-top:24px;color:#7f8791}
+.wv-home-ideas-link{display:flex;align-items:center;justify-content:space-between;background:#f8f8fb;padding:22px 26px;border-radius:25px;font-size:22px;color:#8b8b9a;margin-top:32px}
+.wv-home-ideas-link button{margin:0;padding:0;background:none;font-size:22px;color:#69677c}
+.wv-inspiration .wv-title{white-space:pre-line;font-size:50px}
+.wv-inspiration-search{display:flex;gap:12px}
+.wv-inspiration-search input{flex:1;min-width:0;font-size:24px}
+.wv-inspiration-search button{white-space:nowrap;background:#eeedf8;color:#77758a;border-radius:14px;padding:8px 16px;margin:0;font-size:23px;line-height:1.6}
+.wv-inspiration-scope{display:flex;justify-content:space-between;gap:20px;align-items:center}
+.wv-inspiration-scope input{flex:1;min-width:0;font-size:22px;color:#8a9098}
+.wv-inspiration-scope .wv-link{font-size:21px!important}
+.wv-inspiration-tabs{width:100%;margin:30px 0 24px;white-space:nowrap}
+.wv-inspiration-tabs>view{display:flex;gap:12px}
+.wv-inspiration-tabs button{display:inline-block;flex:none;margin:0;padding:12px 20px;line-height:1.6;font-size:23px;border-radius:19px;background:#f6f7f9;color:#777d85}
+.wv-inspiration-tabs button.active{background:#252b35;color:#fff}
+.wv-venue-grid{display:grid;grid-template-columns:1fr 1fr;gap:34px 22px}
+.wv-venue-card{min-width:0}
+.wv-venue-visual{position:relative;overflow:hidden;border-radius:28px}
+.wv-venue-cover{height:315px;background:linear-gradient(125deg,#effbf5,#e5e9ff);overflow:hidden;border-radius:28px}
+.wv-venue-card:nth-child(2n) .wv-venue-cover{height:285px;background:linear-gradient(125deg,#fff4eb,#ffe7d8)}
+.wv-venue-cover image{width:100%;height:100%}
+.wv-venue-placeholder{height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#98a8a3;font-size:21px;gap:22px;text-align:center;padding:20px;box-sizing:border-box}
+.wv-venue-placeholder text:first-child{font-size:76px;color:#b1c9bf}
+.wv-venue-save{position:absolute;top:15px;right:15px;width:54px;height:54px;line-height:52px;font-size:36px;padding:0;background:#ffffffed;border-radius:50%;margin:0;z-index:2}
+.wv-venue-save.saved{color:#c9786d;background:#fff1e9}
+.wv-venue-name{display:block;font-size:27px;font-weight:700;line-height:1.5;margin-top:17px}
+.wv-venue-reason{display:block;color:#7a8088;font-size:22px;line-height:1.6;margin:10px 0}
+.wv-venue-meta{display:block;color:#9a9fa6;font-size:20px;line-height:1.7}
+.wv-venue-category{display:inline-block;font-size:19px;background:#fff1e7;color:#a77c63;padding:6px 10px;border-radius:10px;margin-top:12px}
+.wv-venue-detail .wv-venue-cover{height:340px;margin-bottom:28px}
+.wv-venue-detail .wv-title{font-size:38px}
+.wv-list-note{display:block;font-size:21px;line-height:1.8;color:#969ca5;text-align:center;margin:25px 0}
+.wv-personal-card{background:#fff;overflow:hidden;border-radius:32px;margin-top:16px;color:#242932}
+.wv-profile-cover{height:265px;position:relative;overflow:hidden;border-radius:32px}
+.wv-cover-image{height:100%;width:100%;display:block}
+.wv-cover-pattern{height:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#a8bfb3;gap:15px}
+.wv-cover-pattern text:first-child{font-size:100px;line-height:1}
+.wv-cover-pattern text:last-child{font-size:16px;letter-spacing:5px}
+.wv-cover-settings{position:absolute;right:23px;top:20px;background:#ffffffb5;margin:0;width:56px;height:56px;border-radius:18px;font-size:30px;padding:0;line-height:56px}
+.wv-profile-body{padding:0 20px 20px}
+.wv-profile-identity{display:flex;align-items:center;justify-content:space-between;position:relative;margin-top:-55px}
+.wv-profile-identity .wv-avatar-button{margin:0;width:124px;height:124px;border:7px solid #fff;border-radius:40px;box-sizing:content-box;background:#eef4f1;font-size:60px;display:flex;align-items:center;justify-content:center}
+.wv-profile-identity .wv-avatar{width:124px;height:124px;border-radius:34px}
+.wv-edit-profile{background:#f5f6f8;border-radius:16px;padding:8px 20px;line-height:1.8;margin:40px 0 0;font-size:22px;color:#6d747d}
+.wv-personal-name{display:block;font-size:42px;font-weight:750;line-height:1.6;margin:14px 0}
+.wv-personal-bio{display:block;font-size:25px;color:#818892;line-height:1.8;white-space:pre-line}
+.wv-interest-tags{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}
+.wv-interest-tags text{padding:8px 16px;border-radius:12px;color:#668675;font-size:22px;background:#eef6f1}
+.wv-interest-tags text.lilac{color:#8980a4}
+.wv-personal-optional{display:flex;gap:14px;color:#8f8a9d;font-size:21px;margin-top:20px}
+.wv-personal-optional text{padding:5px 10px;border:1px solid #eeeaf4;border-radius:9px}
+.wv-preview-profile{display:block;padding:14px 20px;background:#fafafa;border-radius:20px;line-height:1.8;text-align:left;font-size:23px;color:#8b9099;margin:18px 0 32px}
+.wv-my-activity-links{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.wv-my-activity-links button{background:#f7f8fa;text-align:left;white-space:normal;margin:0;border-radius:25px;padding:26px 24px;line-height:1.6}
+.wv-my-activity-links text{display:block;font-size:27px;font-weight:650}
+.wv-my-activity-links text:last-child{font-size:20px;font-weight:400;color:#969ca3;margin-top:9px}
+.wv-profile-tools{padding:30px 0;margin-top:20px}
+.wv-profile-tools button{display:block;text-align:left;background:none;border-bottom:1px solid #f2f3f5;padding:22px 0;font-size:24px;color:#838a94;line-height:1.8;margin:0;border-radius:0}
+.wv-messages-header{display:flex;align-items:center;justify-content:space-between;padding-top:38px}
+.wv-messages-header .wv-title{font-size:48px}
+.wv-message-tabs{display:flex;align-items:center;gap:12px;margin:34px 0 22px;border-bottom:1px solid #f0f1f4;padding-bottom:20px}
+.wv-message-tabs button{margin:0;font-size:25px;color:#8c929b;background:none;padding:10px 24px;line-height:1.7;border-radius:17px}
+.wv-message-tabs button.active{background:#f0f1f5;color:#292f38;font-weight:700}
+.wv-message-tabs .wv-link{margin-left:auto!important}
+.wv-message-card{display:block;width:100%;padding:30px;background:#f7f8fa;white-space:normal;text-align:left;margin:0 0 22px;line-height:1.6;border-radius:27px}
+.wv-message-head{display:flex;justify-content:space-between;gap:18px;align-items:baseline}
+.wv-message-title{font-size:28px;font-weight:650;flex:1}
+.wv-unread-dot{color:#9a91b9;font-size:18px}
+.wv-message-time{font-size:19px;color:#a0a5ad;flex:none}
+.wv-message-summary{display:block;font-size:24px;line-height:1.8;color:#858c96;margin-top:14px}
+.wv-message-footer{display:flex;justify-content:space-between;align-items:center;margin-top:22px;font-size:21px;color:#969ca5}
+.wv-message-footer .pending{color:#a37e54;background:#fff2e2;border-radius:9px;padding:4px 11px}
+.wv-message-footer text:last-child{font-size:30px}
+.wv-profile-edit-section{border-top:1px solid #f0f1f4;padding-top:28px;margin-top:30px}
+.wv-profile-edit-section .wv-section-title{font-size:30px}
+.wv-interest-options{display:flex;flex-wrap:wrap;gap:12px;margin:20px 0}
+.wv-interest-options button{background:#f4f5f8;font-size:23px;line-height:1.7;padding:10px 18px;border-radius:14px;margin:0}
+.wv-interest-options button.selected{background:#e7f4ec;color:#4b8c70}
+.wv-tag-order{display:flex;align-items:center;gap:14px;font-size:24px;padding:10px 0}
+.wv-tag-order text:first-child{flex:1}
+.wv-tag-order button{font-size:22px;line-height:1.7;padding:5px 14px;margin:0;background:#f4f5f8}
+.wv-visibility-row{display:flex;align-items:center;justify-content:space-between;padding:18px 0;font-size:24px}
+.wv-member-directory button{display:flex;justify-content:space-between;gap:20px;background:#f7f8fa;border-radius:18px;padding:20px;font-size:24px;line-height:1.7;margin:12px 0}
+.wv-overlay{position:fixed;inset:0;z-index:100;background:#1e25384a;display:flex;align-items:flex-end}
+.wv-sheet{box-sizing:border-box;width:100%;background:#fff;border-radius:40px 40px 0 0;padding:40px 32px calc(30px + env(safe-area-inset-bottom));max-height:88vh;overflow:auto}
+.wv-sheet .wv-personal-card{margin-top:0}
+.wv-sheet .wv-list-note{font-size:21px}
+
+
+.wv-venue-save{font-size:0}
+.wv-venue-save::before{content:"♡";font-size:36px}
+.wv-venue-save.saved::before{content:"♥"}
+.wv-venue-more{background:none;margin:8px 0 0;padding:4px 0;text-align:left;color:#969ca5;font-size:20px;line-height:1.6}
+.wv-profile-cover.mint{background:linear-gradient(125deg,#effbf5,#dff4e9)}
+.wv-profile-cover.peach{background:linear-gradient(125deg,#fff4eb,#ffe7d8)}
+.wv-profile-cover.lilac{background:linear-gradient(125deg,#f2f2ff,#e5e9ff)}

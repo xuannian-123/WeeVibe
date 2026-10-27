@@ -7,6 +7,7 @@ import { invitationSourceView } from './activities/invitations';
 import { invitationDisplayStatus } from './activities/invitation-rules';
 import { accountActivityRecords } from './account-activities';
 import { emptyProfile, parsePrivateProfile, participationDisplayStatus, decisionMessageId, parseDecisionMessageId } from './account-rules';
+import { normalizeCover } from './member-profile';
 
 export function accountSnapshot(userId: string) {
   return withDb(db => db.$transaction(async tx => {
@@ -56,8 +57,25 @@ export async function updateAccount(userId: string, raw: unknown) {
   try {
     if (input.action === 'profile') {
       if (Object.keys(input).some(k => !['action', 'profile'].includes(k))) throw new Error('不支持的请求字段');
-      const profile = parsePrivateProfile(input.profile);
-      await withDb(async db => { await db.privateProfile.upsert({ where: { userId }, create: { userId, data: profile }, update: { data: profile } }); });
+      if (!input.profile || typeof input.profile !== 'object' || Array.isArray(input.profile) || Object.hasOwn(input.profile, 'cover_image')) throw new Error('封面通过图片入口单独更新');
+      const submitted = input.profile as Record<string, unknown>;
+      await withDb(db => db.$transaction(async tx => {
+        await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId}::uuid FOR UPDATE`;
+        const saved = await tx.privateProfile.findUnique({ where: { userId } });
+        const profile = parsePrivateProfile({ ...(saved ? parsePrivateProfile(saved.data) : emptyProfile), ...submitted });
+        const data = JSON.parse(JSON.stringify(profile)) as Prisma.InputJsonValue;
+        await tx.privateProfile.upsert({ where: { userId }, create: { userId, data }, update: { data } });
+      }));
+    } else if (input.action === 'cover') {
+      if (Object.keys(input).some(k => !['action', 'base64'].includes(k))) throw new Error('不支持的封面字段');
+      const image = await normalizeCover(input.base64, userId);
+      await withDb(db => db.$transaction(async tx => {
+        await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId}::uuid FOR UPDATE`;
+        const saved = await tx.privateProfile.findUnique({ where: { userId } });
+        const profile = parsePrivateProfile({ ...(saved ? parsePrivateProfile(saved.data) : emptyProfile), cover_style: 'custom', cover_image: image });
+        const data = JSON.parse(JSON.stringify(profile)) as Prisma.InputJsonValue;
+        await tx.privateProfile.upsert({ where: { userId }, create: { userId, data }, update: { data } });
+      }));
     } else if (input.action === 'favorite') {
       if (Object.keys(input).some(k => !['action', 'venue', 'saved'].includes(k)) || typeof input.saved !== 'boolean') throw new Error('收藏请求格式不正确');
       const parsed = venueSchema.safeParse(input.venue);

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { accountActivityRecordSchema, venueSchema } from '@weevibe/contracts';
+import { accountActivityRecordSchema, venueSchema, profilePresentationSchema } from '@weevibe/contracts';
 import { invitationSourceSchema } from '@weevibe/contracts/src/invitations';
 import { ApiClientError } from '@weevibe/api-client';
 import { getToken } from './api';
@@ -8,6 +8,9 @@ import { extensionRequest } from './extension-api';
 // Read boundary only: permit omitted optional profile values and older additive fields.
 // Avatar paths are produced by the separate verified avatar adapter, never trusted here.
 const profile = z.object({
+  bio: profilePresentationSchema.shape.bio.removeDefault().optional(), interests: profilePresentationSchema.shape.interests.removeDefault().optional(),
+  cover_style: profilePresentationSchema.shape.cover_style.removeDefault().optional(), cover_image: profilePresentationSchema.shape.cover_image.removeDefault().optional(),
+  visibility: profilePresentationSchema.shape.visibility.removeDefault().optional(),
   nickname: z.string().max(32).optional(), birthday: z.string().max(10).optional(),
   gender: z.string().max(8).optional(), zodiac: z.string().max(8).optional(),
   mbti: z.string().max(4).optional(), signature: z.string().max(100).optional(),
@@ -26,7 +29,7 @@ const accountSchema = z.object({
   capabilities: z.object({ invitations: z.boolean(), avatar_upload: z.boolean() }).optional(),
   limit: z.number().int().positive().optional(), server_time: time.optional(),
 });
-export type AccountProfile = z.infer<typeof profile> & { avatar_url?: string };
+export type AccountProfile = Partial<z.infer<typeof profile>> & { avatar_url?: string };
 export type AccountSnapshot = Omit<z.infer<typeof accountSchema>, 'profile'> & { profile: AccountProfile };
 
 /** Bind every account operation to the session that owns the displayed inputs/state. */
