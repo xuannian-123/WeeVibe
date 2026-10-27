@@ -14,17 +14,20 @@ import { ActivityEditor } from './activity-editor';
 import { Action, Notice, Panel } from '../../components/ui';
 import './activity-create.css';
 import { RebookEditor } from '../rebook/RebookEditor';
+import { PreparationEditor } from './preparation-editor';
 
 export default function Editor() {
   const rebook = Taro.getCurrentInstance?.().router?.params.rebook;
+  const preparation = Taro.getCurrentInstance?.().router?.params.preparation;
+  if (preparation !== undefined) return <PreparationEditor sourceId={preparation} />;
   return rebook === undefined ? <OrdinaryEditor /> : <RebookEditor key={rebook} sourceId={rebook} />;
 }
-function OrdinaryEditor() {
+export function OrdinaryEditor({ initialForm, draftSuffix = '' }: { initialForm?: ActivityForm; draftSuffix?: string } = {}) {
   const identity = usePageRead(readCreationIdentity); const login = useLogin(identity.refresh);
   const source = identity.data?.session === getToken() ? identity.data : undefined;
-  const userId = source?.user_id; const draftKey = `weego-create-draft-v1:${userId ?? 'guest'}`;
-  const completedKey = `weego-created-v1:${userId ?? 'guest'}`;
-  const [form, setForm] = useState<ActivityForm>(emptyForm); const [loadedFor, setLoadedFor] = useState('');
+  const userId = source?.user_id; const draftKey = `weego-create-draft-v1:${userId ?? 'guest'}${draftSuffix}`;
+  const completedKey = `weego-created-v1:${userId ?? 'guest'}${draftSuffix}`;
+  const [form, setForm] = useState<ActivityForm>(() => initialForm ?? emptyForm()); const [loadedFor, setLoadedFor] = useState('');
   const [validation, setValidation] = useState(''); const [draftMessage, setDraftMessage] = useState('');
   const [review, setReview] = useState<{ userId: string; input: CreateActivityInput }>();
   const mounted=useRef(true), visible=useRef(true), epoch=useRef(0);
@@ -36,7 +39,7 @@ function OrdinaryEditor() {
     if (!userId || loadedFor === userId) return;
     const stored = readSaved<ActivityForm>(draftKey);
     // A different identity must never inherit the previous person's draft.
-    setForm(isActivityForm(stored) ? stored : emptyForm());
+    setForm(isActivityForm(stored) ? stored : initialForm ?? emptyForm());
     setLoadedFor(userId);
   }, [userId, loadedFor, draftKey]);
   useEffect(() => {
@@ -44,7 +47,7 @@ function OrdinaryEditor() {
     try { save(draftKey, form); setDraftMessage('草稿已保存在本设备。'); }
     catch { setDraftMessage('草稿暂时无法保存，请保持当前页面。'); }
   }, [form, userId, loadedFor, draftKey]);
-  const write = useStoredWrite({ storageKey: `weego-create-pending-v1:${userId ?? 'guest'}`, userId,
+  const write = useStoredWrite({ storageKey: `weego-create-pending-v1:${userId ?? 'guest'}${draftSuffix}`, userId,
     parse: input => createActivityInputSchema.parse(input), execute: input => {
       const ticket=epoch.current;
       const assertCurrent=()=>{const current=latest.current;assertSource();if(!mounted.current||!visible.current||ticket!==epoch.current||current.source?.session!==source?.session||current.source?.user_id!==userId||current.loading||current.error)throw new ApiClientError('INVALID_RESPONSE','页面或身份状态已变化，创建结果未确认，请返回原账号核对；原请求保留。',0);};

@@ -9,6 +9,7 @@ import { withDb } from '../db';
 import { ServiceError } from '../http';
 import { mutation } from '../activities/mutation';
 import type { Tx } from '../activities/state';
+import { aggregateResponses, managerResponse } from './privacy';
 import { parseDraft, effectiveSurveyStatus, assertSurveyManager, assertRevision, assertSegmentOwnership, assertPublishable, normalizeSubmission, normalizeFinalSelection, surveyStatistics, inputError } from './rules';
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -43,10 +44,10 @@ async function lockSurvey(tx: Tx, id: string) {
   return { survey, activity, now: new Date() };
 }
 function managerFor(survey: RequirementSurvey, activity: Awaited<ReturnType<typeof activityFor>>, actorId: string) {
-  return survey.kind === 'friend' ? activity?.currentManagerId === actorId : survey.ownerUserId === actorId;
+  return survey.activityId ? activity?.currentManagerId === actorId : survey.ownerUserId === actorId;
 }
 function assertReadable(survey: RequirementSurvey, isManager: boolean) {
-  if (!isManager && (survey.kind === 'team' || survey.status === 'draft')) throw new ServiceError('NOT_FOUND', 404, '未找到可查看的需求收集');
+  if (!isManager && survey.status === 'draft') throw new ServiceError('NOT_FOUND', 404, '未找到可查看的需求收集');
 }
 function summary(survey: RequirementSurvey, actorId: string, isManager: boolean, hasResponded: boolean, now: Date): RequirementSummary {
   return { id: survey.id, kind: survey.kind as 'friend' | 'team', activity_id: survey.activityId, title: parseDraft(survey.draft).title,
@@ -76,10 +77,11 @@ export async function requirementSnapshotTx(tx: Tx, id: string, actorId: string,
   const state = effectiveSurveyStatus(survey, now);
   const own = await tx.requirementSubmission.findUnique({ where: { collectionId_userId: { collectionId: id, userId: actorId } } });
   // Never read other users' privateOrigin for manager projections.
-  const rows = isManager ? await tx.requirementSubmission.findMany({ where: { collectionId: id }, orderBy: { updatedAt: 'asc' }, select: { userId: true, revision: true, publicAnswers: true, updatedAt: true } }) : [];
+  const rows = await tx.requirementSubmission.findMany({ where: { collectionId: id }, orderBy: { updatedAt: 'asc' }, take: 501, select: { userId: true, revision: true, publicAnswers: true, updatedAt: true } });
+  if (rows.length > 500) throw new ServiceError('UPSTREAM_UNAVAILABLE', 503, '需求超过当前完整汇总上限，未返回不完整结果');
   const organizerId = activity?.currentManagerId ?? survey.ownerUserId;
   const organizerAvatar = await tx.userAvatar.findUnique({ where: { userId: organizerId }, select: { bytes: true, contentType: true, digest: true, updatedAt: true } });
-  const profileIds = [...new Set([organizerId, actorId, ...rows.map(r => r.userId)])];
+  const profileIds = [...new Set([organizerId, actorId, ...(isManager ? rows.map(r => r.userId) : [])])];
   const profiles = await tx.privateProfile.findMany({ where: { userId: { in: profileIds } }, select: { userId: true, data: true } });
   // Allowlist only nickname. Birthdays, MBTI, signature, profile and departure are never projected.
   const nickname = (id: string) => {
@@ -94,18 +96,18 @@ export async function requirementSnapshotTx(tx: Tx, id: string, actorId: string,
     ownResponse = { ...publicResponse(own, nickname(actorId)), response_version: own.responseVersion, private_origin: origin ? origin.data : null };
   }
   const cancelled = Boolean(activity?.cancelledAt);
-  const teamBlocked = survey.kind === 'team';
   return {
     collection: { ...summary(survey, actorId, isManager, Boolean(own), now), draft,
       closed_at: survey.closedAt?.toISOString() ?? (state === 'closed' || state === 'finalized' ? survey.deadlineAt?.toISOString() ?? null : null),
       final_selection: survey.finalSelection ? normalizeFinalSelection(draft, survey.finalSelection as unknown as Parameters<typeof normalizeFinalSelection>[1]) : null,
       organizer_nickname: nickname(organizerId), organizer_avatar: organizerAvatarProjection(organizerAvatar) },
-    viewer: { is_manager: isManager, can_respond: !teamBlocked && !cancelled && state === 'open', can_edit: isManager && !cancelled && survey.status === 'draft',
-      can_publish: isManager && survey.status === 'draft' && !teamBlocked && !cancelled, can_close: isManager && !cancelled && state === 'open', can_finalize: isManager && state === 'closed' && !teamBlocked && !cancelled,
-      blocked_reason: teamBlocked ? '严格微信群成员校验尚未接通，团建仅支持私有草稿' : cancelled ? '关联活动已取消' : state === 'draft' ? '尚未发布需求收集' : state !== 'open' ? '需求收集已截止；填写不等于报名或接受最终安排' : null },
+    viewer: { is_manager: isManager, can_respond: !cancelled && state === 'open', can_edit: isManager && !cancelled && survey.status === 'draft',
+      can_publish: isManager && survey.status === 'draft' && !cancelled, can_close: isManager && !cancelled && state === 'open', can_finalize: isManager && state === 'closed' && !cancelled,
+      blocked_reason: cancelled ? '关联活动已取消' : state === 'draft' ? '尚未发布需求收集' : state !== 'open' ? '需求收集已截止；填写不等于报名或接受最终安排' : null },
     segments: (activity?.segments ?? []).map(s => ({ id: s.id, name: s.name, starts_at: s.startsAt.toISOString(), ends_at: s.endsAt.toISOString(), cancelled_at: s.cancelledAt?.toISOString() ?? null })),
     own_response: ownResponse,
-    manager: isManager ? { responses, ...surveyStatistics(draft, responses) } : null,
+    aggregate: aggregateResponses(draft, responses),
+    manager: isManager ? { responses: responses.map(managerResponse), ...surveyStatistics(draft, responses) } : null,
     server_time: now.toISOString()
   };
 }
@@ -124,9 +126,9 @@ export function getRequirementForActivity(activityId: string, actorId: string) {
 export function listRequirements(actorId: string): Promise<RequirementList> {
   return withDb(db => db.$transaction(async tx => {
     const now = new Date();
-    const rows = await tx.requirementSurvey.findMany({ where: { OR: [ { kind: 'team', ownerUserId: actorId }, { activity: { currentManagerId: actorId } }, { kind: 'friend', status: { not: 'draft' }, responses: { some: { userId: actorId } } } ] },
+    const rows = await tx.requirementSurvey.findMany({ where: { OR: [ { activityId: null, ownerUserId: actorId }, { activity: { currentManagerId: actorId } }, { status: { not: 'draft' }, responses: { some: { userId: actorId } } } ] },
       orderBy: { updatedAt: 'desc' }, take: 100, include: { activity: { select: { currentManagerId: true } }, responses: { where: { userId: actorId }, select: { userId: true } } } });
-    return { collections: rows.map(s => summary(s, actorId, s.kind === 'friend' ? s.activity?.currentManagerId === actorId : s.ownerUserId === actorId, s.responses.length > 0, now)), server_time: now.toISOString(), limit: 100 };
+    return { collections: rows.map(s => summary(s, actorId, s.activityId ? s.activity?.currentManagerId === actorId : s.ownerUserId === actorId, s.responses.length > 0, now)), server_time: now.toISOString(), limit: 100 };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }));
 }
 
@@ -137,7 +139,7 @@ export async function createRequirement(actorId: string, raw: RequirementCreateI
   return mutation(async tx => {
     if (input.activity_id) await tx.$queryRaw`SELECT "id" FROM "Activity" WHERE "id" = ${input.activity_id}::uuid FOR UPDATE`;
     const activity = input.activity_id ? await tx.activity.findUnique({ where: { id: input.activity_id }, include: { segments: true } }) : null;
-    if (input.kind === 'friend') {
+    if (input.activity_id) {
       if (!activity) throw new ServiceError('NOT_FOUND', 404, '未找到关联活动');
       assertSurveyManager(activity.currentManagerId === actorId);
       if (activity.cancelledAt) throw new ServiceError('ACTIVITY_CANCELLED', 409, '活动已取消');
@@ -193,7 +195,6 @@ export async function commandRequirementTx(tx: Tx, id: string, actorId: string, 
       if (survey.status !== 'open') throw new ServiceError('VERSION_CONFLICT', 409, '当前收集不能再次截止');
       await tx.requirementSurvey.update({ where: { id }, data: { status: 'closed', closedAt: now, revision: { increment: 1 } } });
     } else {
-      if (survey.kind === 'team') throw new ServiceError('NOT_CONFIGURED', 503, '未验证群成员权限，不能定案');
       if (effectiveSurveyStatus(survey, now) !== 'closed') throw new ServiceError('VERSION_CONFLICT', 409, '请在需求收集截止后确定安排');
       const selection = normalizeFinalSelection(draft, command.final_selection);
       // Advisory final selection only. No seats, original activity time/fee, or accepted plan revisions are changed.

@@ -25,14 +25,14 @@ export function validateQuestions(questions: RequirementQuestion[]) {
     for (const o of q.options) assert(validId(o.id) && validText(o.label, 100), '请填写有效选项');
   }
 }
-export function validateTeamDraft(draft: TeamDraft, serverNow: number) {
+export function validateTeamDraft(draft: TeamDraft, serverNow: number, preparation = false) {
   assert(validText(draft.title, 100) && typeof draft.description === 'string' && draft.description.length <= 1000, '标题或说明无效');
   assert(draft.timezone === 'Asia/Shanghai', '当前支持北京时间');
   const timestamp = z.iso.datetime({ offset: true });
-  assert(timestamp.safeParse(draft.starts_at).success && timestamp.safeParse(draft.deadline_at).success, '时间必须包含明确时区（Z 或 +08:00）');
+  assert((preparation && draft.starts_at === '' || timestamp.safeParse(draft.starts_at).success) && timestamp.safeParse(draft.deadline_at).success, '时间必须包含明确时区（Z 或 +08:00）');
   const start = Date.parse(draft.starts_at), deadline = Date.parse(draft.deadline_at);
-  assert(Number.isFinite(start) && Number.isFinite(deadline) && deadline > serverNow && deadline <= start, '截止时间须晚于当前时间且不晚于活动开始');
-  assert(draft.locations.length >= 1 && draft.locations.length <= 20, '请至少添加一个候选地点');
+  assert(Number.isFinite(deadline) && deadline > serverNow && (preparation && draft.starts_at === '' || Number.isFinite(start) && deadline <= start), '截止时间须晚于当前时间且不晚于活动开始');
+  assert(draft.locations.length >= (preparation ? 0 : 1) && draft.locations.length <= 20, '请至少添加一个候选地点');
   assert(unique(draft.locations.map(l => l.id)) && unique(draft.locations.map(l => l.label.trim())), '候选地点不能重复');
   for (const location of draft.locations) {
     assert(validId(location.id) && validText(location.label, 200), '候选地点无效');

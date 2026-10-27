@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import {
-  avatarAssetSchema, privateOriginSchema, requirementDraftSchema,
+  avatarAssetSchema, privateOriginSchema, requirementDraftSchema, requirementAggregateSchema,
   requirementFinalSelectionSchema, requirementResponseInputSchema,
   type RequirementList, type RequirementSnapshot,
 } from '@weevibe/contracts';
@@ -35,8 +35,9 @@ const snapshotSchema = z.object({
   }),
   segments: z.array(z.object({ id: z.uuid(), name: z.string(), starts_at: time, ends_at: time, cancelled_at: time.nullable() })),
   own_response: publicAnswer.extend({ response_version: version, private_origin: privateOriginSchema.nullable() }).nullable(),
+  aggregate: requirementAggregateSchema.optional(),
   manager: z.object({
-    responses: z.array(publicAnswer), respondent_count: count,
+    responses: z.array(publicAnswer.refine(r => r.budget_note === '' && r.preferences === '' && r.answers.length === 0 && r.location_ids.length === 0 && r.location_other === null && r.budget_max_yuan === undefined && r.preference_tags === undefined && r.constraint_tags === undefined, '当前后端尚未采用分字段隐私投影')), respondent_count: count,
     questions: z.array(z.object({ question_id: z.string(), respondent_count: count, options: z.array(optionCount), other_count: count })),
     locations: z.array(optionCount), location_other_count: count,
   }).nullable(),
@@ -62,8 +63,8 @@ export async function requestRequirement(path: string, method?: 'GET' | 'POST', 
   if (path === '/api/v1/requirements' && method === 'POST' && body && typeof body === 'object' && 'action' in body && body.action === 'create') {
     const input = body as { kind?: unknown; activity_id?: unknown };
     if (result.collection.kind !== input.kind) invalidResponse();
-    if (input.kind === 'team' ? result.collection.activity_id !== null
-      : typeof input.activity_id !== 'string' || result.collection.activity_id === null || !sameUuid(result.collection.activity_id, input.activity_id)) invalidResponse();
+    if (typeof input.activity_id === 'string' ? result.collection.activity_id === null || !sameUuid(result.collection.activity_id, input.activity_id)
+      : result.collection.activity_id !== null) invalidResponse();
     // A replay may legitimately return an updated draft/status. Do not compare them.
   }
   return result;

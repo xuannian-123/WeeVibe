@@ -4,7 +4,7 @@ import {
   type TeamDraft, type RequirementResponseInput, type RequirementFinalSelection, type PublicRequirementResponse
 } from '@weevibe/contracts';
 import { ServiceError } from '../http';
-export type SurveyState = { kind: string; status: string; deadlineAt: Date | null; closedAt: Date | null; revision: number };
+export type SurveyState = { kind: string; status: string; deadlineAt: Date | null; closedAt: Date | null; revision: number; activityId?: string | null };
 export type SurveySegment = { id: string; cancelledAt: Date | null; startsAt: Date };
 export function inputError(message = '需求内容格式不正确') { return new ServiceError('INVALID_INPUT', 400, message); }
 export function parseDraft(raw: unknown): TeamDraft {
@@ -31,17 +31,17 @@ export function assertSegmentOwnership(draft: TeamDraft, segments: SurveySegment
   }
 }
 export function assertPublishable(survey: SurveyState, draft: TeamDraft, segments: SurveySegment[], now: Date) {
-  if (survey.kind === 'team') throw new ServiceError('NOT_CONFIGURED', 503, '严格微信群成员校验尚未接通；团建仅可保存私有草稿，不能发布或收集答案');
   if (survey.status !== 'draft') throw new ServiceError('VERSION_CONFLICT', 409, '已发布的收集不能重新发布或改写题目');
-  try { validateTeamDraft(draft, now.getTime()); }
+  const preparation = survey.activityId === null || survey.kind === 'team';
+  try { validateTeamDraft(draft, now.getTime(), preparation); }
   catch (error) { if (error instanceof RequirementError) throw inputError(error.message); throw inputError(); }
   assertSegmentOwnership(draft, segments, survey.kind);
+  if (preparation) return;
   const valid = segments.filter(s => !s.cancelledAt);
   if (!valid.length) throw inputError('活动已无有效环节');
   if (Date.parse(draft.deadline_at) > Math.min(...valid.map(s => s.startsAt.getTime()))) throw inputError('填写截止时间不能晚于活动最早有效环节开始');
 }
 export function normalizeSubmission(survey: SurveyState, draft: TeamDraft, actorId: string, input: RequirementResponseInput, segments: SurveySegment[], now: Date) {
-  if (survey.kind === 'team') throw new ServiceError('NOT_CONFIGURED', 503, '尚未验证指定微信群成员权限，不能提交');
   if (effectiveSurveyStatus(survey, now) !== 'open') throw new ServiceError('SEGMENT_APPLICATION_CLOSED', 409, '需求收集已截止或尚未开放，未保存本次输入');
   const parsed = requirementResponseInputSchema.safeParse(input);
   if (!parsed.success) throw inputError();
@@ -62,7 +62,10 @@ export function normalizeSubmission(survey: SurveyState, draft: TeamDraft, actor
   const publicAnswers = {
     selected_segment_ids: answers.selected_segment_ids, answers: answers.answers,
     location_ids: [...data.location_ids], location_other: data.location_other?.trim() ?? null,
-    time_preferences: data.time_preferences.trim(), budget_note: data.budget_note.trim(), preferences: data.preferences.trim()
+    time_preferences: data.time_preferences.trim(), budget_note: data.budget_note.trim(), preferences: data.preferences.trim(),
+    ...(data.budget_max_yuan !== undefined ? { budget_max_yuan: data.budget_max_yuan } : {}),
+    ...(data.preference_tags !== undefined ? { preference_tags: data.preference_tags } : {}),
+    ...(data.constraint_tags !== undefined ? { constraint_tags: data.constraint_tags } : {})
   };
   // Explicit allowlist: no private origin can enter the public/manager JSON field.
   return { publicAnswers, privateOrigin: data.private_origin ?? null };

@@ -6,7 +6,7 @@ export type RequirementMessageSource = {
 export type RequirementMessage = { id: string; activity_id: string | null; requirement_id: string; title: string; created_at: string; read: boolean };
 /** Sources must be selected by current manager/own submission before calling. No answer or origin is used. */
 export function requirementMessages(source: RequirementMessageSource, readIds: Set<string>, now: Date): RequirementMessage[] {
- if (source.kind !== 'friend' || source.status === 'draft' || !source.deadlineAt) return [];
+ if (source.status === 'draft' || !source.deadlineAt) return [];
  const closedAt = source.closedAt && source.closedAt < source.deadlineAt ? source.closedAt : source.deadlineAt;
  if (closedAt > now) return [];
  const title = parseDraft(source.draft).title;

@@ -17,6 +17,7 @@ vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({
  Button:(p:Record<string,unknown>)=>createElement('button',{onClick:p.onClick,disabled:p.disabled},p.children as never),
  Text:(p:Record<string,unknown>)=>createElement('span',{},p.children as never),
  View:(p:Record<string,unknown>)=>createElement('div',{onClick:p.onClick},p.children as never),
+ Input:(p:Record<string,unknown>)=>createElement('input',{value:p.value,disabled:p.disabled,placeholder:p.placeholder,onInput:(e:{currentTarget:{value:string}})=>(p.onInput as (event:unknown)=>void)?.({detail:{value:e.currentTarget.value}})}),
  Textarea:(p:Record<string,unknown>)=>createElement('textarea',{value:p.value,disabled:p.disabled,placeholder:p.placeholder,onInput:(e:{currentTarget:{value:string}})=>(p.onInput as (event:unknown)=>void)?.({detail:{value:e.currentTarget.value}})})
 }));
 import {ResponseForm} from '../apps/miniprogram/src/features/requirements/response-form';

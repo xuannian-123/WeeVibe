@@ -13,6 +13,9 @@ export function responseInputFromSaved(response: OwnRequirementResponse | null |
     answers: response.answers.map(answer => ({ ...answer, option_ids: [...answer.option_ids] })),
     location_ids: [...response.location_ids], location_other: response.location_other,
     time_preferences: response.time_preferences, budget_note: response.budget_note, preferences: response.preferences,
+    ...(response.budget_max_yuan !== undefined ? { budget_max_yuan: response.budget_max_yuan } : {}),
+    ...(response.preference_tags !== undefined ? { preference_tags: [...response.preference_tags] } : {}),
+    ...(response.constraint_tags !== undefined ? { constraint_tags: [...response.constraint_tags] } : {}),
     private_origin: response.private_origin ? { ...response.private_origin } : null
   };
 }

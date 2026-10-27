@@ -15,7 +15,7 @@ const segmentSchema = z.object({
   position: z.number().int().min(0).max(2_147_483_647),
   plan_revision: positiveInt,
   cancelled: z.boolean(),
-  availability: z.enum(['available', 'cancelled_history_not_exposed']),
+  availability: z.enum(['available', 'counts_only', 'cancelled_history_not_exposed']),
   members: z.array(memberSchema).max(PUBLIC_ROSTER_LIMIT).nullable(),
   counts: z.object({ occupied_count: count, accepted_count: count, pending_acceptance_count: count }).strict().nullable()
 }).strict();
@@ -38,6 +38,12 @@ export const publicRosterSnapshotSchema = z.object({
     const hidden = snapshot.cancelled || segment.cancelled;
     if (hidden) {
       if (segment.availability !== 'cancelled_history_not_exposed' || segment.members !== null || segment.counts !== null) issue('已取消历史名册当前未提供');
+      continue;
+    }
+    if (segment.availability === 'counts_only') {
+      if (segment.members !== null || segment.counts === null) { issue('人数投影不得包含姓名'); continue; }
+      if (segment.counts.occupied_count !== segment.counts.accepted_count + segment.counts.pending_acceptance_count) issue('人数不一致');
+      total += segment.counts.occupied_count;
       continue;
     }
     if (segment.availability !== 'available' || segment.members === null || segment.counts === null) { issue('当前名册不完整'); continue; }

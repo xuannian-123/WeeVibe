@@ -9,9 +9,26 @@ import { getActivityRoster } from '../apps/web/src/server/activities/roster';
 import { GET } from '../apps/web/src/app/api/v1/activities/[activityId]/roster/route';
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2031-01-01T00:00:00Z')); h.f = createRosterFixture(); h.authenticate.mockReset(); h.authenticate.mockResolvedValue({ user_id: I.actor }); });
 afterEach(() => vi.useRealTimers());
-const read = () => getActivityRoster(I.activity);
+const read = () => getActivityRoster(I.activity, I.actor);
 const route = (headers: Record<string, string> = {}, id = I.activity) => GET(new Request(`https://local.invalid/api/v1/activities/${id}/roster`, { headers }), { params: Promise.resolve({ activityId: id }) });
 describe('actual roster service and route with offline transaction/query doubles, not real PG', () => {
+  it('logged-in outsider and pending applicant get only counts, never signup names', async () => {
+    const outsider = rosterId(9000); h.authenticate.mockResolvedValueOnce({ user_id: outsider });
+    const response = await route({ authorization: 'Bearer outsider-fixture' });
+    expect(response.status).toBe(200); const body = await response.json();
+    expect(body.segments[0]).toMatchObject({ availability: 'counts_only', members: null, counts: { occupied_count: 3 } });
+    expect(h.f.tx.participation.findMany.mock.calls[0][0].select).not.toHaveProperty('displayName');
+  });
+  it('an actual retained joined seat may read names; exiting it removes that access', async () => {
+    const row = h.f.rows[0];
+    expect((await getActivityRoster(I.activity, row.userId)).segments[0].availability).toBe('available');
+    row.status = 'exited';
+    expect((await getActivityRoster(I.activity, row.userId)).segments[0]).toMatchObject({ availability: 'counts_only', members: null });
+  });
+  it('old manager with no seat loses name access after handover', async () => {
+    h.f.activity.currentManagerId = rosterId(9001);
+    expect((await getActivityRoster(I.activity, I.actor)).segments[0].members).toBeNull();
+  });
   it('returns complete distinct occupied rows per segment, including retained seats with old/null acceptance', async () => {
     const r = await read(); expect(publicRosterSnapshotSchema.parse(r)).toEqual(r);
     expect(r.segments[0]).toMatchObject({ counts: { occupied_count: 3, accepted_count: 1, pending_acceptance_count: 2 }, members: [{ display_name: '同名', status: 'joined' }, { display_name: '同名', status: 'awaiting_acceptance' }, { display_name: null, status: 'awaiting_acceptance' }] });
@@ -20,7 +37,7 @@ describe('actual roster service and route with offline transaction/query doubles
   it('uses one RepeatableRead transaction for activity/version and complete joined rows', async () => {
     await read(); expect(h.f.db.$transaction).toHaveBeenCalledTimes(1); expect(h.f.db.$transaction.mock.calls[0][1]).toEqual({ isolationLevel: 'RepeatableRead' }); expect(h.f.trace).toEqual(['activity', 'participation']);
     const a = h.f.tx.activity.findUnique.mock.calls[0][0], p = h.f.tx.participation.findMany.mock.calls[0][0];
-    expect(Object.keys(a.select).sort()).toEqual(['cancelledAt', 'id', 'revision', 'segments']); expect(a.select.segments).toEqual({ orderBy: [{ position: 'asc' }, { id: 'asc' }], take: 2001, select: { id: true, activityId: true, name: true, position: true, planRevision: true, cancelledAt: true } });
+    expect(Object.keys(a.select).sort()).toEqual(['cancelledAt', 'currentManagerId', 'id', 'revision', 'segments']); expect(a.select.segments).toEqual({ orderBy: [{ position: 'asc' }, { id: 'asc' }], take: 2001, select: { id: true, activityId: true, name: true, position: true, planRevision: true, cancelledAt: true } });
     expect(p).toEqual({ where: { activityId: I.activity, status: 'joined', segmentId: { in: [I.main, I.second] } }, orderBy: [{ segmentId: 'asc' }, { joinedAt: 'asc' }, { id: 'asc' }], take: 2001, select: { segmentId: true, displayName: true, acceptedPlanRevision: true } });
   });
   it('never reads other identity, profile, application, origin or response fields; never writes', async () => {
@@ -85,7 +102,7 @@ describe('actual roster service and route with offline transaction/query doubles
     const old = structuredClone(h.f.activity.segments[0]); h.f.rows = []; h.f.activity.segments = Array.from({ length: 2000 }, (_, i) => ({ ...old, id: rosterId(100 + i), position: i })); expect((await read()).segments).toHaveLength(2000);
     h.f.activity.segments.push({ ...old, id: rosterId(6000), position: 2000 }); h.f.tx.participation.findMany.mockClear(); await expect(read()).rejects.toMatchObject({ code: 'ROSTER_LIMIT_EXCEEDED' }); expect(h.f.tx.participation.findMany).not.toHaveBeenCalled();
   });
-  it('anonymous public GET is no-store and has no actor-dependent projection', async () => { const response = await route(); expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('no-store'); expect(await response.json()).toEqual(await read()); expect(h.authenticate).not.toHaveBeenCalled(); });
+  it('anonymous GET exposes counts only and never selects signup names', async () => { const response=await route(); expect(response.status).toBe(200);expect(response.headers.get('cache-control')).toBe('no-store');const body=await response.json();expect(body.segments[0]).toMatchObject({availability:'counts_only',members:null,counts:{occupied_count:3}});expect(JSON.stringify(body)).not.toContain('同名');expect(h.f.tx.participation.findMany.mock.calls[0][0].select).not.toHaveProperty('displayName');expect(h.authenticate).not.toHaveBeenCalled(); });
   it('authenticated public GET authenticates bearer but does not reveal extra private fields', async () => { const response = await route({ authorization: 'Bearer fixture-session' }); expect(response.status).toBe(200); expect(h.authenticate).toHaveBeenCalledExactlyOnceWith('Bearer fixture-session'); expect(await response.json()).toEqual(await read()); });
   it.each(['', 'Bearer invalid'])('invalid supplied bearer %s never downgrades to public anonymous', async authorization => { h.authenticate.mockRejectedValueOnce(new ServiceError('UNAUTHENTICATED', 401, '请重新登录')); const response = await route({ authorization }); expect(response.status).toBe(401); expect(response.headers.get('cache-control')).toBe('no-store'); expect(h.f.db.$transaction).not.toHaveBeenCalled(); expect(JSON.stringify(await response.json())).not.toContain('同名'); });
   it('malformed non-array activity segments failclosed', async () => { h.f.tx.activity.findUnique.mockResolvedValueOnce({ id: I.activity, revision: 1, cancelledAt: null, segments: null }); await expect(read()).rejects.toMatchObject({ code: 'ROSTER_UNAVAILABLE' }); });

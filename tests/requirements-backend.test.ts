@@ -70,7 +70,7 @@ describe('requirements persisted transaction boundaries (test transaction double
   vi.useFakeTimers();vi.setSystemTime(now);const f=fixture();
   await commandRequirementTx(f.tx,id,alice,{action:'respond',expected_revision:2,expected_response_version:0,response});
   const manager=await requirementSnapshotTx(f.tx,id,owner,now);
-  expect(manager.manager?.responses[0].budget_note).toBe(response.budget_note);
+  expect(manager.manager?.responses[0].budget_note).toBe('');expect(manager.manager?.responses[0].preferences).toBe('');expect(manager.manager?.responses[0].answers).toEqual([]);expect(manager.manager?.responses[0].time_preferences).toBe(response.time_preferences);expect(manager.aggregate?.respondent_count).toBe(1);
   expect(JSON.stringify(manager)).not.toContain('PRIVATE_HOME_SENTINEL');expect(JSON.stringify(manager)).not.toContain('PRIVATE_PROFILE_SENTINEL');expect(JSON.stringify(manager)).not.toContain('longitude');
   expect(f.raw.requirementSubmission.findMany.mock.calls[0][0].select).not.toHaveProperty('privateOrigin');
   const own=await requirementSnapshotTx(f.tx,id,alice,now);expect(own.own_response?.private_origin?.label).toBe('PRIVATE_HOME_SENTINEL');expect(own.manager).toBeNull();
@@ -89,9 +89,9 @@ describe('requirements persisted transaction boundaries (test transaction double
   await expect(commandRequirementTx(f.tx,id,owner,{action:'save-draft',expected_revision:2,draft:{...draft,deadline_at:'2040-01-01T00:00:00Z'}})).rejects.toMatchObject({code:'VERSION_CONFLICT'});
   expect(f.raw.requirementSurvey.update).not.toHaveBeenCalled();
  });
- it('blocks team publishing even for owner and never allows unknown group flags',async()=>{
-  vi.useFakeTimers();vi.setSystemTime(now);const f=fixture({kind:'team',activityId:null,status:'draft',deadlineAt:null});
-  await expect(commandRequirementTx(f.tx,id,owner,{action:'publish',expected_revision:2})).rejects.toMatchObject({code:'NOT_CONFIGURED'});
+ it('allows team preparation publishing by owner without accepting client group claims',async()=>{
+  vi.useFakeTimers();vi.setSystemTime(now);const f=fixture({kind:'team',activityId:null,status:'draft',deadlineAt:null,draft:{...draft,starts_at:'',locations:[],questions:[]} as unknown as Prisma.JsonObject});
+  await expect(commandRequirementTx(f.tx,id,owner,{action:'publish',expected_revision:2})).resolves.toMatchObject({collection:{status:'open'},viewer:{can_respond:true}});
   expect(requirementCommandSchema.safeParse({action:'publish',expected_revision:2,verifiedGroupAccess:true}).success).toBe(false);
  });
  it('finalizes only after cutoff and never mutates original activity or user acceptance',async()=>{
@@ -104,7 +104,7 @@ describe('requirements strict input and domain validation',()=>{
  it('does not accept user ownership claims or private origin mixed into public answer fields',()=>{
   expect(requirementCommandSchema.safeParse({action:'respond',expected_revision:2,expected_response_version:0,user_id:bob,response}).success).toBe(false);
   expect(requirementCommandSchema.safeParse({action:'respond',expected_revision:2,expected_response_version:0,response:{...response,answers:[{...response.answers[0],private_origin:'secret'}]}}).success).toBe(false);
-  expect(requirementCreateSchema.safeParse({action:'create',kind:'friend',idempotency_key:'a-valid-key',draft}).success).toBe(false);
+  expect(requirementCreateSchema.safeParse({action:'create',kind:'friend',idempotency_key:'a-valid-key',draft}).success).toBe(true);
  });
  it('projects only canonical avatar asset fields, never raw user/profile data',()=>{
   const bytes=Buffer.from([255,216,255,217]);const digest=createHash('sha256').update(bytes).digest('hex');

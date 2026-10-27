@@ -28,7 +28,7 @@ export async function readCoordinationSourceTx(tx:Tx,collectionId:string,actorId
  if(!survey)throw new ServiceError('NOT_FOUND',404,'未找到需求收集');
  if(survey.kind==='team'){
   if(survey.ownerUserId!==actorId)throw new ServiceError('FORBIDDEN',403,'仅当前管理者可准备协调资料');
-  throw new ServiceError('NOT_CONFIGURED',503,'严格群成员校验尚未接通，团建仅支持私有草稿，不能准备多人候选');
+  throw new ServiceError('NOT_CONFIGURED',503,'团建筹备尚未接通多人协调模型；可正常分享收集需求，此处不能生成候选');
  }
  if(survey.kind!=='friend'||!survey.activityId)throw new ServiceError('NOT_CONFIGURED',503,'此需求收集没有可核对的关联朋友活动');
  const activity=await tx.activity.findUnique({where:{id:survey.activityId},select:activitySelect});

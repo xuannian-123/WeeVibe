@@ -10,12 +10,12 @@ function overLimit(): never { throw new ServiceError('ROSTER_LIMIT_EXCEEDED', 50
 
 // A single repeatable-read snapshot binds the names to their exact plan/version
 // counts. No profile/user/application/answer/private-origin relation is read.
-export function getActivityRoster(rawActivityId: string): Promise<PublicRosterSnapshot> {
+export function getActivityRoster(rawActivityId: string, actorId: string | null = null): Promise<PublicRosterSnapshot> {
   const id = activityIdSchema.safeParse(rawActivityId);
   if (!id.success) throw new ServiceError('INVALID_INPUT', 400, '活动标识无效');
   return withDb(db => db.$transaction(async tx => {
     const raw = await tx.activity.findUnique({ where: { id: id.data }, select: {
-      id: true, revision: true, cancelledAt: true,
+      id: true, revision: true, cancelledAt: true, currentManagerId: true,
       segments: { orderBy: [{ position: 'asc' }, { id: 'asc' }], take: PUBLIC_ROSTER_LIMIT + 1, select: {
         id: true, activityId: true, name: true, position: true, planRevision: true, cancelledAt: true
       } }
@@ -28,23 +28,28 @@ export function getActivityRoster(rawActivityId: string): Promise<PublicRosterSn
     if (new Set(activity.segments.map(s => s.id)).size !== activity.segments.length || new Set(activity.segments.map(s => s.position)).size !== activity.segments.length) unavailable();
     const segments = [...activity.segments].sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
     const active = activity.cancelledAt ? [] : segments.filter(s => !s.cancelledAt);
+    // Authenticate at the route, then authorize from this transaction's current
+    // management/seat state. Knowing an activity or invitation ID grants no names.
+    const canSeeNames = actorId !== null && (activity.currentManagerId === actorId || Boolean(active.length && await tx.participation.findFirst({
+      where: { activityId: id.data, userId: actorId, status: 'joined', segmentId: { in: active.map(s => s.id) } }, select: { id: true }
+    })));
     const rawMembers = active.length ? await tx.participation.findMany({
       where: { activityId: id.data, status: 'joined', segmentId: { in: active.map(s => s.id) } },
       // joinedAt/id only order rows; neither is selected or exposed.
       orderBy: [{ segmentId: 'asc' }, { joinedAt: 'asc' }, { id: 'asc' }], take: PUBLIC_ROSTER_LIMIT + 1,
-      select: { segmentId: true, displayName: true, acceptedPlanRevision: true }
+      select: { segmentId: true, acceptedPlanRevision: true, ...(canSeeNames ? { displayName: true } : {}) }
     }) : [];
     if (Array.isArray(rawMembers) && rawMembers.length > PUBLIC_ROSTER_LIMIT) overLimit();
     if (!Array.isArray(rawMembers) || rawMembers.some(row => !row || typeof row !== 'object'
-      || Object.keys(row).length !== 3 || !activityIdSchema.safeParse(row.segmentId).success
-      || !(row.displayName === null || typeof row.displayName === 'string' && row.displayName.length <= 40)
+      || Object.keys(row).length !== (canSeeNames ? 3 : 2) || !activityIdSchema.safeParse(row.segmentId).success
+      || canSeeNames && !(row.displayName === null || typeof row.displayName === 'string' && row.displayName.length <= 40)
       || !(row.acceptedPlanRevision === null || positiveInt(row.acceptedPlanRevision)))) unavailable();
     const members = new Map<string, NonNullable<PublicRosterSnapshot['segments'][number]['members']>>(active.map(s => [s.id, []]));
     const versions = new Map(active.map(s => [s.id, s.planRevision]));
     for (const row of rawMembers) {
       const version = versions.get(row.segmentId), list = members.get(row.segmentId);
       if (version === undefined || !list || (row.acceptedPlanRevision !== null && row.acceptedPlanRevision > version)) unavailable();
-      list.push({ display_name: row.displayName, status: row.acceptedPlanRevision === version ? 'joined' : 'awaiting_acceptance' });
+      list.push({ display_name: canSeeNames ? row.displayName : null, status: row.acceptedPlanRevision === version ? 'joined' : 'awaiting_acceptance' });
     }
     const response = publicRosterSnapshotSchema.safeParse({
       activity_id: activity.id, activity_revision: activity.revision, server_time: new Date().toISOString(),
@@ -54,7 +59,7 @@ export function getActivityRoster(rawActivityId: string): Promise<PublicRosterSn
         const list = members.get(s.id) ?? [];
         const accepted = list.filter(m => m.status === 'joined').length;
         return { segment_id: s.id, name: s.name, position: s.position, plan_revision: s.planRevision, cancelled: s.cancelledAt !== null,
-          availability: hidden ? 'cancelled_history_not_exposed' : 'available', members: hidden ? null : list,
+          availability: hidden ? 'cancelled_history_not_exposed' : canSeeNames ? 'available' : 'counts_only', members: hidden || !canSeeNames ? null : list,
           counts: hidden ? null : { occupied_count: list.length, accepted_count: accepted, pending_acceptance_count: list.length - accepted } };
       })
     });
