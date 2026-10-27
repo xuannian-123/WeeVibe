@@ -23,7 +23,7 @@ CloudBase沿用既有套餐及共享额度，当前期限为2026-11-04，自动�
 
 ## 构建产物
 
-工作流 `Package API for SCF` 只允许手动触发，限公开仓库的标准 Ubuntu runner。使用 Node 24、pnpm 11.15.1，从干净源码安装、生成 Prisma、执行既有 `build:api`（包含 Prisma WASM 产物校验），再打包。它不加载真实环境变量、不创建测试凭据、不执行数据库迁移、不发布 Release。
+工作流 `Package API for SCF` 使用标准 Ubuntu runner，私有仓库仅允许显式手动触发；常规 push/PR 不会为私有仓库额外打包。触发前核对账号剩余免费 Actions 分钟与存储，不升级或开启超额付费。使用 Node 24、pnpm 11.15.1，从干净源码安装、生成 Prisma、执行既有 `build:api`（包含 Prisma WASM 产物校验），再打包。它不加载真实环境变量、不创建测试凭据、不执行数据库迁移、不发布 Release，也不部署云函数。
 
 `scripts/package-api-scf.mjs` 只接受 Linux 产物，保留 Next monorepo standalone 目录结构，补齐 `apps/web/.next/static` 和可选 `public`，保留经边界校验的内部相对链接及 pnpm 模块解析布局，并拒绝环境文件、私钥和本机工作目录。最终 ZIP 根目录含 `scf_bootstrap`，以 `/var/lang/node24/bin/node apps/web/server.js` 启动，监听 `0.0.0.0:9000`。ZIP 在忽略目录 `.working` 内，不应提交仓库。Actions 下载得到的外层 artifact ZIP 需先解压，再使用内层 `weevibe-api-scf.zip`。
 
