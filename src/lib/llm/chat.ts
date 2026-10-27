@@ -23,7 +23,7 @@ export type ChatCtx = {
 };
 
 /** 内置地名小词典只有上海的地点：只在上海的局里用，别把北京的"南站"认成上海南站 */
-function useDict(ctx: ChatCtx): boolean {
+function dictApplies(ctx: ChatCtx): boolean {
   return !ctx.ju.spec.city || ctx.ju.spec.city.includes("上海");
 }
 
@@ -311,7 +311,7 @@ export function ruleExtract(text: string, ctx: ChatCtx, pending: ChatStep | unde
   if (nm) patch.name = nm[1];
 
   // 地点：说了地名；或老朋友确认“还是那儿”（小词典只在上海的局里用，其他城市由 chatTurn 调高德地理编码）
-  const place = useDict(ctx) ? lookupPlace(t) : undefined;
+  const place = dictApplies(ctx) ? lookupPlace(t) : undefined;
   if (place) patch.location = place;
   else if (pending === "location" && ctx.profile?.lastLocation && (AFFIRM_RE.test(s) || /还是那|老地方/.test(s))) {
     patch.location = { ...ctx.profile.lastLocation };
@@ -735,7 +735,7 @@ function mergePatch(rule: ChatPatch, llm: ReturnType<typeof llmChatSchema.parse>
     if (llm.rsvp === "yes" || (/不|没|算了|下次|鸽/.test(text) && !CONDITIONAL_RE.test(strip(text)))) out.rsvp = llm.rsvp;
   }
   if (out.rsvp === "no") return { rsvp: "no" };
-  if (!out.location && llm.placeName && useDict(ctx)) {
+  if (!out.location && llm.placeName && dictApplies(ctx)) {
     const place = lookupPlace(llm.placeName);
     if (place) out.location = place;
   }
