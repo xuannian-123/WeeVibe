@@ -56,7 +56,7 @@ try {
   });
   await check('ongoing and awaiting-reaccept participation remain eligible without accepting arrangements', async () => {
     const f = await fixture();
-    await db.segment.update({ where: { id: f.segment }, data: { startsAt: new Date(Date.now() - 1000), endsAt: new Date(Date.now() + 3600000), planRevision: 2 } });
+    await db.segment.update({ where: { id: f.segment }, data: { deadlineAt: new Date(Date.now() - 3600000), startsAt: new Date(Date.now() - 1000), endsAt: new Date(Date.now() + 3600000), planRevision: 2 } });
     const state = await commandHandover(f.id, f.offer, f.b, f.command('accept'));
     assert.equal(state.activity.viewer.is_manager, true);
     assert.equal((await db.participation.findUniqueOrThrow({ where: { segmentId_userId: { segmentId: f.segment, userId: f.b } } })).acceptedPlanRevision, 1);
