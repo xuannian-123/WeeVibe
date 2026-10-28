@@ -4,6 +4,7 @@ import { inboxSchema, type InboxMessage } from '@weevibe/contracts';
 import { withDb } from './db';
 import { ServiceError } from './http';
 import type { Tx } from './activities/state';
+import { handoverMessage } from './handover-message';
 import { requirementMessageSelect, requirementMessages } from './requirements/messages';
 
 // Source messages are projected for the authenticated actor. Read state never
@@ -18,7 +19,7 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
         events: { where: { type: { in: ['segment_capacity_changed', 'segment_deadline_extended', 'activity_cancelled', 'main_segment_changed', 'formation_confirmed', 'arrangement_changed', 'segment_arrangement_changed'] } }, orderBy: { createdAt: 'desc' }, take: 30, select: { id: true, type: true, createdAt: true, detail: true } },
       } }),
     tx.activityApplication.findMany({ where: { applicantUserId: actor, status: { in: ['approved', 'rejected'] } }, orderBy: { decidedAt: 'desc' }, take: 100, select: { id: true, activityId: true, status: true, decidedAt: true, activity: { select: { name: true } } } }),
-    tx.managementHandover.findMany({ where: { OR: [{ fromUserId: actor }, { toUserId: actor }] }, orderBy: { createdAt: 'desc' }, take: 100, select: { id: true, activityId: true, fromUserId: true, toUserId: true, status: true, createdAt: true, activity: { select: { name: true, currentManagerId: true, cancelledAt: true } } } }),
+    tx.managementHandover.findMany({ where: { OR: [{ fromUserId: actor }, { toUserId: actor }] }, orderBy: { createdAt: 'desc' }, take: 100, select: { id: true, activityId: true, fromUserId: true, toUserId: true, status: true, createdAt: true, resolvedAt: true, fromManagementRevision: true, activity: { select: { name: true, currentManagerId: true, managementRevision: true, cancelledAt: true } } } }),
     tx.requirementSurvey.findMany({ where: { status: { not: 'draft' }, AND: [{ OR: [{ activityId: null, ownerUserId: actor }, { activity: { currentManagerId: actor } }, { responses: { some: { userId: actor } } }] }, { OR: [{ deadlineAt: { lte: now } }, { closedAt: { not: null } }] }] }, select: requirementMessageSelect, orderBy: { updatedAt: 'desc' }, take: 100 }),
     tx.gatheringNotificationRecipient.findMany({where:{userId:actor},orderBy:[{createdAt:'desc'},{id:'asc'}],take:100,select:{id:true,createdAt:true,event:{select:{action:true,gatheringId:true,gathering:{select:{kind:true}}}}}}),
   ]);
@@ -42,11 +43,7 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
     }
   }
   for (const application of decisions) if (application.decidedAt) messages.push({ id: `application:${application.id}:${application.status}`, activity_id: application.activityId, title: application.activity.name, summary: application.status === 'approved' ? '你的报名已通过，查看参加的环节和安排' : '你的报名未通过，可查看活动最新情况', created_at: application.decidedAt.toISOString(), read: false, pending: false, status: application.status === 'approved' ? '已加入' : '未通过', section: 'activity' });
-  for (const offer of offers) {
-    const pending = offer.status === 'pending' && offer.toUserId === actor && !offer.activity.cancelledAt && offer.activity.currentManagerId === offer.fromUserId;
-    const status = ({ pending: offer.toUserId === actor ? '待接任' : '等待回应', accepted: '已接任', rejected: '已拒绝', withdrawn: '已撤回', invalidated: '已失效' })[offer.status];
-    messages.push({ id: `handover:${offer.id}`, activity_id: offer.activityId, title: offer.activity.name, summary: offer.toUserId === actor ? '你收到一份活动管理交接邀请' : '查看你发起的管理交接进展', created_at: offer.createdAt.toISOString(), read: false, pending, status, section: 'handover' });
-  }
+  for (const offer of offers) messages.push(handoverMessage(offer, actor));
   for (const survey of surveys) for (const source of requirementMessages(survey, new Set(), now)) messages.push({ ...source, title: source.title.slice(0, 200), summary: source.title.slice(0, 300), pending: false, status: '筹备进展', section: 'requirement' });
   for(const notice of gatheringNotices){
     const friend=notice.event.gathering.kind==='friend',updated=notice.event.action==='updated';
