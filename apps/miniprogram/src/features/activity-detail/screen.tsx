@@ -44,7 +44,8 @@ export default function ActivityDetailScreen() {
   const [bookingBusy, setBookingBusy] = useState(false);
   const messageSection=Taro.getCurrentInstance?.().router?.params.section;
   useEffect(()=>{if(!detail||!['applications','arrangement','handover','activity'].includes(String(messageSection)))return;const timer=setTimeout(()=>{try{void Taro.pageScrollTo?.({selector:`#activity-${messageSection}`,duration:250})?.catch(()=>{});}catch{}},250);return()=>clearTimeout(timer);},[detail?.activity_id,messageSection]);
-  const anyBusy = editBusy || applications.anyBusy || participationBusy || invitationBusy || formationBusy || arrangementBusy || withdrawalBusy || cancellationBusy || handoverBusy || rebookBusy || mainSegmentBusy || capacityBusy || deadlineBusy || bookingBusy;
+  const editorPeerBusy = applications.anyBusy || participationBusy || invitationBusy || formationBusy || arrangementBusy || withdrawalBusy || cancellationBusy || handoverBusy || rebookBusy || mainSegmentBusy || capacityBusy || deadlineBusy || bookingBusy;
+  const anyBusy = editBusy || editorPeerBusy;
   const otherWriteBusy = editBusy || participationBusy || invitationBusy || formationBusy || arrangementBusy || withdrawalBusy || cancellationBusy || handoverBusy || rebookBusy || mainSegmentBusy || capacityBusy || deadlineBusy || bookingBusy;
   const applicationState = { ...applications, anyBusy, fresh: applications.fresh && !otherWriteBusy,
     submit: () => { if (!otherWriteBusy) applications.submit(); },
@@ -114,7 +115,7 @@ export default function ActivityDetailScreen() {
 
     {detail && <BookingPanel key={`booking:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!editBusy && !read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !formationBusy && !arrangementBusy && !withdrawalBusy && !cancellationBusy && !handoverBusy && !rebookBusy && !mainSegmentBusy && !capacityBusy && !deadlineBusy && !login.busy} anyBusy={anyBusy || login.busy} refresh={read.refresh} onBusyChange={setBookingBusy} />}
 
-    {detail && <ArrangementEditor key={`edit:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !formationBusy && !arrangementBusy && !withdrawalBusy && !cancellationBusy && !handoverBusy && !rebookBusy && !mainSegmentBusy && !capacityBusy && !deadlineBusy && !bookingBusy && !login.busy} anyBusy={anyBusy && !editBusy} refresh={read.refresh} onBusyChange={setEditBusy} />}
+    {detail && <ArrangementEditor key={`edit:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !formationBusy && !arrangementBusy && !withdrawalBusy && !cancellationBusy && !handoverBusy && !rebookBusy && !mainSegmentBusy && !capacityBusy && !deadlineBusy && !bookingBusy && !login.busy} anyBusy={editorPeerBusy || login.busy} refresh={read.refresh} onBusyChange={setEditBusy} />}
 
     {detail && <ActivityMore detail={detail} showMore={showMore} setShowMore={setShowMore} login={login} anyBusy={anyBusy} />}
     <Action variant="text" disabled={anyBusy} onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>返回首页</Action>
