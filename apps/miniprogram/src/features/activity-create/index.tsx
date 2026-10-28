@@ -32,10 +32,11 @@ export function OrdinaryEditor({ initialForm, draftSuffix = '' }: { initialForm?
   const completedKey = `weego-created-v1:${userId ?? 'guest'}${draftSuffix}`;
   const [form, setForm] = useState<ActivityForm>(() => initialForm ?? emptyForm()); const [loadedFor, setLoadedFor] = useState('');
   const [validation, setValidation] = useState(''); const [draftMessage, setDraftMessage] = useState('');
+  const [navigating, setNavigating] = useState(false); const navigationLock = useRef(false);
   const [review, setReview] = useState<{ userId: string; input: CreateActivityInput }>();
   const mounted=useRef(true), visible=useRef(true), epoch=useRef(0);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;epoch.current++;};},[]);
-  const deactivate=()=>{visible.current=false;epoch.current++;};useDidHide(deactivate);useUnload(deactivate);useDidShow(()=>{visible.current=true;});
+  const deactivate=()=>{visible.current=false;epoch.current++;navigationLock.current=false;setNavigating(false);};useDidHide(deactivate);useUnload(deactivate);useDidShow(()=>{visible.current=true;});
   const latest=useRef({source,loading:identity.loading,error:identity.error});latest.current={source,loading:identity.loading,error:identity.error};
   const assertSource=()=>{if(!source||getToken()!==source.session)throw new ApiClientError('UNAUTHENTICATED','登录身份已变化，请重新读取；原草稿仍按账号隔离保存。',401);};
   useEffect(() => {
@@ -82,12 +83,27 @@ export function OrdinaryEditor({ initialForm, draftSuffix = '' }: { initialForm?
     try { assertSource(); Taro.removeStorageSync(completedKey); write.resetResult(); setReview(undefined); setForm(emptyForm()); setValidation(''); }
     catch { setValidation('暂时无法开始新活动，请先查看已创建的活动。'); }
   }
+  async function openCreatedPage(page: 'requirements' | 'activity') {
+    if (!completedId || write.pending || write.busy || identity.loading || identity.error || navigationLock.current || !mounted.current || !visible.current) return;
+    const ticket = epoch.current;
+    try {
+      assertSource(); navigationLock.current = true; setNavigating(true); setValidation('');
+      const target = page === 'requirements' ? `requirements/index?activity_id=${encodeURIComponent(completedId)}` : `activity/index?id=${encodeURIComponent(completedId)}`;
+      await Taro.redirectTo({ url: `/pages/${target}` });
+    } catch {
+      if (mounted.current && visible.current && epoch.current === ticket) setValidation(getToken() !== source?.session ? '账号已变化，请重新读取本人创建记录。' : '页面暂时无法打开，请重试。活动已保存，不需要重新发布。');
+    } finally {
+      if (epoch.current === ticket) { navigationLock.current = false; if (mounted.current) setNavigating(false); }
+    }
+  }
   if (completedId && !write.pending) return <View className="screen">
     <View className="page-intro"><Text className="page-eyebrow">{BRAND_NAME} / 一起出发</Text><Text className="page-title">这场活动已发起</Text><Text className="page-subtitle">安排已保存，可以进入详情邀请朋友。</Text></View>
     <Panel title="接下来，一起把人约齐">
       <Notice tone="success">服务端已确认保存。达到人数后，仍需你核实安排并确认成局。</Notice>
-      <Action variant="primary" onClick={() => { try { assertSource(); void Taro.redirectTo({ url: `/pages/activity/index?id=${encodeURIComponent(completedId)}` }); } catch { setValidation('账号已变化，请重新读取本人创建记录。'); } }}>查看活动</Action>
-      <Action onClick={startAnother}>发起另一场活动</Action>
+      <Text className="caption">先收集朋友的时间与意向，再共同核对安排。填写需求不等于报名，批准后才占用名额。</Text>
+      <Action variant="primary" disabled={navigating || identity.loading || !!identity.error} onClick={() => { void openCreatedPage('requirements'); }}>收集参与需求</Action>
+      <Action disabled={navigating || identity.loading || !!identity.error} onClick={() => { void openCreatedPage('activity'); }}>查看活动</Action>
+      <Action disabled={navigating} onClick={startAnother}>发起另一场活动</Action>
       {validation && <Notice tone="error">{validation}</Notice>}
     </Panel>
     <Action variant="text" onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>回到首页</Action>
