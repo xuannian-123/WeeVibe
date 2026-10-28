@@ -45,8 +45,9 @@ try {
   assert(new RegExp(transportEntry).test(common), 'Compiled transport entry does not return through cloud-http');
   const app = json(root, 'apps/miniprogram/dist/app.json');
   assert(Array.isArray(app.pages) && app.pages.includes('pages/index/index'), 'Compiled app entry is missing');
-  const locationDescription = app.permission?.['scope.userLocation']?.desc;
+  const locationDescription = app.permission?.['scope.userFuzzyLocation']?.desc;
   assert(typeof locationDescription === 'string' && locationDescription.trim().length > 0 && Array.from(locationDescription).length <= 30, 'Compiled location permission description must contain 1-30 characters');
-  assert(Array.isArray(app.requiredPrivateInfos) && app.requiredPrivateInfos.includes('getLocation'), 'Compiled location interface declaration is missing');
+  assert(Array.isArray(app.requiredPrivateInfos) && app.requiredPrivateInfos.includes('getFuzzyLocation'), 'Compiled location interface declaration is missing');
+  assert(!app.requiredPrivateInfos.includes('getLocation') && !app.permission?.['scope.userLocation'], 'Rejected precise location must not remain declared');
   console.log(JSON.stringify({ pass: true, target: 'existing_shared_demo', artifact: 'compiled_cloud_login_and_cloud_http', common_sha256: createHash('sha256').update(common).digest('hex'), appid: 'wxaa06e111e33f6ddd', urlCheck: true, remote_calls: 0 }));
 } catch (error) { console.error(error instanceof Error ? error.message : 'Configured artifact validation failed'); process.exitCode = 1; }
