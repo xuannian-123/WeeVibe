@@ -13,7 +13,7 @@ vi.mock('../apps/miniprogram/src/platform/api', async () => {
   return { api: createApiClient(h.transport, () => 'offline-fixture-session') };
 });
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({
-  default: { getStorageSync: h.storage, getLocation: h.location, openLocation: h.location },
+  default: { getStorageSync: h.storage, getFuzzyLocation: h.location, openLocation: h.location },
   useDidHide: (fn: () => void) => h.hide.push(fn),
 }));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components', () => ({
