@@ -4,7 +4,7 @@ import { activityIdSchema, apiErrorSchema, cityLookupInputSchema, cityLookupResu
 import { getToken, transport } from '../../platform/api';
 import { errorText } from '../../platform/page-state';
 import { unrecognizedResponseMessage } from '../../platform/response-error';
-import { requireLocationPermission } from '../../platform/location-permission';
+import { readApproximateLocation, requireLocationPermission } from '../../platform/location-permission';
 
 function boundLocationClient(session: string | undefined, assertCurrent: () => void) {
   const guard = () => {
@@ -28,8 +28,8 @@ async function locate(session: string | undefined, assertCurrent: () => void) {
   const identity = await api.client.me(); api.guard();
   const actor = activityIdSchema.parse(identity.user_id);
   await requireLocationPermission(api.guard); api.guard();
-  let raw: Taro.getLocation.SuccessCallbackResult;
-  try { api.guard(); raw = await Taro.getLocation({ type: 'gcj02' }); }
+  let raw: Taro.getFuzzyLocation.SuccessCallbackResult;
+  try { api.guard(); raw = await readApproximateLocation(); }
   catch (error) {
     api.guard();
     const reason = String((error as { errMsg?: unknown })?.errMsg ?? (error instanceof Error ? error.message : ''));
