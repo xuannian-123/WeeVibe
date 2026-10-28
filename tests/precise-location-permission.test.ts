@@ -21,35 +21,29 @@ beforeEach(() => {
   h.app.mockReturnValue({ locationAuthorized: 'authorized', locationReducedAccuracy: false });
 });
 
-describe('precise and approximate consent remain independent', () => {
-  it('asks for precise permission even when approximate permission was granted', async () => {
-    h.setting.mockResolvedValue({ authSetting: { 'scope.userFuzzyLocation': true } });
-    await requireLocationPermission(() => {}, 'precise');
+describe('one precise permission shared by every location entry', () => {
+  it('requests the precise scope once and reuses the actual grant on subsequent entries', async () => {
+    const auth: Record<string, boolean> = {};
+    h.setting.mockImplementation(async () => ({ authSetting: auth }));
+    h.authorize.mockImplementation(async ({ scope }) => { auth[scope] = true; });
+    await requireLocationPermission(() => {});
+    await requireLocationPermission(() => {});
     expect(h.authorize).toHaveBeenCalledExactlyOnceWith({ scope: 'scope.userLocation' });
     expect(h.precise).not.toHaveBeenCalled();
     expect(h.fuzzy).not.toHaveBeenCalled();
   });
 
-  it('does not use precise consent to override a refusal of approximate permission', async () => {
-    h.setting.mockResolvedValue({ authSetting: { 'scope.userLocation': true, 'scope.userFuzzyLocation': false } });
-    await expect(requireLocationPermission(() => {}, 'approximate')).rejects.toMatchObject({ code: 'LOCATION_PERMISSION_DENIED' });
+  it('does not repeat a refusal or fall back to fuzzy permission', async () => {
+    h.setting.mockResolvedValue({ authSetting: { 'scope.userLocation': false, 'scope.userFuzzyLocation': true } });
+    await expect(requireLocationPermission(() => {})).rejects.toMatchObject({ code: 'LOCATION_PERMISSION_DENIED' });
     expect(h.authorize).not.toHaveBeenCalled();
-  });
-
-  it.each([false, undefined])('does not open settings or fall back after precise permission is refused (%s)', async granted => {
-    h.setting.mockResolvedValue({ authSetting: { 'scope.userLocation': granted, 'scope.userFuzzyLocation': true } });
-    h.authorize.mockRejectedValue({ errMsg: 'authorize:fail auth deny' });
-    await expect(requireLocationPermission(() => {}, 'precise')).rejects.toMatchObject({ code: 'LOCATION_PERMISSION_DENIED' });
-    expect(h.authorize).toHaveBeenCalledTimes(granted === false ? 0 : 1);
     expect(h.open).not.toHaveBeenCalled();
-    expect(h.precise).not.toHaveBeenCalled();
     expect(h.fuzzy).not.toHaveBeenCalled();
   });
 
-  it('explains the OS approximate-only setting while still allowing an explicit approximate action', async () => {
+  it('explains the OS approximate-only setting without presenting its coordinates as precise', async () => {
     h.app.mockReturnValue({ locationAuthorized: 'authorized', locationReducedAccuracy: true });
-    await expect(requireLocationPermission(() => {}, 'precise')).rejects.toMatchObject({ code: 'LOCATION_PRECISE_SYSTEM_LIMITED' });
-    await expect(requireLocationPermission(() => {}, 'approximate')).resolves.toBeUndefined();
+    await expect(requireLocationPermission(() => {})).rejects.toMatchObject({ code: 'LOCATION_PRECISE_SYSTEM_LIMITED' });
     expect(h.open).not.toHaveBeenCalled();
     expect(h.authorize).not.toHaveBeenCalled();
   });
@@ -57,17 +51,8 @@ describe('precise and approximate consent remain independent', () => {
   it('allows first authorization when the OS location grant is still undetermined', async () => {
     h.app.mockReturnValue({ locationAuthorized: 'not determined', locationReducedAccuracy: true });
     h.setting.mockResolvedValue({ authSetting: {} });
-    await requireLocationPermission(() => {}, 'precise');
+    await requireLocationPermission(() => {});
     expect(h.authorize).toHaveBeenCalledExactlyOnceWith({ scope: 'scope.userLocation' });
-  });
-
-  it('rejects a stale actor or page after the precise authorization dialog returns', async () => {
-    h.setting.mockResolvedValue({ authSetting: {} });
-    let active = true;
-    h.authorize.mockImplementation(async () => { active = false; });
-    await expect(requireLocationPermission(() => { if (!active) throw Error('stale actor'); }, 'precise')).rejects.toThrow('stale actor');
-    expect(h.precise).not.toHaveBeenCalled();
-    expect(h.fuzzy).not.toHaveBeenCalled();
   });
 });
 

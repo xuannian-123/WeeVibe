@@ -4,7 +4,7 @@ import { activityIdSchema, apiErrorSchema, cityLookupInputSchema, cityLookupResu
 import { getToken, transport } from '../../platform/api';
 import { errorText } from '../../platform/page-state';
 import { unrecognizedResponseMessage } from '../../platform/response-error';
-import { readApproximateLocation, readPreciseLocation, requireLocationPermission, type LocationMode } from '../../platform/location-permission';
+import { readPreciseLocation, requireLocationPermission } from '../../platform/location-permission';
 
 function boundLocationClient(session: string | undefined, assertCurrent: () => void) {
   const guard = () => {
@@ -22,14 +22,14 @@ function safeFailure(error: unknown): never {
   if (error instanceof ApiClientError) throw error;
   throw new ApiClientError('INVALID_RESPONSE', '地点响应无法验证，未使用其中内容。', 200);
 }
-async function locate(session: string | undefined, assertCurrent: () => void, mode: LocationMode) {
+async function locate(session: string | undefined, assertCurrent: () => void) {
   const api = boundLocationClient(session, assertCurrent);
   // Authenticate before requesting native coordinates; never trust a caller's actor id.
   const identity = await api.client.me(); api.guard();
   const actor = activityIdSchema.parse(identity.user_id);
-  await requireLocationPermission(api.guard, mode); api.guard();
-  let raw: { latitude: number; longitude: number };
-  try { api.guard(); raw = mode === 'precise' ? await readPreciseLocation() : await readApproximateLocation(); }
+  await requireLocationPermission(api.guard); api.guard();
+  let raw: Taro.getLocation.SuccessCallbackResult;
+  try { api.guard(); raw = await readPreciseLocation(); }
   catch (error) {
     api.guard();
     const reason = String((error as { errMsg?: unknown })?.errMsg ?? (error instanceof Error ? error.message : ''));
@@ -43,7 +43,7 @@ async function locate(session: string | undefined, assertCurrent: () => void, mo
 }
 export async function locateCityForSession(session: string | undefined, assertCurrent: () => void) {
   try {
-    const source = await locate(session, assertCurrent, 'approximate'); source.guard();
+    const source = await locate(session, assertCurrent); source.guard();
     const response = await source.bound({ method: 'POST', path: '/api/v1/venues/city', headers: { 'Content-Type': 'application/json' }, body: cityLookupInputSchema.parse({ location: source.location }) });
     if (response.status < 200 || response.status >= 300) {
       const error = apiErrorSchema.safeParse(response.body);
@@ -52,9 +52,9 @@ export async function locateCityForSession(session: string | undefined, assertCu
     const result = cityLookupResultSchema.parse(response.body); source.guard(); return result;
   } catch (error) { return safeFailure(error); }
 }
-export async function nearbyForSession(session: string | undefined, keyword: string, assertCurrent: () => void, mode: LocationMode = 'precise') {
+export async function nearbyForSession(session: string | undefined, keyword: string, assertCurrent: () => void) {
   try {
-    const source = await locate(session, assertCurrent, mode); source.guard();
+    const source = await locate(session, assertCurrent); source.guard();
     const result = await source.client.nearbyVenues({ center: source.location, category: 'custom', keyword: keyword.trim() || '休闲', radius_m: 3000, page_size: 10 });
     source.guard(); return result;
   } catch (error) { return safeFailure(error); }
@@ -64,7 +64,7 @@ export async function searchForSession(session: string | undefined, input: Venue
   catch (error) { return safeFailure(error); }
 }
 export function locationError(error: unknown): string {
-  if (error instanceof ApiClientError && error.code === 'LOCATION_PRECISE_SYSTEM_LIMITED') return '系统当前仅允许微信使用大致位置；可在手机系统设置调整精确位置权限，或选择“使用大致位置搜索”。';
+  if (error instanceof ApiClientError && error.code === 'LOCATION_PRECISE_SYSTEM_LIMITED') return '系统当前仅允许微信使用大致位置，请在手机系统设置中为微信开启精确位置；仍可手动选择城市或搜索地点。';
   if (error instanceof ApiClientError && error.code === 'LOCATION_SYSTEM_DISABLED') return '手机定位服务未开启，请在系统设置中打开定位；仍可手动选择城市。';
   if (error instanceof ApiClientError && error.code === 'LOCATION_SYSTEM_DENIED') return '系统未允许微信使用位置，请到手机系统设置中为微信开启位置权限；仍可手动选择城市。';
   if (error instanceof ApiClientError && error.code === 'LOCATION_PERMISSION_DENIED') return '位置权限未开启；可点击下方打开设置，允许后再重试定位。';

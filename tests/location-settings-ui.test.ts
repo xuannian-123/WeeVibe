@@ -10,8 +10,6 @@ import {LocationSettings} from '../apps/miniprogram/src/components/location-sett
 let root:any,host:HTMLDivElement;
 beforeEach(async()=>{h.auth={};h.current=true;h.changed.mockReset();host=document.createElement('div');document.body.append(host);root=createRoot(host);await act(async()=>root.render(createElement(LocationSettings,{current:()=>h.current,changed:h.changed})));});
 afterEach(async()=>{await act(async()=>root.unmount());document.body.innerHTML='';});
-it('recognizes a returned fuzzy-location grant',async()=>{h.auth={'scope.userFuzzyLocation':true};await act(async()=>host.querySelector('button')!.click());expect(h.changed).toHaveBeenCalledWith(true);});
-it.each([false,undefined])('does not accept precise consent when fuzzy consent is %s',async granted=>{h.auth={'scope.userLocation':true};if(granted!==undefined)h.auth['scope.userFuzzyLocation']=granted;await act(async()=>host.querySelector('button')!.click());expect(h.changed).toHaveBeenCalledWith(false);});
-it('ignores a native settings return to an expired source',async()=>{h.auth={'scope.userFuzzyLocation':true};h.current=false;await act(async()=>host.querySelector('button')!.click());expect(h.changed).not.toHaveBeenCalled();});
-
-it.each([false,true])('reads only the precise scope when precise settings return %s',async precise=>{await act(async()=>root.render(createElement(LocationSettings,{mode:'precise',current:()=>h.current,changed:h.changed})));h.auth={'scope.userFuzzyLocation':!precise,'scope.userLocation':precise};await act(async()=>host.querySelector('button')!.click());expect(h.changed).toHaveBeenCalledWith(precise);});
+it('recognizes a returned precise-location grant',async()=>{h.auth={'scope.userLocation':true};await act(async()=>host.querySelector('button')!.click());expect(h.changed).toHaveBeenCalledWith(true);});
+it.each([false,undefined])('does not accept precise consent when precise consent is %s',async granted=>{h.auth={'scope.userFuzzyLocation':true};if(granted!==undefined)h.auth['scope.userLocation']=granted;await act(async()=>host.querySelector('button')!.click());expect(h.changed).toHaveBeenCalledWith(false);});
+it('ignores a native settings return to an expired source',async()=>{h.auth={'scope.userLocation':true};h.current=false;await act(async()=>host.querySelector('button')!.click());expect(h.changed).not.toHaveBeenCalled();});
