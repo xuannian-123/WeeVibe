@@ -16,7 +16,7 @@ vi.mock('../apps/miniprogram/src/features/todos/TodoPanel',()=>({TodoPanel:()=>n
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',async()=>{
   const {createRequire}=await import('node:module');const {resolve}=await import('node:path');const {useRef,useEffect}=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json'))('react');
   const hook=(kind:'show'|'hide'|'unload',cb:()=>void)=>{const ref=useRef(cb);ref.current=cb;useEffect(()=>{const fn=()=>ref.current();h.hooks[kind].add(fn);return()=>{h.hooks[kind].delete(fn);};},[]);};
-  return {default:{getFuzzyLocation:h.native,openLocation:h.map,showToast:h.toast,getStorageSync:(k:string)=>h.storage.get(k)??'',setStorageSync:(k:string,v:unknown)=>{h.writes(k,v);h.storage.set(k,v);},navigateTo:h.navigate,reLaunch:vi.fn()},usePageScroll:()=>{},useDidShow:(f:()=>void)=>hook('show',f),useDidHide:(f:()=>void)=>hook('hide',f),useUnload:(f:()=>void)=>hook('unload',f)};
+  return {default:{getLocation:h.native,getFuzzyLocation:h.native,openLocation:h.map,showToast:h.toast,getStorageSync:(k:string)=>h.storage.get(k)??'',setStorageSync:(k:string,v:unknown)=>{h.writes(k,v);h.storage.set(k,v);},navigateTo:h.navigate,reLaunch:vi.fn()},usePageScroll:()=>{},useDidShow:(f:()=>void)=>hook('show',f),useDidHide:(f:()=>void)=>hook('hide',f),useUnload:(f:()=>void)=>hook('unload',f)};
 });
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({
  Switch:(p:any)=>createElement('input',{type:'checkbox',checked:p.checked,disabled:p.disabled,onChange:(e:any)=>p.onChange?.({detail:{value:e.currentTarget.checked}})}),

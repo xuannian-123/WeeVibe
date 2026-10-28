@@ -1,7 +1,21 @@
 import Taro from '@tarojs/taro';
 import { ApiClientError } from '@weevibe/api-client';
 
-export const LOCATION_SCOPE = 'scope.userFuzzyLocation' as const;
+export type LocationMode = 'approximate' | 'precise';
+export const LOCATION_SCOPES = { approximate: 'scope.userFuzzyLocation', precise: 'scope.userLocation' } as const;
+export const LOCATION_SCOPE = LOCATION_SCOPES.approximate;
+
+/** Precise location is requested only by the explicit nearby-search action. */
+export function readPreciseLocation(): Promise<Taro.getLocation.SuccessCallbackResult> {
+  return new Promise((resolve, reject) => {
+    if (typeof Taro.getLocation !== 'function') {
+      reject(new ApiClientError('LOCATION_UNAVAILABLE', '当前微信暂不支持精确定位，可使用大致位置或手动搜索', 0));
+      return;
+    }
+    const pending = Taro.getLocation({ type: 'gcj02', isHighAccuracy: true, highAccuracyExpireTime: 5000, success: resolve, fail: reject });
+    if (pending && typeof pending.then === 'function') void pending.then(resolve, reject);
+  });
+}
 
 /** WeChat's native fuzzy API uses callbacks; Taro may also return a promise. */
 export function readApproximateLocation(): Promise<Taro.getFuzzyLocation.SuccessCallbackResult> {
@@ -30,20 +44,25 @@ export async function requirePrivacyPermission(guard: () => void) {
   guard();
 }
 
-export async function requireLocationPermission(guard: () => void) {
+export async function requireLocationPermission(guard: () => void, mode: LocationMode = 'approximate') {
   await requirePrivacyPermission(guard); guard();
   if (typeof Taro.getSystemSetting === 'function' && Taro.getSystemSetting().locationEnabled === false) throw new ApiClientError('LOCATION_SYSTEM_DISABLED', '手机定位服务未开启', 0);
-  if (typeof Taro.getAppAuthorizeSetting === 'function' && Taro.getAppAuthorizeSetting().locationAuthorized === 'denied') throw new ApiClientError('LOCATION_SYSTEM_DENIED', '系统未允许微信使用位置', 0);
+  if (typeof Taro.getAppAuthorizeSetting === 'function') {
+    const app = Taro.getAppAuthorizeSetting();
+    if (app.locationAuthorized === 'denied') throw new ApiClientError('LOCATION_SYSTEM_DENIED', '系统未允许微信使用位置', 0);
+    if (mode === 'precise' && app.locationAuthorized === 'authorized' && app.locationReducedAccuracy === true) throw new ApiClientError('LOCATION_PRECISE_SYSTEM_LIMITED', '系统当前仅允许微信使用大致位置', 0);
+  }
   guard();
   let setting: Taro.getSetting.SuccessCallbackResult;
   try { setting = await Taro.getSetting(); }
   catch { guard(); throw new ApiClientError('LOCATION_UNAVAILABLE', '暂时无法读取位置权限', 0); }
   guard();
   // Taro 4.3.1 omits this documented native scope from AuthSetting's type.
-  const granted = (setting.authSetting as typeof setting.authSetting & { [LOCATION_SCOPE]?: boolean })[LOCATION_SCOPE];
+  const scope = LOCATION_SCOPES[mode];
+  const granted = (setting.authSetting as typeof setting.authSetting & Partial<Record<typeof scope, boolean>>)[scope];
   if (granted === false) throw new ApiClientError('LOCATION_PERMISSION_DENIED', '位置权限尚未开启', 0);
   if (granted !== true) {
-    try { guard(); await Taro.authorize({ scope: LOCATION_SCOPE }); }
+    try { guard(); await Taro.authorize({ scope }); }
     catch (error) {
       guard();
       const native = error as { errMsg?: string; errno?: number };

@@ -12,7 +12,7 @@ import { VenueCard, VenueDetail } from './venue-card';
 import { LocationSettings } from '../../components/location-settings';
 import { UiIcon } from '../../components/ui-icon';
 import { LoadingCards } from '../../components/loading-cards';
-import { needsLocationSettings } from '../../platform/location-permission';
+import { needsLocationSettings, type LocationMode } from '../../platform/location-permission';
 
 const categories = ['全部', '吃点喝点', '随便逛逛', '一起玩点', '动起来', '看点新鲜'];
 const categorySearch: Record<string, string> = { '全部': '休闲', '吃点喝点': '咖啡|餐厅', '随便逛逛': '公园|步行街', '一起玩点': '桌游|手作', '动起来': '运动', '看点新鲜': '展览|博物馆' };
@@ -21,6 +21,7 @@ export type InspirationBrowseState={keyword:string;area:string;category:string;v
 export function Inspiration({ city, authenticated, initialKeyword='', login, initialFavorites=[], accountChanged, plan, initialBrowse, browseChanged }: { city: string; authenticated: boolean; initialBrowse?:InspirationBrowseState; browseChanged?:(v:InspirationBrowseState)=>void; initialKeyword?:string; login: (input:{keyword:string;city:string}) => void; initialFavorites?: Venue[]; accountChanged?: (v: AccountSnapshot) => void; plan?: (v: Venue) => void }) {
   const actorSession = useRef(getToken());
   const [keyword, setKeyword] = useState(initialBrowse?.keyword??initialKeyword); const keywordRef=useRef(initialBrowse?.keyword??initialKeyword); const [venues, setVenues] = useState<Venue[]>(initialBrowse?.favorites?initialFavorites:initialBrowse?.venues??[]);
+  const [locationMode,setLocationMode]=useState<LocationMode>('precise');
   const [error, setError] = useState(''); const [locationDenied,setLocationDenied]=useState(false); const [busy, setBusy] = useState(false); const [searched, setSearched] = useState(initialBrowse?.searched??false);
   const [favorites, setFavorites] = useState(initialBrowse?.favorites??false); const [selected, setSelected] = useState<Venue>();
   const [category, setCategory] = useState(initialBrowse?.category??'全部'), [area, setArea] = useState(initialBrowse?.area??'');
@@ -45,12 +46,13 @@ export function Inspiration({ city, authenticated, initialKeyword='', login, ini
     const finish = () => { if (lock.current === ticket) { lock.current = undefined; if (mounted.current) setBusy(false); } };
     return { session, valid, guard, finish };
   }
-  async function find(nearby = false, nextCategory = category) {
+  async function find(nearby = false, nextCategory = category, mode:LocationMode='precise') {
     const operation = start(); if (!operation) return;
+    if(nearby)setLocationMode(mode);
     try {
       const search = [area.trim(), keyword.trim() || categorySearch[nextCategory]].filter(Boolean).join(' ');
       if (search.length > 80) throw new ApiClientError('INVALID_INPUT', '区域与搜索关键词合计请控制在 80 字以内', 400);
-      const result = nearby ? await nearbyForSession(operation.session, search, operation.guard) : await searchForSession(operation.session, { region: city, keyword: search, page_size: 10 }, operation.guard);
+      const result = nearby ? await nearbyForSession(operation.session, search, operation.guard, mode) : await searchForSession(operation.session, { region: city, keyword: search, page_size: 10 }, operation.guard);
       operation.guard(); setVenues(result.venues); setFavorites(false); setSearched(true); setSelected(undefined);
     } catch (e) { if (operation.valid()) {setError(nearby ? locationError(e) : errorText(e));setLocationDenied(nearby&&needsLocationSettings(e));} }
     finally { operation.finish(); }
@@ -76,10 +78,10 @@ export function Inspiration({ city, authenticated, initialKeyword='', login, ini
   const permissionEpoch=epoch.current;
   return <View className="wv-inspiration"><View className="wv-hero mint"><Text className="wv-eyebrow">A LITTLE INSPIRATION</Text><Text className="wv-title">好地方，{String.fromCharCode(10)}想和你们一起去。</Text><Text className="wv-subtitle">探索 {city}，把下一次相聚安排上。</Text></View>
     <View className="wv-search wv-inspiration-search"><Input value={keyword} adjustPosition cursorSpacing={24} confirmType="search" maxlength={80} placeholder="搜索地点、商圈或关键词" onInput={e=>{invalidate();keywordRef.current=e.detail.value;setKeyword(e.detail.value);setSelected(undefined);setError('');}} onConfirm={()=>void find()}/><Button disabled={busy} onClick={()=>void find(true)}>查看附近</Button></View>
-    <Text className="wv-list-note">查看附近仅在主动点击时获取大致位置，搜索距离为估算；也可直接按城市搜索。</Text><View className="wv-inspiration-scope"><Input value={area} adjustPosition cursorSpacing={24} confirmType="done" maxlength={30} placeholder={`${city} · 输入区域或商圈（选填）`} onInput={e=>{invalidate();setArea(e.detail.value);setSelected(undefined);}}/><Button className="wv-link" disabled={busy} onClick={()=>favorites?void find():void showFavorites()}>{favorites?'查看全部地点':'我的收藏'}</Button></View>
+    <Text className="wv-list-note">查看附近会请求精确位置，距离仍为估算；也可选择大致位置或按城市搜索。</Text><Button className="wv-link" disabled={busy} onClick={()=>void find(true,category,'approximate')}>使用大致位置搜索</Button><View className="wv-inspiration-scope"><Input value={area} adjustPosition cursorSpacing={24} confirmType="done" maxlength={30} placeholder={`${city} · 输入区域或商圈（选填）`} onInput={e=>{invalidate();setArea(e.detail.value);setSelected(undefined);}}/><Button className="wv-link" disabled={busy} onClick={()=>favorites?void find():void showFavorites()}>{favorites?'查看全部地点':'我的收藏'}</Button></View>
     <ScrollView scrollX className="wv-inspiration-tabs"><View>{categories.map(c=><Button key={c} className={c===category?'active':''} disabled={busy} onClick={()=>{invalidate();setCategory(c);void find(false,c);}}>{c}</Button>)}</View></ScrollView>
     <View className="wv-section-heading"><Text className="wv-section-title">{favorites?'收藏起来，下次一起去':'找个地方，一起出发'}</Text><Button className="wv-link" disabled={busy} onClick={()=>void find()}>搜索地点</Button></View>
-    {error && <Notice tone="error">{error}</Notice>}{locationDenied && <LocationSettings current={()=>mounted.current&&visible.current&&epoch.current===permissionEpoch&&getToken()===actorSession.current} changed={granted=>{setLocationDenied(!granted);setError(granted?'位置权限已开启，请再次点击“查看附近”。':'位置权限仍未开启，可按城市搜索地点。');}}/>}{busy && (venues.length?<Text className="wv-loading-status">正在更新地点…</Text>:<LoadingCards grid label="正在查找好去处…"/>)}
+    {error && <Notice tone="error">{error}</Notice>}{locationDenied && <LocationSettings mode={locationMode} current={()=>mounted.current&&visible.current&&epoch.current===permissionEpoch&&getToken()===actorSession.current} changed={granted=>{setLocationDenied(!granted);setError(granted?`位置权限已开启，请再次点击“${locationMode==='precise'?'查看附近':'使用大致位置搜索'}”。`:'位置权限仍未开启，可按城市搜索地点。');}}/>}{busy && (venues.length?<Text className="wv-loading-status">正在更新地点…</Text>:<LoadingCards grid label="正在查找好去处…"/>)}
     {!busy && !error && venues.length===0 && <View className="wv-empty"><View className="wv-empty-icon"><UiIcon name="spark"/></View><Text className="wv-section-title">{searched?'这里暂时没有地点':'下一次相聚，从喜欢的地方开始'}</Text><Text className="wv-muted">{favorites?'收藏喜欢的地点，下次一起去。':'选个分类或搜索想去的地方。附近搜索仅在你主动点击时使用定位。'}</Text></View>}
     <View className="wv-venue-grid">{venues.map(venue=><VenueCard key={venue.provider_id} venue={venue} saved={savedIds.has(venue.provider_id)} busy={busy} open={()=>select(venue)} favorite={()=>void favorite(venue,savedIds.has(venue.provider_id))}/>)}</View>
     {!!venues.length && <Text className="wv-list-note">地点资料来自高德；参考费用、营业和预约请向商家核实。</Text>}
