@@ -3,6 +3,8 @@ import { CLOUD_HTTP_ENVELOPE_HEADER, CLOUD_HTTP_ENVELOPE_VERSION } from '../pack
 import { attributionFixture, I, id } from './application-attribution-fixture';
 const h=vi.hoisted(()=>({f:null as any,auth:vi.fn()}));
 vi.mock('../apps/web/src/server/auth',()=>({identityService:{authenticate:h.auth}}));
+// This suite exercises invitation provenance; persisted profile gating is covered separately.
+vi.mock('../apps/web/src/server/gatherings/profile',()=>({assertGatheringProfileActor:async()=>{}}));
 vi.mock('../apps/web/src/server/db',()=>({withDb:async(run:any)=>{try{return await run(h.f.db);}catch(e){if(e instanceof ServiceError)throw e;throw new ServiceError('DATABASE_UNAVAILABLE',503,'数据库暂时不可用');}}}));
 import { ServiceError } from '../apps/web/src/server/http';
 import { GET } from '../apps/web/src/app/api/v1/activities/[activityId]/application-attributions/route';

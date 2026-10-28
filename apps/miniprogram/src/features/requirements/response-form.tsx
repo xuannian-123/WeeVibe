@@ -4,13 +4,14 @@ import { Button, Input, Text, Textarea, View } from '@tarojs/components';
 import { constraintTagSchema, preferenceTagSchema, requirementResponseInputSchema, type RequirementResponseInput, type RequirementSnapshot } from '@weevibe/contracts';
 import { ApiClientError } from '@weevibe/api-client';
 import { getToken } from '../../platform/api';
+import { GatheringProfileBoundary } from '../gatherings/profile-boundary';
 import { responseInputFromSaved, responseVersion } from './response-recovery';
 import { assertRequirementSession } from './session-boundary';
 import { requestRequirement } from '../../platform/requirements-api';
 import { errorText } from '../../platform/page-state';
 import { answerFromSaved, beijingLabel, emptyAnswer, relevantQuestions, serializeAnswers, toggleAnswerOption, toggleOther, type AnswerMap } from './answer-state';
 function message(error:unknown) { return error instanceof ApiClientError ? error.message : error instanceof Error ? error.message : errorText(error); }
-export function ResponseForm({ snapshot, updated }: {snapshot:RequirementSnapshot;updated:(next:RequirementSnapshot)=>void}) {
+function ResponseFormBody({ snapshot, updated }: {snapshot:RequirementSnapshot;updated:(next:RequirementSnapshot)=>void}) {
   const own=snapshot.own_response; const actorSession=useRef(getToken());
   const [segments,setSegments]=useState<string[]>(own?.selected_segment_ids || []);
   const [answers,setAnswers]=useState<AnswerMap>(()=>Object.fromEntries((own?.answers || []).map(answer=>[answer.question_id,answerFromSaved(answer)])));
@@ -68,3 +69,5 @@ export function ResponseForm({ snapshot, updated }: {snapshot:RequirementSnapsho
     {notice&&<View className={`req-notice ${noticeSuccess?'req-success':''}`}><Text selectable>{notice}</Text></View>}<Button className="req-button" loading={busy} disabled={disabled} onClick={()=>void submit()}>{saved?'更新我的需求':'保存我的需求'}</Button><Button className="req-button secondary" disabled={busy} onClick={()=>void copy()}>复制当前输入（不含私有地点）</Button><Text className="req-muted">截止依据服务端时间与状态判断。即使本机时间不准确，过期提交也会被拒绝。</Text>
   </View>;
 }
+
+export function ResponseForm(props:Parameters<typeof ResponseFormBody>[0]){return <GatheringProfileBoundary session={getToken()} required={props.snapshot.viewer.can_respond}><ResponseFormBody {...props}/></GatheringProfileBoundary>;}

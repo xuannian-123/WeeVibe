@@ -5,6 +5,8 @@ import { feeText } from '../../platform/activities';
 import { Action, Field, Notice, Panel } from '../../components/ui';
 import type { ApplicationsState } from './use-applications';
 import { applicationLabels } from './labels';
+import { getToken } from '../../platform/api';
+import { GatheringProfileBoundary } from '../gatherings/profile-boundary';
 
 type LoginActions = Pick<ReturnType<typeof useLogin>, 'busy' | 'login'>;
 
@@ -57,7 +59,11 @@ export function MyParticipationPanel({ detail, state }: { detail: ActivityDetail
 export function ApplicationForm({ detail, state, login }: { detail: ActivityDetail; state: ApplicationsState; login: LoginActions }) {
   const { selected, setSelected, nickname, setNickname, accepted, setAccepted, validation,
     apply, anyBusy, applicationBlocked, myOccupied, myPending, available, confirmation, fresh, userId, submit } = state;
-  return <Panel title="我想参加">
+  const terminal=!!detail.cancelled_at||detail.segments.every(segment=>!!segment.cancelled_at||segment.has_started||!segment.is_join_open);
+  // A closed invitation is a read-only history surface and needs neither profile verification nor native session access.
+  if(terminal)return <Panel title="我想参加"><Text className="activity-muted">本次不再开放新申请，原申请与参加记录仍可在“我的参加状态”核对。</Text>{detail.segments.map(segment=><View className="activity-select-row" key={segment.segment_id}><View className="activity-select-content"><Text>{segment.name}</Text><Text className="caption">{detail.cancelled_at||segment.cancelled_at?'已取消 · 不开放加入':segment.has_started?'已开始 · 不开放加入':'报名已结束 · 不开放加入'} · {feeText(segment.fee)}</Text></View></View>)}{apply.message&&<Notice>{apply.message}</Notice>}</Panel>;
+  if(!userId)return <Panel title="我想参加"><Text className="activity-muted">登录并保存头像、昵称后，再填写参加申请。</Text><Action disabled={login.busy||anyBusy} onClick={()=>{void login.login();}}>先登录，再申请</Action></Panel>;
+  return <GatheringProfileBoundary actor={userId} session={getToken()}><Panel title="我想参加">
       <Text className="activity-muted">选适合你的环节，不必全程参加。</Text>
       {state.incomingInvitationId && <Notice>本次新申请会记录当前公开邀请入口，仅说明入口来源，不证明谁实际邀请你，也不保证身份或授予席位。</Notice>}
       {state.attributionBlocked && <Notice>当前服务尚未确认支持邀请归因，请刷新来源记录或联系发起人；不会自动去掉来源提交。已保存的原申请仍可按原内容核对重试。</Notice>}
@@ -69,5 +75,5 @@ export function ApplicationForm({ detail, state, login }: { detail: ActivityDeta
       <Action variant="primary" disabled={!fresh || !userId || anyBusy || applicationBlocked || state.attributionBlocked || !selected.length || accepted !== confirmation} onClick={submit}>{apply.busy ? '正在提交…' : '申请参加所选环节'}</Action>
       {apply.pending && <View><Notice>上次申请结果尚未确认，请先刷新核对。重试会保留原来的选择，不会重复提交一份新申请。</Notice><Action disabled={anyBusy || !fresh || !userId} onClick={() => { void apply.send(); }}>核对后重试原申请</Action></View>}
       {!userId && <Action disabled={login.busy || anyBusy} onClick={() => { void login.login(); }}>先登录，再申请</Action>}
-    </Panel>;
+    </Panel></GatheringProfileBoundary>;
 }

@@ -53,12 +53,19 @@ jobs:
       - run: npm install --global pnpm@11.15.1
       - run: pnpm install --frozen-lockfile
       - run: npm ci --prefix cloudfunctions/weevibeLogin --ignore-scripts --no-audit --no-fund
+      - run: npm ci --prefix cloudfunctions/weevibeNotifyGathering --ignore-scripts --no-audit --no-fund
       - run: pnpm db:generate && pnpm db:validate
       - run: pnpm typecheck && pnpm test
       - run: pnpm build:api && pnpm build:mini
       - run: pnpm db:migrate
       - name: Check v38 preparations and privacy in disposable PostgreSQL
         run: pnpm exec tsx scripts/check-v38-preparation.ts --fixture-only
+      - name: Check HTML gathering flows and privacy in disposable PostgreSQL
+        run: |
+          pnpm exec tsx scripts/check-gathering-integration.ts --fixture-only
+          pnpm exec tsx scripts/check-gathering-http.ts --fixture-only
+          pnpm exec tsx scripts/check-gathering-notifications.ts --fixture-only
+          pnpm exec tsx scripts/check-gathering-presentation.ts --fixture-only
       - run: node scripts/prepare-cloud-identity-fixture.mjs --fixture-only
       - name: Start standalone and test real PG transactions
         shell: bash

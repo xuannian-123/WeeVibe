@@ -72,7 +72,13 @@ describe('terminal cancellation display never reinterprets retained rows as curr
  it.each(['activity','segment'] as const)('join form %s cancellation caption does not promise existing seats',async kind=>{
   const detail=await activitySnapshot(h.tx,activityId,actor);detail.segments=[detail.segments[1]];if(kind==='activity'){detail.cancelled_at=now.toISOString();detail.segments[0].cancelled_at=null;}
   const noop=()=>{},state={selected:[],setSelected:noop,nickname:'',setNickname:noop,accepted:'',setAccepted:noop,validation:'',apply:{busy:false,message:''},anyBusy:false,applicationBlocked:false,myOccupied:new Set([otherId]),myPending:new Set(),available:()=>false,confirmation:'',fresh:true,userId:actor,submit:noop};
-  const html=markup(ApplicationForm,{detail,state,login:{busy:false,login:async()=>{}}});expect(html).toContain('已取消 · 不开放加入');expect(html).not.toContain('已有席位');
+  // This SSR adapter intentionally has no native session storage: terminal history must not access it or mount the profile gate.
+  const html=markup(ApplicationForm,{detail,state,login:{busy:false,login:async()=>{}}});expect(html).toContain('已取消 · 不开放加入');expect(html).not.toContain('已有席位');expect(html).not.toContain('头像');expect(html).not.toContain('申请参加所选环节');
+ });
+ it.each(['started','deadline'] as const)('closed join form for %s remains readable without any native identity access',async kind=>{
+  const detail=await activitySnapshot(h.tx,activityId,actor);detail.segments=[detail.segments[0]];detail.segments[0].is_join_open=false;detail.segments[0].has_started=kind==='started';
+  const noop=()=>{},state={selected:[],setSelected:noop,nickname:'',setNickname:noop,accepted:'',setAccepted:noop,validation:'',apply:{busy:false,message:''},anyBusy:false,applicationBlocked:false,myOccupied:new Set(),myPending:new Set(),available:()=>false,confirmation:'',fresh:true,userId:actor,submit:noop};
+  const html=markup(ApplicationForm,{detail,state,login:{busy:false,login:async()=>{}}});expect(html).toContain(kind==='started'?'已开始 · 不开放加入':'报名已结束 · 不开放加入');expect(html).not.toContain('头像');expect(html).not.toContain('申请参加所选环节');
  });
  it('cancelled content remains text, does not render original names as markup',async()=>{
   const detail=await activitySnapshot(h.tx,activityId,actor);detail.segments[1].name='<b>原安排</b>';const html=markup(MyParticipationPanel,{detail,state:{userId:actor}});expect(html).toContain('&lt;b&gt;原安排&lt;/b&gt;');expect(html).not.toContain('<b>原安排</b>');

@@ -1,0 +1,9 @@
+{
+  "name": "weevibe-notify-gathering",
+  "version": "0.0.1",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.js",
+  "engines": {"node": ">=20.19"},
+  "dependencies": {"wx-server-sdk": "4.0.2", "@cloudbase/node-sdk": "3.18.7"}
+}

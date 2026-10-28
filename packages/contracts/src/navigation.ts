@@ -18,11 +18,13 @@ export type MemberProfile = z.infer<typeof memberProfileSchema>;
 export const memberDirectorySchema = z.object({ members: z.array(z.object({ user_id: z.uuid(), display_name: z.string().max(40).nullable() }).strict()).max(2000).refine(a => new Set(a.map(m => m.user_id)).size === a.length) }).strict();
 
 export const inboxMessageSchema = z.object({
-  id: z.string().min(1).max(180), activity_id: z.uuid().nullable(), requirement_id: z.uuid().optional(),
+  id: z.string().min(1).max(180), activity_id: z.uuid().nullable(), requirement_id: z.uuid().optional(), gathering_id:z.uuid().optional(),
   title: z.string().max(200), summary: z.string().max(300), created_at: z.iso.datetime({ offset: true }),
   read: z.boolean(), pending: z.boolean(), status: z.string().max(30),
-  section: z.enum(['applications', 'arrangement', 'handover', 'activity', 'requirement']),
-}).strict();
+  section: z.enum(['applications', 'arrangement', 'handover', 'activity', 'requirement','gathering']),
+}).strict().superRefine((value,ctx)=>{
+  if(value.section==='gathering'?(!value.gathering_id||value.activity_id!==null||value.requirement_id!==undefined):value.gathering_id!==undefined)ctx.addIssue({code:'custom',message:'筹备消息来源不一致'});
+});
 export const inboxSchema = z.object({ messages: z.array(inboxMessageSchema).max(100), unread_count: z.number().int().min(0), pending_count: z.number().int().min(0), server_time: z.iso.datetime({ offset: true }), limit: z.literal(100) }).superRefine((v, ctx) => {
   if (new Set(v.messages.map(m => m.id)).size !== v.messages.length || v.unread_count !== v.messages.filter(m => !m.read).length || v.pending_count !== v.messages.filter(m => m.pending).length) ctx.addIssue({ code: 'custom', message: '消息数量与当前列表不一致' });
 });

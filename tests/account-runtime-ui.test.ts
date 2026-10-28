@@ -102,3 +102,9 @@ it('keeps unsaved profile input during a same-account background refresh failure
 });
 
 it('releases refresh feedback when the request completes while hidden and never replays it on show',async()=>{let finish!:()=>void;const refresh=vi.fn(()=>new Promise<void>(resolve=>{finish=resolve;}));const host=await render(createElement(Messages,{session:mocks.token,error:'',refresh,changed:vi.fn()}));await click('刷新');expect(refresh).toHaveBeenCalledOnce();expect(host.textContent).toContain('刷新中…');await act(async()=>mocks.hide.forEach(fn=>fn()));await act(async()=>finish());await act(async()=>mocks.show.forEach(fn=>fn()));expect(host.textContent).not.toContain('刷新中…');expect(Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='刷新')?.disabled).toBe(false);expect(refresh).toHaveBeenCalledOnce();});
+
+it('opens a gathering update from the real message component after its read acknowledgement',async()=>{
+ const value={messages:[{id:'gathering:submission-fixture',activity_id:null,gathering_id:accountActivity,title:'活动填写有更新',summary:'有成员提交了填写',created_at:'2030-01-01T00:00:00Z',read:false,pending:false,status:'筹备进展',section:'gathering' as const}],unread_count:1,pending_count:0,server_time:'2030-01-01T00:00:00Z',limit:100 as const};
+ const changed=vi.fn();const host=await render(createElement(Messages,{value,session:mocks.token,error:'',refresh:()=>{},changed}));mocks.transport.mockResolvedValueOnce({status:200,body:{...value,messages:value.messages.map(m=>({...m,read:true})),unread_count:0}});
+ const notice=Array.from(host.querySelectorAll('button')).find(s=>s.textContent?.includes('活动填写有更新'))!;await act(async()=>{notice.click();await Promise.resolve();});expect(changed).toHaveBeenCalledOnce();expect(mocks.navigate).toHaveBeenCalledWith({url:`/pages/gathering/index?id=${accountActivity}`});
+});

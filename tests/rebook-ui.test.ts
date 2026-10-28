@@ -9,6 +9,8 @@ const { createRoot } = req('react-dom/client') as { createRoot: (host: Element) 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({ token: 'session-a', actor: '', transport: vi.fn(), modal: vi.fn(), navigate: vi.fn(), redirect: vi.fn(), back: vi.fn(), busy: vi.fn(), save: vi.fn(), remove: vi.fn(),
   store: new Map<string, unknown>(), readFailure: false, show: [] as (() => void)[], hide: [] as (() => void)[], unload: [] as (() => void)[], controller: {} as any, route: undefined as string | undefined, beforeCommit: undefined as undefined | (() => void) }));
+// Business regressions start after profile completion; the real boundary has separate UI coverage.
+vi.mock('../apps/miniprogram/src/features/gatherings/profile-boundary',()=>({GatheringProfileBoundary:({children}:any)=>children}));
 vi.mock('../apps/miniprogram/src/platform/api', async () => { const { createApiClient } = await import('../packages/api-client/src'); return { getToken: () => h.token, transport: h.transport, api: createApiClient(h.transport, () => h.token), establishSession: vi.fn(), forgetSession: () => { h.token = ''; } }; });
 vi.mock('../apps/miniprogram/src/platform/write-state', async importOriginal => { const actual = await importOriginal<typeof import('../apps/miniprogram/src/platform/write-state')>(); return { ...actual, useStoredWrite: (options: any) => actual.useStoredWrite({ ...options, execute: async (input: unknown) => { const value = await options.execute(input); h.beforeCommit?.(); return value; } }) }; });
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: {

@@ -9,6 +9,8 @@ import type { RequirementSnapshot } from '../packages/contracts/src/requirements
 import { ApiClientError } from '../packages/api-client/src';
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT=true;
 const mocks=vi.hoisted(()=>({ request:vi.fn(),modal:vi.fn(),token:'session-a',saved:vi.fn() }));
+// Business regressions start after profile completion; the real boundary has separate UI coverage.
+vi.mock('../apps/miniprogram/src/features/gatherings/profile-boundary',()=>({GatheringProfileBoundary:({children}:any)=>children}));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>mocks.token}));
 vi.mock('../apps/miniprogram/src/platform/extension-api',()=>({extensionRequest:mocks.request}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{showModal:mocks.modal,setClipboardData:vi.fn()}}));

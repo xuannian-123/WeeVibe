@@ -25,7 +25,7 @@ export function Messages({ value, session, error, refresh, changed, initialPendi
     try {
       const next = await requestInbox(session, id ? { action: 'read', message_id: id } : { action: 'read-all' }); if (!current()) return; changed(next);
       const message = value?.messages.find(m => m.id === id); if (!message) return;
-      const url = message.requirement_id ? `/pages/requirements/index?id=${message.requirement_id}` : message.activity_id ? `/pages/activity/index?id=${message.activity_id}&section=${message.section}` : '';
+      const url = message.gathering_id ? `/pages/gathering/index?id=${message.gathering_id}` : message.requirement_id ? `/pages/requirements/index?id=${message.requirement_id}` : message.activity_id ? `/pages/activity/index?id=${message.activity_id}&section=${message.section}` : '';
       if (url && current()) await Taro.navigateTo({ url });
     } catch (e) { if (current()) setNotice(errorText(e)); } finally { lock.current = false; if (ownState()) setBusy(false); }
   }

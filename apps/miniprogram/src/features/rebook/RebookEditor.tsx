@@ -10,6 +10,7 @@ import { useStoredWrite } from '../../platform/write-state';
 import { feeText, formatTime, rememberActivity } from '../../platform/activities';
 import { createActivityForIdentity, readCreationIdentity } from '../activity-create/api';
 import { ActivityEditor } from '../activity-create/activity-editor';
+import { GatheringProfileBoundary } from '../gatherings/profile-boundary';
 import { buildRebookInput, confirmRebookField, parseRebookDraft, rebookKeys, updateRebookForm, type RebookDraft } from './draft';
 
 function readOwnPending(key: string, actor: string): CreateActivityInput | undefined {
@@ -126,7 +127,7 @@ export function RebookEditor({ sourceId: rawSourceId }: { sourceId: string }) {
     finally { anotherLock.current = false; if (mounted.current) setAnotherBusy(false); }
   }
   if (!sourceId) return <Panel title="再约入口无效"><Notice>来源活动标识不完整，没有读取、覆盖或发布任何草稿。</Notice></Panel>;
-  return <View className="screen">
+  return <GatheringProfileBoundary actor={actor} session={source?.session} required={!!source&&!completedId}><View className="screen">
     <Panel title={completedId && !pending ? '这份再约已创建新活动' : '再约 · 独立本机草稿'}>
       <Notice>不继承旧成员、同意、审批、核实或预订；仅本机保存，明确确认发起后才创建新活动和新链接。普通创建草稿保持不变。</Notice>
       {source && draft && <Text>旧来源时区：{draft.source_timezone}。本次全部日期重新按北京时间设置。</Text>}
@@ -149,5 +150,5 @@ export function RebookEditor({ sourceId: rawSourceId }: { sourceId: string }) {
     {preview && !pending && <Action disabled={write.busy} onClick={() => { try { guard(); setReview(undefined); } catch { setMessage('页面或身份已变化。'); } }}>返回修改再约</Action>}
     {message && <Notice>{message}</Notice>}{source && write.message && <Notice>{write.message}</Notice>}
     <Action disabled={write.busy || anotherBusy} onClick={() => { void Taro.navigateBack(); }}>返回</Action>
-  </View>;
+  </View></GatheringProfileBoundary>;
 }

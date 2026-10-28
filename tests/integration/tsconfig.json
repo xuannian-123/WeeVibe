@@ -12,6 +12,10 @@
     "../../scripts/check-cloud-identity-integration.ts",
     "../../scripts/check-requirements-integration.ts",
     "../../scripts/check-participation-invitations.ts",
-    "../../scripts/check-v38-preparation.ts"
+    "../../scripts/check-v38-preparation.ts",
+    "../../scripts/check-gathering-integration.ts",
+    "../../scripts/check-gathering-http.ts",
+    "../../scripts/check-gathering-notifications.ts",
+    "../../scripts/check-gathering-presentation.ts"
   ]
 }

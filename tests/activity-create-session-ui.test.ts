@@ -10,6 +10,8 @@ const {createElement,act}=req('react') as typeof import('../apps/miniprogram/nod
 const {createRoot}=req('react-dom/client') as {createRoot:(host:Element)=>{render:(element:ReturnType<typeof createElement>)=>void;unmount:()=>void}};
 (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
 const h=vi.hoisted(()=>({token:'session-a',actor:'',transport:vi.fn(),store:new Map<string,unknown>(),show:[] as (()=>void)[],hide:[] as (()=>void)[],unload:[] as (()=>void)[],form:{} as ActivityForm,remember:vi.fn()}));
+// Business regressions start after profile completion; the real boundary has separate UI coverage.
+vi.mock('../apps/miniprogram/src/features/gatherings/profile-boundary',()=>({GatheringProfileBoundary:({children}:any)=>children}));
 vi.mock('../apps/miniprogram/src/platform/api',async()=>{const {createApiClient}=await import('../packages/api-client/src');return {getToken:()=>h.token,api:createApiClient(h.transport,()=>h.token),transport:h.transport,forgetSession:vi.fn(),establishSession:vi.fn()};});
 vi.mock('../apps/miniprogram/src/platform/activities',()=>({formatTime:(value:string)=>value,feeText:()=> '费用待核实',rememberActivity:h.remember}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:(key:string)=>h.store.get(key),setStorageSync:(key:string,value:unknown)=>h.store.set(key,value),removeStorageSync:(key:string)=>h.store.delete(key),pageScrollTo:vi.fn().mockResolvedValue(undefined)},useDidShow:(fn:()=>void)=>h.show.push(fn),useDidHide:(fn:()=>void)=>h.hide.push(fn),useUnload:(fn:()=>void)=>h.unload.push(fn)}));
