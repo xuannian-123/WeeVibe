@@ -4,7 +4,7 @@ import { activityIdSchema, apiErrorSchema, cityLookupInputSchema, cityLookupResu
 import { getToken, transport } from '../../platform/api';
 import { errorText } from '../../platform/page-state';
 import { unrecognizedResponseMessage } from '../../platform/response-error';
-import { readApproximateLocation, requireLocationPermission } from '../../platform/location-permission';
+import { readPreciseLocation, requireLocationPermission } from '../../platform/location-permission';
 
 function boundLocationClient(session: string | undefined, assertCurrent: () => void) {
   const guard = () => {
@@ -28,8 +28,8 @@ async function locate(session: string | undefined, assertCurrent: () => void) {
   const identity = await api.client.me(); api.guard();
   const actor = activityIdSchema.parse(identity.user_id);
   await requireLocationPermission(api.guard); api.guard();
-  let raw: Taro.getFuzzyLocation.SuccessCallbackResult;
-  try { api.guard(); raw = await readApproximateLocation(); }
+  let raw: Taro.getLocation.SuccessCallbackResult;
+  try { api.guard(); raw = await readPreciseLocation(); }
   catch (error) {
     api.guard();
     const reason = String((error as { errMsg?: unknown })?.errMsg ?? (error instanceof Error ? error.message : ''));
@@ -64,6 +64,7 @@ export async function searchForSession(session: string | undefined, input: Venue
   catch (error) { return safeFailure(error); }
 }
 export function locationError(error: unknown): string {
+  if (error instanceof ApiClientError && error.code === 'LOCATION_PRECISE_SYSTEM_LIMITED') return '系统当前仅允许微信使用大致位置，请在手机系统设置中为微信开启精确位置；仍可手动选择城市或搜索地点。';
   if (error instanceof ApiClientError && error.code === 'LOCATION_SYSTEM_DISABLED') return '手机定位服务未开启，请在系统设置中打开定位；仍可手动选择城市。';
   if (error instanceof ApiClientError && error.code === 'LOCATION_SYSTEM_DENIED') return '系统未允许微信使用位置，请到手机系统设置中为微信开启位置权限；仍可手动选择城市。';
   if (error instanceof ApiClientError && error.code === 'LOCATION_PERMISSION_DENIED') return '位置权限未开启；可点击下方打开设置，允许后再重试定位。';
