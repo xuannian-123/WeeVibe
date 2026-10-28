@@ -231,11 +231,60 @@ export const arrangementReviewV3Schema = z.object({
   if (revision !== review.current_plan_revision || capacity !== review.current_plan.capacity || deadline !== review.current_plan.deadline_at || JSON.stringify(previous) !== JSON.stringify(arrangementAgreementV3(review.current_plan))) invalid();
 });
 export type ArrangementReviewV3 = z.infer<typeof arrangementReviewV3Schema>;
+export const PLAN_CHANGE_EVENT_TYPE = 'segment_plan_changed';
+export const planChangeEventSchema = z.object({
+  schema_version: z.literal(1), segment_id: activityIdSchema,
+  from_plan_revision: version, to_plan_revision: version,
+  before: arrangementPlanSchema, after: arrangementPlanSchema,
+  reasons: z.array(z.enum(['arrangement', 'cross_segment', 'capacity', 'deadline'])).min(1).max(4)
+}).strict().superRefine((event, ctx) => {
+  const material = event.reasons.includes('arrangement') || event.reasons.includes('cross_segment');
+  const directChange = JSON.stringify(arrangementAgreementV3(event.before)) !== JSON.stringify(arrangementAgreementV3(event.after));
+  if (new Set(event.reasons).size !== event.reasons.length || event.reasons.includes('arrangement') !== directChange
+    || event.reasons.includes('capacity') !== (event.before.capacity !== event.after.capacity)
+    || event.reasons.includes('deadline') !== (event.before.deadline_at !== event.after.deadline_at)) ctx.addIssue({ code: 'custom', message: '安排变化与影响原因不一致' });
+  if (event.before.segment_id !== event.segment_id || event.after.segment_id !== event.segment_id || event.before.client_ref !== event.after.client_ref
+    || event.to_plan_revision !== event.from_plan_revision + (material ? 1 : 0)) ctx.addIssue({ code: 'custom', message: '安排变更事件目标或版本不正确' });
+});
+export type PlanChangeEvent = z.infer<typeof planChangeEventSchema>;
+
+const row = z.object({ kind: z.enum(['plan', 'requirements', 'capacity', 'deadline']), activity_revision: z.number().int().positive(), changed_at: z.iso.datetime(),
+  event: z.union([planChangeEventSchema, arrangementChangeEventSchema, capacityChangeEventSchema, deadlineExtensionEventSchema]) }).strict();
+export const arrangementReviewV4Schema = z.object({ ...arrangementReviewV3Schema.shape,
+  schema_version: z.literal(4), history_format: z.literal('verified_v4'), plan_changes: z.array(row).max(ARRANGEMENT_HISTORY_LIMIT)
+}).strict().superRefine((review, ctx) => {
+  const invalid = () => ctx.addIssue({ code: 'custom', message: '完整安排变更历史不连续或与当前版本不符' });
+  if (review.current_plan.segment_id !== review.segment_id || review.changes.length || review.capacity_changes.length || review.deadline_changes.length) invalid();
+  if (review.state === 'unavailable') {
+    if (review.can_reaccept || review.accepted_plan || review.history_digest || review.history_anchor || review.plan_changes.length || review.reason !== 'HISTORY_UNAVAILABLE') invalid();
+    return;
+  }
+  if (review.state !== 'ready' || review.accepted_plan_revision === null || review.accepted_plan_revision >= review.current_plan_revision || !review.accepted_plan || review.accepted_plan_revision === null || !review.history_digest || !review.history_anchor || !review.plan_changes.length
+    || review.can_reaccept !== (review.reason === null) || (review.reason !== null && !['CANCELLED', 'SEGMENT_STARTED'].includes(review.reason))) { invalid(); return; }
+  let revision = review.accepted_plan_revision, previous = review.plan_changes[0].event.before, activityRevision = 0;
+  if (JSON.stringify(arrangementAgreementV3(previous)) !== JSON.stringify(review.accepted_plan)) invalid();
+  if (review.history_anchor.plan_revision !== revision || review.history_anchor.activity_revision !== review.plan_changes[0].activity_revision
+    || review.history_anchor.capacity !== previous.capacity || review.history_anchor.deadline_at !== previous.deadline_at) invalid();
+  for (const change of review.plan_changes) {
+    const event = change.event;
+    const parsed = change.kind === 'plan' ? planChangeEventSchema.safeParse(event) : change.kind === 'requirements' ? arrangementChangeEventSchema.safeParse(event)
+      : change.kind === 'capacity' ? capacityChangeEventSchema.safeParse(event) : deadlineExtensionEventSchema.safeParse(event);
+    if (!parsed.success || event.segment_id !== review.segment_id || change.activity_revision <= activityRevision || change.activity_revision > review.revision
+      || Date.parse(change.changed_at) > Date.parse(review.server_time) || JSON.stringify(previous) !== JSON.stringify(event.before)) invalid();
+    if ('from_plan_revision' in event) { if (event.from_plan_revision !== revision) invalid(); revision = event.to_plan_revision; }
+    else if (event.plan_revision !== revision) invalid();
+    previous = event.after; activityRevision = change.activity_revision;
+  }
+  if (revision !== review.current_plan_revision || JSON.stringify(previous) !== JSON.stringify(review.current_plan)) invalid();
+});
+export type ArrangementReviewV4 = z.infer<typeof arrangementReviewV4Schema>;
+
 /** Strict alternatives: unknown/versioned payloads cannot fall back into a legacy exact object. */
-export const arrangementReviewSchema = z.union([arrangementReviewV3Schema, arrangementReviewV2Schema, arrangementReviewV1Schema]);
+export const arrangementReviewSchema = z.union([arrangementReviewV4Schema, arrangementReviewV3Schema, arrangementReviewV2Schema, arrangementReviewV1Schema]);
 export type ArrangementReview = z.infer<typeof arrangementReviewSchema>;
 export type ArrangementReviewView = Omit<ArrangementReviewV3, 'history_format' | 'changes' | 'capacity_changes' | 'history_anchor'> & {
-  history_format: 'verified_v3' | 'legacy_v2' | 'legacy_v1';
+  history_format: 'verified_v4' | 'verified_v3' | 'legacy_v2' | 'legacy_v1';
+  plan_changes?: ArrangementReviewV4['plan_changes'];
   history_anchor: ArrangementReviewV3['history_anchor'];
   changes: Array<Omit<ArrangementReviewV3['changes'][number], 'activity_revision' | 'capacity_at_change' | 'deadline_at_change'> & { activity_revision: number | null; capacity_at_change: number | null; deadline_at_change: string | null }>;
   capacity_changes: Array<Omit<ArrangementReviewV3['capacity_changes'][number], 'deadline_at_change'> & { deadline_at_change: string | null }>;
@@ -243,6 +292,7 @@ export type ArrangementReviewView = Omit<ArrangementReviewV3, 'history_format' |
 /** Legacy payloads are fully validated first. Normalization never fabricates an independent deadline log. */
 export function normalizeArrangementReview(raw: unknown): ArrangementReviewView {
   const parsed = arrangementReviewSchema.parse(raw);
+  if ('schema_version' in parsed && parsed.schema_version === 4) return { ...parsed, schema_version: 3 };
   if ('schema_version' in parsed && parsed.schema_version === 3) return parsed;
   if ('schema_version' in parsed) return { ...parsed, schema_version: 3, history_format: 'legacy_v2', history_anchor: null,
     accepted_plan: parsed.accepted_plan ? arrangementAgreementV3(parsed.accepted_plan) : null,

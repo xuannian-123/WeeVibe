@@ -15,7 +15,7 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
         _count: { select: { applications: { where: { status: 'pending' } } } },
         applications: { where: { activity: { currentManagerId: actor } }, orderBy: { createdAt: 'desc' }, take: 100, select: { id: true, status: true, createdAt: true } },
         segments: { select: { id: true, planRevision: true, cancelledAt: true, startsAt: true, participations: { where: { userId: actor }, select: { userId: true, joinedAt: true, exitedAt: true, status: true, acceptedPlanRevision: true } } } },
-        events: { where: { type: { in: ['segment_capacity_changed', 'segment_deadline_extended', 'activity_cancelled', 'main_segment_changed', 'formation_confirmed', 'arrangement_changed', 'segment_arrangement_changed'] } }, orderBy: { createdAt: 'desc' }, take: 30, select: { id: true, type: true, createdAt: true, detail: true } },
+        events: { where: { type: { in: ['segment_capacity_changed', 'segment_deadline_extended', 'activity_cancelled', 'main_segment_changed', 'formation_confirmed', 'arrangement_changed', 'segment_arrangement_changed', 'segment_plan_changed', 'activity_arrangement_edited'] } }, orderBy: { createdAt: 'desc' }, take: 30, select: { id: true, type: true, createdAt: true, detail: true } },
       } }),
     tx.activityApplication.findMany({ where: { applicantUserId: actor, status: { in: ['approved', 'rejected'] } }, orderBy: { decidedAt: 'desc' }, take: 100, select: { id: true, activityId: true, status: true, decidedAt: true, activity: { select: { name: true } } } }),
     tx.managementHandover.findMany({ where: { OR: [{ fromUserId: actor }, { toUserId: actor }] }, orderBy: { createdAt: 'desc' }, take: 100, select: { id: true, activityId: true, fromUserId: true, toUserId: true, status: true, createdAt: true, activity: { select: { name: true, currentManagerId: true, cancelledAt: true } } } }),
@@ -34,7 +34,7 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
       const detail = event.detail && typeof event.detail === 'object' && !Array.isArray(event.detail) ? event.detail as Record<string, unknown> : {};
       const own = activity.segments.filter(s => (typeof detail.segment_id !== 'string' || s.id === detail.segment_id) && s.participations.some(p => p.joinedAt <= event.createdAt && (!p.exitedAt || p.exitedAt >= event.createdAt)));
       if (!own.length && activity.currentManagerId !== actor) continue;
-      const changed = ['segment_capacity_changed', 'segment_deadline_extended', 'arrangement_changed', 'segment_arrangement_changed'].includes(event.type);
+      const changed = ['segment_capacity_changed', 'segment_deadline_extended', 'arrangement_changed', 'segment_arrangement_changed', 'segment_plan_changed', 'activity_arrangement_edited'].includes(event.type);
       const pending = changed && !activity.cancelledAt && own.some(s => !reviewedSegments.has(s.id) && !s.cancelledAt && s.startsAt > now && s.participations.some(p => p.status === 'joined' && p.acceptedPlanRevision !== s.planRevision));
       if (changed) for (const segment of own) reviewedSegments.add(segment.id);
       const summary = event.type === 'activity_cancelled' ? '活动已取消，请查看最新通知' : event.type === 'formation_confirmed' ? '组织者已确认成局' : event.type === 'main_segment_changed' ? '活动主要环节已调整' : pending ? '活动安排有变化，请查看并确认是否继续参加' : '活动安排已更新，请查看最新详情';
