@@ -17,6 +17,7 @@
     "../../scripts/check-gathering-http.ts",
     "../../scripts/check-gathering-notifications.ts",
     "../../scripts/check-gathering-presentation.ts",
-    "../../scripts/check-wg04-postgres.ts"
+    "../../scripts/check-wg04-postgres.ts",
+    "../../scripts/check-wg05-postgres.ts"
   ]
 }

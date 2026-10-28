@@ -30,7 +30,13 @@ function publicPlan(item: ActivityDetail['segments'][number]) {
   return arrangementPlanSchema.parse({ segment_id, client_ref, position, type, name, starts_at, ends_at, deadline_at, minimum_participants, capacity, location, fee, requirements });
 }
 function Changes({ review, timezone }: { review: ArrangementReviewView; timezone: string }) {
-  return <View>{review.changes.map(change => {
+  return <View>{review.plan_changes?.map(change => <View key={change.activity_revision}>
+    <Text>安排版本 {'from_plan_revision' in change.event ? change.event.from_plan_revision : change.event.plan_revision} → {'to_plan_revision' in change.event ? change.event.to_plan_revision : change.event.plan_revision}</Text>
+    {planRows(change.event.after, timezone).map(([label, value], index) => planRows(change.event.before, timezone)[index][1] !== value ? <Text className="caption" key={label}>{label}：{planRows(change.event.before, timezone)[index][1]} → {value}</Text> : null)}
+    {change.event.before.capacity !== change.event.after.capacity && <Text className="caption">人数上限：{change.event.before.capacity} → {change.event.after.capacity}</Text>}
+    {change.event.before.deadline_at !== change.event.after.deadline_at && <Text className="caption">报名截止：{formatActivityTime(change.event.before.deadline_at, timezone)} → {formatActivityTime(change.event.after.deadline_at, timezone)}</Text>}
+    {'reasons' in change.event && change.event.reasons.includes('cross_segment') && <Text className="caption">本段字段未必改变，但共同参加的其他环节改变了时间衔接，请重新核对。</Text>}
+  </View>)}{review.changes.map(change => {
     const before = planRows(change.before, timezone), after = planRows(change.after, timezone);
     return <View key={change.activity_revision ?? `${change.from_plan_revision}:${change.to_plan_revision}`}><Text>参加条件版本 {change.from_plan_revision} → {change.to_plan_revision} · {formatActivityTime(change.changed_at, timezone)}</Text>
       {after.map(([label, value], index) => before[index][1] !== value ? <Text className="caption" key={label}>{label}：{before[index][1]} → {value}</Text> : null)}
@@ -46,7 +52,7 @@ export function ArrangementPanel(props: Props) {
   if (!session || getToken() !== session) return <Notice>登录账号已变化，旧的本人安排已隐藏，请重新读取。</Notice>;
   return <Panel title="本人安排版本与重新接受">
     <Text className="caption">仅核对本人参加记录；已取消的记录只作历史查看。未回复不等于同意；重新接受不会新增席位、替别人接受或自动成局。</Text>
-    <Text className="caption">当前提供版本核验与重新接受基础能力；人数上限和报名截止可独立调整，其他安排修改入口尚未启用，不会伪造变更记录。</Text>
+    <Text className="caption">请查看服务端核验的完整变化，再决定是否接受；保留原席位，人数上限及报名截止仍分别记录。</Text>
     {candidates.length > 1 && <View>{candidates.map(item => <Action key={item.segment_id} disabled={working || props.anyBusy || current.segment_id === item.segment_id} onClick={() => setSelected(item.segment_id)}>{item.name}{isCancelled(detail, item.segment_id) ? ' · 已取消（历史记录）' : own(detail, item.segment_id)?.status === 'awaiting_acceptance' ? ' · 待重新接受' : ''}</Action>)}</View>}
     <ArrangementItem key={`${detail.activity_id}:${detail.viewer.user_id}:${current.segment_id}`} {...props} segmentId={current.segment_id} onWorking={setWorking} />
   </Panel>;
