@@ -8,7 +8,7 @@ import { activitySnapshot } from './snapshot';
 import { checkManager, checkNotCancelled, checkRevision, requestFingerprint } from './rules';
 import { replay, remember } from './idempotency';
 
-const scopeNotice='本片仅支持接任者仍参加至少一个未取消、尚未开始且已接受当前安排的环节；不受报名截止限制，无自动过期。其它资格范围尚未启用。交接不改变参加、安排、费用或预订。';
+const scopeNotice='接任者必须仍参加至少一个未取消、尚未结束的有效环节；待重新接受安排仍保留参加资格。交接不代替安排接受，不受报名截止限制，无自动过期。交接不改变参加、安排、费用或预订。';
 const memberSelect={userId:true,displayName:true,segmentId:true,status:true,acceptedPlanRevision:true,segment:{select:{id:true,activityId:true,planRevision:true,cancelledAt:true,startsAt:true,endsAt:true}}} satisfies Prisma.ParticipationSelect;
 type Member=Prisma.ParticipationGetPayload<{select:typeof memberSelect}>;
 type Activity=Awaited<ReturnType<typeof loadActivity>>;
@@ -19,7 +19,7 @@ function ids(activityId:string,actorId:string,handoverId?:string){
  return{id:a.data,actor:u.data,offerId:h?.success?h.data:undefined};
 }
 function conflict():never{throw new ServiceError('CONCURRENT_MODIFICATION',409,'交接状态正在变化，请刷新后重试');}
-function requireScope():never{throw new ServiceError('HANDOVER_SCOPE_UNAVAILABLE',409,'目前仅支持仍参加未取消、尚未开始且已接受当前安排环节的成员接任；其它资格范围尚未启用，待接邀请未自动失效');}
+function requireScope():never{throw new ServiceError('HANDOVER_SCOPE_UNAVAILABLE',409,'接任人须仍参加至少一个未取消、尚未结束的有效环节；当前资格不足，待接邀请仍保留，可拒绝或撤回');}
 async function schemaReady<T>(action:()=>Promise<T>):Promise<T>{try{return await action();}catch(error){
  // Only this new schema's absent table/column is configuration failure. Never
  // emit raw adapter details or silently substitute an in-memory invitation.
@@ -37,7 +37,7 @@ async function members(tx:Tx,activityId:string,userId?:string):Promise<Member[]>
  if(rows.length>maxMembers)throw new ServiceError('NOT_CONFIGURED',503,'当前交接名单超过完整读取范围，未截取成员或发出邀请');
  return rows;
 }
-function eligible(row:Member,activityId:string,now:Date){const s=row.segment;return row.status==='joined'&&s.activityId===activityId&&s.id===row.segmentId&&!s.cancelledAt&&Number.isFinite(s.startsAt.getTime())&&Number.isFinite(s.endsAt.getTime())&&s.endsAt>s.startsAt&&now<s.startsAt&&row.acceptedPlanRevision===s.planRevision;}
+function eligible(row:Member,activityId:string,now:Date){const s=row.segment;return row.status==='joined'&&s.activityId===activityId&&s.id===row.segmentId&&!s.cancelledAt&&Number.isFinite(s.startsAt.getTime())&&Number.isFinite(s.endsAt.getTime())&&s.endsAt>s.startsAt&&now<s.endsAt;}
 function candidates(rows:Member[],activity:Activity,now:Date):HandoverCandidate[]{
  const map=new Map<string,HandoverCandidate>();
  for(const row of rows){if(row.userId===activity.currentManagerId||!eligible(row,activity.id,now))continue;

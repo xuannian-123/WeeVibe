@@ -18,7 +18,7 @@ const statusText = { pending: '等待指定接任人处理', accepted: '此交�
 function blockedText(offer: HandoverOffer) {
   if (offer.blocked_reason === 'activity_cancelled') return '活动已取消，待接交接不能生效；历史与已生效管理归属保留。';
   if (offer.blocked_reason === 'management_changed') return '管理归属已有变化，请刷新核对；旧交接不会恢复旧管理权。';
-  if (offer.blocked_reason === 'recipient_scope_unavailable') return '接任人当前不满足本片资格，暂不能接受；待接记录仍保留，本人可拒绝，当前管理者可撤回。';
+  if (offer.blocked_reason === 'recipient_scope_unavailable') return '接任人当前没有符合资格的有效参加环节，暂不能接受；待接记录仍保留，本人可拒绝，当前管理者可撤回。';
   return offer.status === 'pending' && !offer.can_accept && !offer.can_reject && !offer.can_withdraw ? '当前状态无法执行本片交接动作，请刷新核对。' : '';
 }
 export function HandoverPanel({ detail, session, fresh, anyBusy, refresh, onBusyChange }: Props) {
@@ -125,7 +125,7 @@ export function HandoverPanel({ detail, session, fresh, anyBusy, refresh, onBusy
   const operationBlocked = !fresh || busy || state.blocked || !!pending || !view;
   return <Panel title="管理权交接">
     <Text className="caption">同一活动只有一位当前管理者、至多一份待接交接；指定本人接受后才生效，没有自动过期。管理与参加独立，原链接、名单和安排保留。</Text>
-    <Text className="caption">本片接任资格：至少参加一个未取消、尚未开始并已接受当前安排的环节；报名截止不单独阻止交接。仅已开始／结束或待重新接受的情况暂未启用。</Text>
+    <Text className="caption">接任资格：仍参加至少一个未取消、尚未结束的有效环节。正在进行或保位待重新接受的参加也可接任；交接不会代替安排接受。报名截止不单独阻止交接。</Text>
     <Action disabled={!fresh || busy} onClick={() => { void load(); }}>{reading ? '正在读取交接…' : '读取交接与接任候选'}</Action>
     {!view && !reading && <Notice>尚未取得可用的交接状态；不会把读取失败当作没有邀请或伪造成员候选。</Notice>}
     {view && <View>
