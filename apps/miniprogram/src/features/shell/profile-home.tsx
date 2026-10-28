@@ -1,3 +1,4 @@
+import type {ReactNode} from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Button, Text, View } from '@tarojs/components';
 import type { Venue } from '@weevibe/contracts';
@@ -9,7 +10,7 @@ import { VenueCard, VenueDetail } from './venue-card';
 import { Action, Notice } from '../../components/ui';
 import { errorText } from '../../platform/page-state';
 
-export function ProfileHome({ account, session, edit, settings, activities, changed, plan }: { account: AccountSnapshot; session: string; edit: () => void; settings: () => void; activities: (filter: 'managed' | 'joined') => void; changed: (v: AccountSnapshot) => void; plan: (v: Venue) => void }) {
+export function ProfileHome({ account, session, edit, settings, activities, changed, plan, gatherings }: { gatherings?:ReactNode; account: AccountSnapshot; session: string; edit: () => void; settings: () => void; activities: (filter: 'managed' | 'joined') => void; changed: (v: AccountSnapshot) => void; plan: (v: Venue) => void }) {
   const [preview, setPreview] = useState(false), [allFavorites, setAllFavorites] = useState(false), [selected, setSelected] = useState<Venue>(), [tool, setTool] = useState<'help' | 'about' | ''>('');
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState(''); const mounted = useRef(true), lock = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -26,6 +27,7 @@ export function ProfileHome({ account, session, edit, settings, activities, chan
   return <View className="wv-profile-home"><ProfileCard profile={displayed} session={session} avatarPath={p.avatar_url} edit={!preview ? edit : undefined} settings={!preview ? settings : undefined}/>
     <Button className="wv-preview-profile" onClick={() => setPreview(v => !v)}>{preview ? '返回本人视角' : '预览他人看到的主页'}　›</Button>
     {preview ? <Text className="wv-list-note">仅同一活动的组织者和已加入成员可查看；此视角只展示你主动公开的内容。</Text> : <View>
+      {gatherings}
       <View className="wv-section-heading"><Text className="wv-section-title">我的收藏</Text><Button className="wv-link" onClick={() => setAllFavorites(v => !v)}>{allFavorites ? '收起' : '全部'}　›</Button></View>
       {notice && <Notice tone="error">{notice}</Notice>}
       {account.favorites.length ? <View className="wv-venue-grid">{account.favorites.slice(0, allFavorites ? 100 : 2).map(v => <VenueCard key={v.provider_id} venue={v} saved busy={busy} open={() => setSelected(v)} favorite={() => void remove(v)}/>)}</View> : <View className="wv-empty compact"><Text className="wv-muted">把想一起去的地点，慢慢收藏起来。</Text></View>}

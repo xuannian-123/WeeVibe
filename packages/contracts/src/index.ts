@@ -76,3 +76,7 @@ export * from './deadline';
 export * from './booking';
 
 export * from './navigation';
+
+export * from './gatherings';
+export * from './gathering-reference';
+export * from './gathering-rules';

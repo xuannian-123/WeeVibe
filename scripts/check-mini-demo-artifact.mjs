@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -50,7 +50,16 @@ try {
   assert(Array.isArray(app.requiredPrivateInfos) && app.requiredPrivateInfos.includes('getLocation'), 'Compiled location interface declaration is missing');
   assert(!app.requiredPrivateInfos.includes('getFuzzyLocation') && !app.permission?.['scope.userFuzzyLocation'], 'Mutually exclusive fuzzy location must not remain declared');
   const home = read(root, 'apps/miniprogram/dist/pages/index/index.js');
-  assert(/\.getLocation\(\{type:["']gcj02["']/.test(home), 'Compiled precise location call is missing');
-  assert(!/\.getFuzzyLocation\(/.test(home), 'Mutually exclusive fuzzy location call must not remain');
+  // Reused native-location modules move from the home bundle into common.js
+  // when the gathering page imports them too. Both are executable app bundles.
+  assert(/\.getLocation\(\{type:["']gcj02["']/.test(home + '\n' + common), 'Compiled precise location call is missing');
+  function checkLocationBundles(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = resolve(directory, entry.name);
+      if (entry.isDirectory()) checkLocationBundles(path);
+      else if (entry.isFile() && entry.name.endsWith('.js')) assert(!/\.getFuzzyLocation\(/.test(readFileSync(path, 'utf8')), 'Mutually exclusive fuzzy location call must not remain');
+    }
+  }
+  checkLocationBundles(resolve(root, 'apps/miniprogram/dist'));
   console.log(JSON.stringify({ pass: true, target: 'existing_shared_demo', artifact: 'compiled_cloud_login_and_cloud_http', common_sha256: createHash('sha256').update(common).digest('hex'), appid: 'wxaa06e111e33f6ddd', urlCheck: true, remote_calls: 0 }));
 } catch (error) { console.error(error instanceof Error ? error.message : 'Configured artifact validation failed'); process.exitCode = 1; }

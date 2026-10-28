@@ -59,6 +59,10 @@ jobs:
       - run: pnpm db:migrate
       - name: Check v38 preparations and privacy in disposable PostgreSQL
         run: pnpm exec tsx scripts/check-v38-preparation.ts --fixture-only
+      - name: Check HTML gathering flows and privacy in disposable PostgreSQL
+        run: |
+          pnpm exec tsx scripts/check-gathering-integration.ts --fixture-only
+          pnpm exec tsx scripts/check-gathering-http.ts --fixture-only
       - run: node scripts/prepare-cloud-identity-fixture.mjs --fixture-only
       - name: Start standalone and test real PG transactions
         shell: bash

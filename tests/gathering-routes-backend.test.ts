@@ -1,0 +1,37 @@
+import {beforeEach,describe,expect,it,vi} from 'vitest';
+const h=vi.hoisted(()=>({auth:vi.fn(),list:vi.fn(),create:vi.fn(),save:vi.fn(),join:vi.fn(),details:vi.fn(),finalize:vi.fn(),members:vi.fn(),generate:vi.fn(),organize:vi.fn(),budget:vi.fn()}));
+vi.mock('../apps/web/src/server/activities/transport',async()=>{const actual=await vi.importActual<typeof import('../apps/web/src/server/activities/transport')>('../apps/web/src/server/activities/transport');return{...actual,requireActor:h.auth};});
+vi.mock('../apps/web/src/server/gatherings/service',()=>({listGatherings:h.list,createGathering:h.create,saveGatheringIntake:h.save,joinGathering:h.join,updateGatheringDetails:h.details,finalizeGathering:h.finalize,getGatheringMembers:h.members}));
+vi.mock('../apps/web/src/server/gatherings/generation',()=>({generateGatheringItinerary:h.generate}));
+vi.mock('../apps/web/src/server/gatherings/ai',()=>({gatheringAI:{organize:h.organize}}));
+vi.mock('../apps/web/src/server/requirements/service',()=>({consumeRequirementBudget:h.budget}));
+import {ServiceError} from '../apps/web/src/server/http';
+import {emptyGatheringIntake} from '../packages/contracts/src';
+import {GET as list,POST as create} from '../apps/web/src/app/api/v1/gatherings/route';
+import {POST as save} from '../apps/web/src/app/api/v1/gatherings/[id]/intake/route';
+import {POST as join} from '../apps/web/src/app/api/v1/gatherings/[id]/join/route';
+import {POST as details} from '../apps/web/src/app/api/v1/gatherings/[id]/details/route';
+import {POST as finalize} from '../apps/web/src/app/api/v1/gatherings/[id]/finalize/route';
+import {GET as members} from '../apps/web/src/app/api/v1/gatherings/[id]/members/route';
+import {POST as generate} from '../apps/web/src/app/api/v1/gatherings/[id]/generate/route';
+import {POST as organize} from '../apps/web/src/app/api/v1/gatherings/organize/route';
+const actor='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222-222222222222';
+const context=()=>({params:Promise.resolve({id})});
+const request=(body:unknown={},method='POST',url=`https://fixture.test/api/v1/gatherings/${id}`)=>new Request(url,{method,...(method==='POST'?{body:JSON.stringify(body),headers:{'Content-Type':'application/json'}}:{})});
+beforeEach(()=>{for(const fn of Object.values(h))fn.mockReset();h.auth.mockResolvedValue(actor);h.budget.mockResolvedValue(undefined);});
+describe('gathering HTTP handlers authenticate and bound untrusted input',()=>{
+  it.each(['create','save','join','details','finalize','generate','organize'] as const)('requires identity before %s work',async name=>{
+    h.auth.mockRejectedValue(new ServiceError('UNAUTHENTICATED',401,'请先登录'));
+    const handler={create,save,join,details,finalize,generate,organize}[name];const response=await handler(request(),context());
+    expect(response.status).toBe(401);expect(Object.values(h).filter(fn=>fn!==h.auth).every(fn=>fn.mock.calls.length===0)).toBe(true);
+  });
+  it('uses server identity for list and never caches a private response',async()=>{h.list.mockResolvedValue({gatherings:[]});const response=await list(request(undefined,'GET'));expect(h.list).toHaveBeenCalledExactlyOnceWith(actor);expect(response.headers.get('cache-control')).toBe('no-store');});
+  it('bounds create input before reaching a domain write',async()=>{const response=await create(request({oversized:'x'.repeat(66000)}));expect(response.status).toBe(400);expect(h.create).not.toHaveBeenCalled();});
+  it('passes only the parsed route identity and authenticated actor into a save',async()=>{h.save.mockResolvedValue({ok:true});const body={expected_revision:1,expected_version:0};const response=await save(request(body),context());expect(response.status).toBe(200);expect(h.save).toHaveBeenCalledExactlyOnceWith(id,actor,body);});
+  it('passes explicit join consent in the save route without calling the separate join handler',async()=>{h.save.mockResolvedValue({ok:true});const body={expected_revision:1,expected_version:0,join_if_needed:true};const response=await save(request(body),context());expect(response.status).toBe(200);expect(h.save).toHaveBeenCalledExactlyOnceWith(id,actor,body);expect(h.join).not.toHaveBeenCalled();});
+  it('binds final selection to the authenticated actor and bounds the request body',async()=>{h.finalize.mockResolvedValue({ok:true});const body={expected_source:'a'.repeat(64),generation_id:id,plan_id:'plan1'};const response=await finalize(request(body),context());expect(response.status).toBe(200);expect(h.finalize).toHaveBeenCalledExactlyOnceWith(id,actor,body);const oversized=await finalize(request({large:'x'.repeat(5000)}),context());expect(oversized.status).toBe(400);expect(h.finalize).toHaveBeenCalledTimes(1);});
+  it('rejects malformed pagination cursors before any member read',async()=>{const response=await members(request(undefined,'GET',`https://fixture.test/api/v1/gatherings/${id}/members?cursor=../../account`),context());expect(response.status).toBe(400);expect(h.members).not.toHaveBeenCalled();});
+  it('rejects private object injection into the organize request before supplier work',async()=>{const response=await organize(request({public:emptyGatheringIntake().public,private:{origin:'PRIVATE_HOME'}}));expect(response.status).toBe(400);expect(h.organize).not.toHaveBeenCalled();});
+  it('returns only the known public error when a provider unexpectedly throws',async()=>{h.generate.mockRejectedValue(Error('PRIVATE_SUPPLIER_ERROR'));const response=await generate(request({}),context());expect(response.status).toBe(500);expect(JSON.stringify(await response.json())).not.toContain('PRIVATE_SUPPLIER_ERROR');});
+  it('passes only public intake to the organize provider after the rate budget',async()=>{const input=emptyGatheringIntake().public;h.organize.mockResolvedValue({summary:'整理完成',blocks:[],source:'ai'});await organize(request({public:input}));expect(h.budget).toHaveBeenCalledExactlyOnceWith(actor);expect(h.organize).toHaveBeenCalledExactlyOnceWith(actor,input);});
+});

@@ -30,6 +30,9 @@ model User {
   receivedInvitations ReceivedInvitation[]
   sentHandovers ManagementHandover[] @relation("HandoverSender")
   receivedHandovers ManagementHandover[] @relation("HandoverRecipient")
+  ownedGatherings Gathering[]
+  gatheringMemberships GatheringMember[]
+  gatheringGenerations GatheringGeneration[]
 }
 
 model WechatIdentity {
@@ -358,6 +361,62 @@ enum ManagementHandoverStatus {
 
 // Partial unique index for one pending/activity and CHECK constraints are maintained
 // by migration SQL; Prisma 6 does not express a predicate-bearing unique index.
+// HTML-based friend / team preparation. Legacy activities remain intact.
+model Gathering {
+  id String @id @default(uuid()) @db.Uuid
+  ownerUserId String @db.Uuid
+  owner User @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  kind String
+  details Json
+  revision Int @default(1)
+  creationKey String
+  creationHash String
+  currentGenerationId String? @db.Uuid
+  finalGenerationId String? @db.Uuid
+  finalPlanId String?
+  finalizedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  members GatheringMember[]
+  generations GatheringGeneration[]
+  @@unique([ownerUserId, creationKey])
+  @@index([ownerUserId, updatedAt])
+}
+
+model GatheringMember {
+  gatheringId String @db.Uuid
+  gathering Gathering @relation(fields: [gatheringId], references: [id], onDelete: Cascade)
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  publicIntake Json
+  privateIntake Json
+  answers Json
+  responseVersion Int @default(0)
+  lastWriteKey String?
+  lastWriteHash String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@id([gatheringId, userId])
+  @@index([userId, updatedAt])
+}
+
+model GatheringGeneration {
+  id String @id @default(uuid()) @db.Uuid
+  gatheringId String @db.Uuid
+  gathering Gathering @relation(fields: [gatheringId], references: [id], onDelete: Cascade)
+  creatorUserId String @db.Uuid
+  creator User @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  idempotencyKey String
+  sourceHash String
+  status String
+  result Json?
+  error String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([gatheringId, idempotencyKey])
+  @@index([gatheringId, createdAt])
+}
+
 model ManagementHandover {
   id String @id @default(uuid()) @db.Uuid
   activityId String @db.Uuid
