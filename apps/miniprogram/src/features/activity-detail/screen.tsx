@@ -14,6 +14,7 @@ import { Itinerary } from './itinerary';
 import { ActivityMore } from './more';
 import { ParticipationActions } from '../participation/ParticipationActions';
 import { FormationPanel } from '../formation/FormationPanel';
+import { formationProgress } from '../formation/progress';
 import { ArrangementPanel } from '../arrangement-change/ArrangementPanel';
 import { WithdrawalPanel } from '../applications/WithdrawalPanel';
 import { CancellationPanel } from '../cancellation/CancellationPanel';
@@ -55,7 +56,7 @@ export default function ActivityDetailScreen() {
       <Text className="activity-eyebrow">{BRAND_NAME} · 一起出发</Text>
       <Text className="activity-title">{detail?.name ?? '活动详情'}</Text>
       {detail && <View className="activity-badges">
-        <Text className={`activity-badge ${detail.cancelled_at ? 'activity-badge-muted' : ''}`}>{detail.cancelled_at ? '已取消' : detail.formation_status === 'confirmed' ? '主环节已成局' : '待确认成局'}</Text>
+        <Text className={`activity-badge ${detail.cancelled_at ? 'activity-badge-muted' : ''}`}>{formationProgress(detail).label}</Text>
         <Text className="activity-role">{detail.viewer.is_manager ? '你在管理此活动' : userId ? '我的活动' : '朋友的邀请'} · {detail.segments.length}个环节</Text>
       </View>}
       <View className="activity-toolbar">
@@ -63,6 +64,7 @@ export default function ActivityDetailScreen() {
         {!userId && <Action variant="primary" disabled={login.busy || anyBusy} onClick={() => { void login.login(); }}>{login.busy ? '登录中…' : '微信登录'}</Action>}
       </View>
     </View>
+    {detail && <Notice>{formationProgress(detail).guidance}</Notice>}
     {read.loading && !detail && <Notice>正在加载活动安排…</Notice>}
     {read.error && <Notice>{read.error} 当前内容可能已过时，请刷新后再操作。</Notice>}
     {!detail && !read.loading && !read.error && <Notice>暂时没有取得活动信息，请刷新重试。</Notice>}

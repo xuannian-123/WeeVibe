@@ -58,6 +58,8 @@ jobs:
       - run: pnpm typecheck && pnpm test
       - run: pnpm build:api && pnpm build:mini
       - run: pnpm db:migrate
+      - name: Check WG04 formation exit and replacement in disposable PostgreSQL
+        run: pnpm exec tsx scripts/check-wg04-postgres.ts --fixture-only
       - name: Check v38 preparations and privacy in disposable PostgreSQL
         run: pnpm exec tsx scripts/check-v38-preparation.ts --fixture-only
       - name: Check HTML gathering flows and privacy in disposable PostgreSQL
