@@ -58,11 +58,15 @@ async function check(name: string, work: () => Promise<void>) { current = name; 
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done; }); return { promise, resolve }; }
 async function actor() {
   const user = await db.user.create({ data: {} }), token = randomBytes(32).toString('base64url');
+  const sharp = loadServer('../apps/web/node_modules/sharp') as (options: unknown) => { jpeg: () => { toBuffer: () => Promise<Buffer> } };
+  const bytes = await sharp({create:{width:2,height:2,channels:3,background:'#e4d6c8'}}).jpeg().toBuffer();
+  await db.privateProfile.create({data:{userId:user.id,data:{nickname:'HTTP fixture participant'}}});
+  await db.userAvatar.create({data:{userId:user.id,bytes:Uint8Array.from(bytes),contentType:'image/jpeg',digest:createHash('sha256').update(bytes).digest('hex')}});
   await db.authSession.create({ data: { userId: user.id, tokenHash: createHash('sha256').update(token).digest('hex'), expiresAt: new Date(Date.now() + 3600000) } });
   return { id: user.id, token };
 }
 function ownIntake(prefix: string): GatheringIntake {
-  const value = emptyGatheringIntake(); value.public.note = `${prefix} public preference`;
+  const value = emptyGatheringIntake(); value.public.activity_nickname='活动参与者'; value.public.note = `${prefix} public preference`;
   value.private = { budget_min: 5555.55, budget_max: 5666.66, budget_note: `${prefix}_PRIVATE_BUDGET_SENTINEL`, origin: { label: `${prefix}_PRIVATE_ORIGIN_SENTINEL` }, confirmed_keys: ['budget', 'origin'] };
   return value;
 }

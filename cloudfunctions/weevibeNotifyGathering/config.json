@@ -1,0 +1,4 @@
+{
+  "permissions": {"openapi": ["subscribeMessage.send"]},
+  "triggers": [{"name":"gatheringSubmissionNotify","type":"timer","config":"0 * * * * * *"}]
+}

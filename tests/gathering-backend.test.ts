@@ -19,7 +19,7 @@ const generationInput=async()=>({expected_source:gatheringSourceFingerprint(f.de
 describe('gathering server projections and access',()=>{
   it('shares friend identities and public blocks but returns private fields only to their actor',async()=>{
     const privateAnswer=gatheringFixtureIntake('想一起唱歌');privateAnswer.private.budget_max=987;privateAnswer.private.budget_note='ALICE_PRIVATE_BUDGET';privateAnswer.private.origin={label:'ALICE_PRIVATE_HOME'};f.seed(alice,privateAnswer);
-    const ownerView=await gatheringSnapshotTx(f.tx,id,owner);expect(ownerView.members?.map(m=>m.person.nickname)).toEqual(['局头','Alice']);expect(JSON.stringify(ownerView)).not.toMatch(/ALICE_PRIVATE|987|PRIVATE_PROFILE/);
+    const ownerView=await gatheringSnapshotTx(f.tx,id,owner);expect(ownerView.members?.map(m=>m.person.nickname)).toEqual(['出游伙伴','出游伙伴']);expect(ownerView.members?.every(m=>m.person.animal_id==='cat'&&m.person.avatar===null)).toBe(true);expect(JSON.stringify(ownerView)).not.toMatch(/ALICE_PRIVATE|PRIVATE_PROFILE/);expect(ownerView.own?.intake.private.budget_max).toBeNull();
     const aliceView=await gatheringSnapshotTx(f.tx,id,alice);expect(aliceView.own?.intake.private.budget_note).toBe('ALICE_PRIVATE_BUDGET');expect(aliceView.source_fingerprint).toBeNull();expect(gatheringSnapshotSchema.safeParse(aliceView).success).toBe(true);
     const publicQuery=f.raw.gatheringMember.findMany.mock.calls[0][0];expect(publicQuery.select).not.toHaveProperty('privateIntake');
     expect(f.raw.gatheringMember.findUnique.mock.calls.every(([arg])=>[owner,alice].includes(arg.where.gatheringId_userId.userId))).toBe(true);
@@ -61,7 +61,7 @@ describe('gathering creation and response boundaries',()=>{
     const result=await saveGatheringIntake(id,bob,input),replay=await saveGatheringIntake(id,bob,input);
     expect(result.viewer.is_member).toBe(true);expect(result.own?.version).toBe(1);expect(replay.own?.version).toBe(1);expect(result.gathering.has_responded).toBe(true);
     expect(f.raw.gatheringMember.create).toHaveBeenCalledTimes(1);expect(f.raw.gatheringMember.update).not.toHaveBeenCalled();
-    expect(JSON.stringify(await gatheringSnapshotTx(f.tx,id,owner))).not.toMatch(/BOB_PRIVATE|777/);
+    const organizerView=await gatheringSnapshotTx(f.tx,id,owner);expect(JSON.stringify(organizerView)).not.toContain('BOB_PRIVATE');expect(organizerView.own?.intake.private.budget_max).toBeNull();expect(organizerView.members?.every(member=>member.blocks.every(block=>block.id!=='budget'&&block.id!=='origin'))).toBe(true);
     await expect(saveGatheringIntake(id,bob,{...input,intake:gatheringFixtureIntake('另一份输入')})).rejects.toMatchObject({code:'IDEMPOTENCY_CONFLICT'});
     expect(f.members.size).toBe(3);
   });

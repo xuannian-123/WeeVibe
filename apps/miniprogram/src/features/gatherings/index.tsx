@@ -8,6 +8,7 @@ import safeShare from '../../assets/share-safe.png';
 import {PrivacyConsent} from '../../components/privacy-consent';
 import {GatheringDesigner} from './designer';
 import {GatheringManage} from './manage';
+import {GatheringProfileBoundary} from './profile-boundary';
 import {gatheringMessage,readGathering} from './client';
 import './gatherings.css';
 
@@ -42,7 +43,7 @@ export default function GatheringPage(){
   const update=(next:GatheringSnapshot)=>{if(valid&&identity&&mounted.current&&visible.current&&next.gathering.id===id)accept(identity,next);};
   return <View className="gg-screen"><View className="gg-top"><Text className="gg-brand">WeeVibe<Text>•</Text></Text><Text className="gg-muted">好时光，一起。</Text></View><Button className="gg-back" onClick={()=>void Taro.navigateBack({fail:()=>void Taro.reLaunch({url:'/pages/index/index'})}).catch(()=>{})}>← 返回首页</Button>
     {notice&&<Text className="gg-notice error">{notice}</Text>}
-    {valid&&identity?(id?snapshot?<GatheringManage key={`${identity.actor}:${identity.session}:${id}:${entry}`} entry={entry} snapshot={snapshot} actor={identity.actor} session={identity.session} update={update} refresh={refresh}/>:<View className="gg-empty"><Text>{busy?'正在读取筹备…':'暂时无法确认筹备内容'}</Text><Button className="gg-secondary" disabled={busy} onClick={()=>void refresh()}>重新读取</Button></View>:kind?<GatheringDesigner key={`${identity.actor}:${identity.session}:${kind}`} actor={identity.actor} session={identity.session} kind={kind}/>:null):<View className="gg-panel"><Text className="gg-heading">先认识一下，再一起出发</Text><Text className="gg-muted">使用微信身份后继续；当前入口会保留。</Text><Button className="gg-primary" disabled={busy} loading={busy} onClick={()=>void login()}>{busy?'正在确认微信身份…':'微信登录并继续'}</Button></View>}
+    {valid&&identity?<GatheringProfileBoundary actor={identity.actor} session={identity.session} cancel={()=>void Taro.reLaunch({url:'/pages/index/index'})}>{id?snapshot?<GatheringManage key={`${identity.actor}:${identity.session}:${id}:${entry}`} entry={entry} snapshot={snapshot} actor={identity.actor} session={identity.session} update={update} refresh={refresh}/>:<View className="gg-empty"><Text>{busy?'正在读取筹备…':'暂时无法确认筹备内容'}</Text><Button className="gg-secondary" disabled={busy} onClick={()=>void refresh()}>重新读取</Button></View>:kind?<GatheringDesigner key={`${identity.actor}:${identity.session}:${kind}`} actor={identity.actor} session={identity.session} kind={kind}/>:null}</GatheringProfileBoundary>:<View className="gg-panel"><Text className="gg-heading">先认识一下，再一起出发</Text><Text className="gg-muted">使用微信身份后继续；当前入口会保留。</Text><Button className="gg-primary" disabled={busy} loading={busy} onClick={()=>void login()}>{busy?'正在确认微信身份…':'微信登录并继续'}</Button></View>}
     <PrivacyConsent/>
   </View>;
 }

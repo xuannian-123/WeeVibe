@@ -5,6 +5,7 @@ import { consumeRequirementBudget } from '../requirements/service';
 import { gatheringAI,reviewGatheringItinerary } from './ai';
 import { gatheringModelSource, gatheringSourceFingerprint } from './privacy';
 import { assertGatheringOwner,assertGatheringEditable, gatheringConflict, gatheringJson, gatheringSnapshotTx, lockGathering, readGatheringRows } from './service';
+import {assertGatheringProfile} from './profile';
 
 export async function generateGatheringItinerary(id:string,actor:string,raw:unknown,provider:Pick<typeof gatheringAI,'generate'>=gatheringAI){
   const parsed=gatheringGenerateSchema.safeParse(raw);if(!parsed.success)throw new ServiceError('INVALID_INPUT',400,'请刷新当前筹备后生成');
@@ -15,6 +16,7 @@ export async function generateGatheringItinerary(id:string,actor:string,raw:unkn
     const previous=await tx.gatheringGeneration.findUnique({where:{gatheringId_idempotencyKey:{gatheringId:id,idempotencyKey:input.idempotency_key}}});
     if(previous){if(previous.sourceHash!==input.expected_source)throw new ServiceError('IDEMPOTENCY_CONFLICT',409,'原生成请求不能用于新的需求');return {existing:true as const,snapshot:await gatheringSnapshotTx(tx,id,actor)};}
     assertGatheringEditable(row);
+    await assertGatheringProfile(tx,actor);
     await tx.gatheringGeneration.updateMany({where:{gatheringId:id,status:'processing',createdAt:{lt:new Date(Date.now()-90000)}},data:{status:'failed',error:'生成未完成，请重新核对后重试'}});
     if(await tx.gatheringGeneration.findFirst({where:{gatheringId:id,status:'processing'}}))throw new ServiceError('CONCURRENT_MODIFICATION',409,'已有一次生成正在处理，请先核对生成状态');
     const details=gatheringDetailsSchema.parse(row.details),rows=await readGatheringRows(tx,id);

@@ -12,6 +12,9 @@ const optionalDate = z.union([z.literal(''), gatheringDateSchema]);
 const clock = z.union([z.literal(''), z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/)]);
 const money = z.number().min(0).max(1_000_000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 0.000001);
 export const gatheringKindSchema = z.enum(['friend', 'team']);
+export const gatheringAnimalIds=['cat','dog','fox','rabbit','bear','panda','koala','tiger','lion','penguin','owl','capybara'] as const;
+export const gatheringAnimalIdSchema=z.enum(gatheringAnimalIds);
+export type GatheringAnimalId=typeof gatheringAnimalIds[number];
 export const gatheringDetailKeys = ['date', 'title', 'start_time', 'end_date', 'end_time', 'place', 'address', 'description', 'approximate_time', 'minimum', 'capacity', 'fee'] as const;
 export const gatheringQuestionSchema = z.object({
   id: key, title: text(200).min(1), type: z.enum(['single', 'multiple', 'text']), required: z.boolean(),
@@ -37,6 +40,7 @@ export const gatheringDetailsSchema = z.object({
 export type GatheringDetails = z.infer<typeof gatheringDetailsSchema>;
 export const gatheringKeywordGroups = ['eat','drink','play','pace','atmosphere','experience','arrangement','venue','environment','travel','exertion'] as const;
 export const gatheringPublicIntakeSchema = z.object({
+  activity_nickname:text(32).default(''),
   date: optionalDate, availability: text(200), note: text(1000),
   keywords: z.record(z.enum(gatheringKeywordGroups), z.array(text(40).min(1)).max(20)),
   confirmed_keys: z.array(key).max(100),
@@ -76,7 +80,7 @@ export const gatheringItinerarySchema = z.object({
 export type GatheringItinerary = z.infer<typeof gatheringItinerarySchema>;
 export const gatheringGenerateSchema = z.object({expected_source:z.string().regex(/^[a-f0-9]{64}$/),idempotency_key:idempotencyKeySchema}).strict();
 export const gatheringFinalizeSchema = z.object({expected_source:z.string().regex(/^[a-f0-9]{64}$/),generation_id:id,plan_id:key}).strict();
-export const gatheringPersonSchema = z.object({user_id:id,nickname:text(32),avatar:avatarAssetSchema.nullable()}).strict();
+export const gatheringPersonSchema = z.object({user_id:id,nickname:text(32),avatar:avatarAssetSchema.nullable(),animal_id:gatheringAnimalIdSchema.optional()}).strict();
 export const gatheringMemberPublicSchema = z.object({person:gatheringPersonSchema,blocks:z.array(gatheringBlockSchema).max(100),submitted:z.boolean()}).strict();
 export const gatheringStatsSchema = z.object({
   respondent_count:z.number().int().nonnegative(),
@@ -94,9 +98,17 @@ export const gatheringSnapshotSchema = z.object({
   final_choice:z.object({generation_id:id,plan_id:key,finalized_at:z.iso.datetime()}).strict().nullable(),
   generation:z.object({id,status:z.enum(['processing','ready','failed']),error:text(100).nullable()}).strict().nullable(),
   server_time:z.iso.datetime(),
-}).strict();
+}).strict().superRefine((value,ctx)=>{
+  if(value.gathering.kind==='friend'&&[value.gathering.owner,...(value.members?.map(member=>member.person)??[])].some(person=>!person.animal_id||person.avatar!==null))ctx.addIssue({code:'custom',message:'朋友出游只展示活动昵称与动物头像'});
+});
 export type GatheringSnapshot = z.infer<typeof gatheringSnapshotSchema>;
 export const gatheringListSchema=z.object({gatherings:z.array(gatheringSummarySchema).max(100)}).strict();
-export const gatheringMembersPageSchema=z.object({members:z.array(gatheringMemberPublicSchema).max(10),next_cursor:id.nullable()}).strict();
-export const gatheringOrganizeSchema=z.object({public:gatheringPublicIntakeSchema}).strict();
+export const gatheringMembersPageSchema=z.object({members:z.array(gatheringMemberPublicSchema).max(10),next_cursor:id.nullable()}).strict().superRefine((value,ctx)=>{
+  if(value.members.some(member=>!member.person.animal_id||member.person.avatar!==null))ctx.addIssue({code:'custom',message:'朋友出游只展示活动昵称与动物头像'});
+});
+export const gatheringOrganizePublicSchema=gatheringPublicIntakeSchema.omit({activity_nickname:true});
+export const gatheringOrganizeSchema=z.object({public:gatheringOrganizePublicSchema}).strict();
 export const gatheringOrganizedSchema=z.object({summary:text(1200),blocks:z.array(gatheringBlockSchema).max(100),source:z.literal('ai')}).strict();
+export const gatheringSubscriptionConfigSchema=z.object({enabled:z.boolean(),template_id:text(200).min(1).nullable(),scope:text(100).min(1).nullable(),authorization:z.literal('one_time_intent')}).strict().refine(value=>value.enabled?value.template_id!==null&&value.scope!==null:value.template_id===null&&value.scope===null,'订阅配置不完整');
+export const gatheringSubscriptionIntentSchema=z.object({gathering_id:id,authorization_key:idempotencyKeySchema,template_id:text(200).min(1),result:z.enum(['accept','reject','ban'])}).strict();
+export const gatheringSubscriptionIntentResultSchema=z.object({recorded:z.boolean(),available_intents:z.number().int().nonnegative(),authorization:z.literal('one_time_intent')}).strict();

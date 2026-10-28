@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {emptyGatheringDetails,emptyGatheringIntake,gatheringDateSchema,gatheringDetailsSchema,gatheringIntakeSchema,gatheringCreateSchema,gatheringGenerateSchema,gatheringFinalizeSchema,gatheringMemberSaveSchema,gatheringOwnBlocks,gatheringPublicBlocks,gatheringVisibleDetails,privateGatheringQuestion} from '../packages/contracts/src';
+import {emptyGatheringDetails,emptyGatheringIntake,gatheringDateSchema,gatheringDetailsSchema,gatheringIntakeSchema,gatheringCreateSchema,gatheringGenerateSchema,gatheringFinalizeSchema,gatheringMemberSaveSchema,gatheringSubscriptionConfigSchema,gatheringSubscriptionIntentSchema,gatheringSubscriptionIntentResultSchema,inboxMessageSchema,gatheringOwnBlocks,gatheringPublicBlocks,gatheringVisibleDetails,privateGatheringQuestion} from '../packages/contracts/src';
 import {newKey} from '../apps/miniprogram/src/platform/local-id';
 import {gatheringModelSource,gatheringSourceFingerprint,gatheringTeamStatistics} from '../apps/web/src/server/gatherings/privacy';
 
@@ -46,6 +46,20 @@ describe('gathering private fields and confirmed blocks',()=>{
     expect(gatheringCreateSchema.safeParse({kind:'friend',idempotency_key,details:details(),intake:intake()}).success).toBe(true);
     expect(gatheringMemberSaveSchema.safeParse({expected_version:0,expected_revision:1,idempotency_key,intake:intake()}).success).toBe(true);
     expect(gatheringGenerateSchema.safeParse({idempotency_key,expected_source:'a'.repeat(64)}).success).toBe(true);
+  });
+  it('models one-time subscription intent for one gathering with actual mini keys instead of permanent authorization',()=>{
+    expect(gatheringSubscriptionConfigSchema.safeParse({enabled:true,template_id:null,scope:null,authorization:'one_time_intent'}).success).toBe(false);
+    expect(gatheringSubscriptionConfigSchema.safeParse({enabled:false,template_id:null,scope:null,authorization:'one_time_intent'}).success).toBe(true);
+    const value={gathering_id:owner,authorization_key:newKey(),template_id:'fixture-template-id',result:'accept'};
+    expect(gatheringSubscriptionIntentSchema.safeParse(value).success).toBe(true);
+    expect(gatheringSubscriptionIntentSchema.safeParse({...value,appId:'untrusted-app-id'}).success).toBe(false);
+    expect(gatheringSubscriptionIntentResultSchema.safeParse({recorded:true,available_intents:1,authorization:'permanent'}).success).toBe(false);
+  });
+  it('keeps gathering inbox destinations separate from formal activity and requirement destinations',()=>{
+    const message={id:'gathering-notice:'+owner,activity_id:null,gathering_id:member,title:'朋友出游有新填写',summary:'有成员更新了填写',created_at:'2030-01-01T00:00:00Z',read:false,pending:false,status:'填写已更新',section:'gathering'};
+    expect(inboxMessageSchema.safeParse(message).success).toBe(true);
+    expect(inboxMessageSchema.safeParse({...message,activity_id:owner}).success).toBe(false);
+    expect(inboxMessageSchema.safeParse({...message,section:'activity'}).success).toBe(false);
   });
 });
 describe('model input and team projection',()=>{

@@ -1,0 +1,7 @@
+{
+  "GATHERING_NOTIFY_ENV": "cloud1-d2gl86h3t5a8b5369",
+  "GATHERING_NOTIFY_APPID": "wxaa06e111e33f6ddd",
+  "GATHERING_NOTIFY_TEMPLATE_ID": "aVkr_cF1h4dR0RTXflHXxVFRItt5xzlYoxzXguniW4Q",
+  "GATHERING_NOTIFY_TEMPLATE_FIELDS": "{\"thing1\":\"service\",\"thing2\":\"event\",\"thing3\":\"hint\"}",
+  "GATHERING_NOTIFY_MINIPROGRAM_STATE": "developer"
+}

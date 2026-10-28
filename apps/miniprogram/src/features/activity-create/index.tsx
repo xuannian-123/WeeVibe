@@ -16,6 +16,7 @@ import './activity-create.css';
 import { RebookEditor } from '../rebook/RebookEditor';
 import { PreparationEditor } from './preparation-editor';
 import { VenueEditor } from './venue-editor';
+import { GatheringProfileBoundary } from '../gatherings/profile-boundary';
 
 export default function Editor() {
   const rebook = Taro.getCurrentInstance?.().router?.params.rebook;
@@ -92,7 +93,7 @@ export function OrdinaryEditor({ initialForm, draftSuffix = '' }: { initialForm?
     </Panel>
     <Action variant="text" onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>回到首页</Action>
   </View>;
-  return <View className="screen">
+  return <GatheringProfileBoundary actor={userId} session={source?.session} required={!!source}><View className="screen">
     <View className="page-intro"><Text className="page-eyebrow">{BRAND_NAME} / 发起活动</Text><Text className="page-title">{write.pending ? '先核对上次发起' : preview ? '发出前，再看一眼' : '约一次见面'}</Text><Text className="page-subtitle">{write.pending ? '下面是上次提交的原安排，日期和内容完整保留。' : preview ? '时间、人数和你的参加选择，都以这里为准。' : '把时间、地点和人数说清楚，剩下的一起商量。'}</Text></View>
     {(!userId || identity.error || login.error) && <Panel title="先确认你的微信身份">
       {identity.loading && <Notice>正在确认本人身份……</Notice>}
@@ -124,5 +125,5 @@ export function OrdinaryEditor({ initialForm, draftSuffix = '' }: { initialForm?
     {preview && !write.pending && <Action disabled={write.busy} onClick={() => setReview(undefined)}>返回修改</Action>}
     {!displayedPlan && <Text className="caption">{draftMessage || '登录后自动保存本机草稿。'}下一步先预览，确认后才发出。</Text>}
     <Action variant="text" onClick={() => { void Taro.navigateBack({ fail: () => { void Taro.reLaunch({ url: '/pages/index/index' }); } }); }}>返回首页</Action>
-  </View>;
+  </View></GatheringProfileBoundary>;
 }

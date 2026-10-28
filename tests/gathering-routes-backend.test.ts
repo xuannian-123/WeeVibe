@@ -1,10 +1,11 @@
 import {beforeEach,describe,expect,it,vi} from 'vitest';
-const h=vi.hoisted(()=>({auth:vi.fn(),list:vi.fn(),create:vi.fn(),save:vi.fn(),join:vi.fn(),details:vi.fn(),finalize:vi.fn(),members:vi.fn(),generate:vi.fn(),organize:vi.fn(),budget:vi.fn()}));
+const h=vi.hoisted(()=>({auth:vi.fn(),list:vi.fn(),create:vi.fn(),save:vi.fn(),join:vi.fn(),details:vi.fn(),finalize:vi.fn(),members:vi.fn(),generate:vi.fn(),organize:vi.fn(),budget:vi.fn(),profile:vi.fn()}));
 vi.mock('../apps/web/src/server/activities/transport',async()=>{const actual=await vi.importActual<typeof import('../apps/web/src/server/activities/transport')>('../apps/web/src/server/activities/transport');return{...actual,requireActor:h.auth};});
 vi.mock('../apps/web/src/server/gatherings/service',()=>({listGatherings:h.list,createGathering:h.create,saveGatheringIntake:h.save,joinGathering:h.join,updateGatheringDetails:h.details,finalizeGathering:h.finalize,getGatheringMembers:h.members}));
 vi.mock('../apps/web/src/server/gatherings/generation',()=>({generateGatheringItinerary:h.generate}));
 vi.mock('../apps/web/src/server/gatherings/ai',()=>({gatheringAI:{organize:h.organize}}));
 vi.mock('../apps/web/src/server/requirements/service',()=>({consumeRequirementBudget:h.budget}));
+vi.mock('../apps/web/src/server/gatherings/profile',()=>({assertGatheringProfileActor:h.profile}));
 import {ServiceError} from '../apps/web/src/server/http';
 import {emptyGatheringIntake} from '../packages/contracts/src';
 import {GET as list,POST as create} from '../apps/web/src/app/api/v1/gatherings/route';
@@ -18,7 +19,8 @@ import {POST as organize} from '../apps/web/src/app/api/v1/gatherings/organize/r
 const actor='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222-222222222222';
 const context=()=>({params:Promise.resolve({id})});
 const request=(body:unknown={},method='POST',url=`https://fixture.test/api/v1/gatherings/${id}`)=>new Request(url,{method,...(method==='POST'?{body:JSON.stringify(body),headers:{'Content-Type':'application/json'}}:{})});
-beforeEach(()=>{for(const fn of Object.values(h))fn.mockReset();h.auth.mockResolvedValue(actor);h.budget.mockResolvedValue(undefined);});
+const organizePublic=()=>{const{activity_nickname:_,...publicInput}=emptyGatheringIntake().public;return publicInput;};
+beforeEach(()=>{for(const fn of Object.values(h))fn.mockReset();h.auth.mockResolvedValue(actor);h.budget.mockResolvedValue(undefined);h.profile.mockResolvedValue(undefined);});
 describe('gathering HTTP handlers authenticate and bound untrusted input',()=>{
   it.each(['create','save','join','details','finalize','generate','organize'] as const)('requires identity before %s work',async name=>{
     h.auth.mockRejectedValue(new ServiceError('UNAUTHENTICATED',401,'请先登录'));
@@ -33,5 +35,7 @@ describe('gathering HTTP handlers authenticate and bound untrusted input',()=>{
   it('rejects malformed pagination cursors before any member read',async()=>{const response=await members(request(undefined,'GET',`https://fixture.test/api/v1/gatherings/${id}/members?cursor=../../account`),context());expect(response.status).toBe(400);expect(h.members).not.toHaveBeenCalled();});
   it('rejects private object injection into the organize request before supplier work',async()=>{const response=await organize(request({public:emptyGatheringIntake().public,private:{origin:'PRIVATE_HOME'}}));expect(response.status).toBe(400);expect(h.organize).not.toHaveBeenCalled();});
   it('returns only the known public error when a provider unexpectedly throws',async()=>{h.generate.mockRejectedValue(Error('PRIVATE_SUPPLIER_ERROR'));const response=await generate(request({}),context());expect(response.status).toBe(500);expect(JSON.stringify(await response.json())).not.toContain('PRIVATE_SUPPLIER_ERROR');});
-  it('passes only public intake to the organize provider after the rate budget',async()=>{const input=emptyGatheringIntake().public;h.organize.mockResolvedValue({summary:'整理完成',blocks:[],source:'ai'});await organize(request({public:input}));expect(h.budget).toHaveBeenCalledExactlyOnceWith(actor);expect(h.organize).toHaveBeenCalledExactlyOnceWith(actor,input);});
+  it('passes only public intake to the organize provider after the rate budget',async()=>{const input=organizePublic();h.organize.mockResolvedValue({summary:'整理完成',blocks:[],source:'ai'});await organize(request({public:input}));expect(h.budget).toHaveBeenCalledExactlyOnceWith(actor);expect(h.organize).toHaveBeenCalledExactlyOnceWith(actor,input);});
+  it('rejects organizing before a saved avatar and nickname and never touches the provider',async()=>{h.profile.mockRejectedValue(new ServiceError('INVALID_INPUT',400,'请先保存头像和昵称'));const response=await organize(request({public:organizePublic()}));expect(response.status).toBe(400);expect(h.organize).not.toHaveBeenCalled();expect(h.budget).not.toHaveBeenCalled();});
+  it('rejects an activity nickname at the organize route instead of forwarding identity to the model',async()=>{const response=await organize(request({public:{...organizePublic(),activity_nickname:'仅本次使用的名字'}}));expect(response.status).toBe(400);expect(h.organize).not.toHaveBeenCalled();});
 });

@@ -42,7 +42,7 @@ function publicDetails(kind: 'friend' | 'team'): GatheringDetails {
 }
 function intake(note: string, privatePrefix: string): GatheringIntake {
   const value = emptyGatheringIntake();
-  value.public = { ...value.public, date, note, keywords: { ...value.public.keywords, eat: ['常规中餐'], play: ['唱歌'] }, confirmed_keys: ['date', 'eat_0'] };
+  value.public = { ...value.public, activity_nickname:privatePrefix==='OWNER_PRIVATE'?'活动局头甲':privatePrefix==='MEMBER_PRIVATE'?'活动朋友乙':'活动参与者', date, note, keywords: { ...value.public.keywords, eat: ['常规中餐'], play: ['唱歌'] }, confirmed_keys: ['date', 'eat_0'] };
   const privateNumber = privatePrefix === 'OWNER_PRIVATE' ? 1111.11 : privatePrefix === 'MEMBER_PRIVATE' ? 2222.22 : privatePrefix === 'TEAM_PRIVATE' ? 3333.33 : 4444.44;
   value.private = { budget_min: privateNumber, budget_max: privateNumber + 100, budget_note: `${privatePrefix}_BUDGET`,
     origin: { label: `${privatePrefix}_ORIGIN`, latitude: privatePrefix === 'OWNER_PRIVATE' ? 30.123456 : 31.234567, longitude: 120.234567, crs: 'GCJ-02' }, confirmed_keys: ['budget', 'origin'] };
@@ -84,6 +84,10 @@ try {
     assert.equal(constraints.length, 4);
   });
   const owner = await db.user.create({ data: {} }), member = await db.user.create({ data: {} }), outsider = await db.user.create({ data: {} });
+  const sharp = loadServer('../apps/web/node_modules/sharp') as (options: unknown) => { jpeg: () => { toBuffer: () => Promise<Buffer> } };
+  const avatarBytes = await sharp({create:{width:2,height:2,channels:3,background:'#e4d6c8'}}).jpeg().toBuffer();
+  for(const actor of [owner,member,outsider])await db.userAvatar.create({data:{userId:actor.id,bytes:Uint8Array.from(avatarBytes),contentType:'image/jpeg',digest:createHash('sha256').update(avatarBytes).digest('hex')}});
+  await db.privateProfile.create({data:{userId:outsider.id,data:{nickname:'Fixture participant'}}});
   for (const [actor, nickname] of [[owner, 'Fixture owner'], [member, 'Fixture member']] as const) {
     await db.privateProfile.create({ data: { userId: actor.id, data: { nickname, birthday: '1999-01-01', signature: 'PRIVATE_PROFILE_SENTINEL' } } });
   }
@@ -113,7 +117,7 @@ try {
     assert.equal(own.own?.version, 1); assert.equal(own.own?.intake.private.budget_note, 'MEMBER_PRIVATE_BUDGET');
     assert.equal(valid(await service.saveGatheringIntake(friendId, member.id, memberSave)).own?.version, 1);
     const manager = valid(await service.getGathering(friendId, owner.id));
-    assert.ok(manager.members?.some(row => row.person.nickname === 'Fixture member' && row.blocks.some(block => block.value === 'Public member preference')));
+    assert.ok(manager.members?.some(row => row.person.nickname === '活动朋友乙' && row.blocks.some(block => block.value === 'Public member preference')));
     excludes(manager, 'MEMBER_PRIVATE', '2222.22', '2322.22', '31.234567', 'PRIVATE_PROFILE_SENTINEL', '1999-01-01');
     excludes(own, 'OWNER_PRIVATE', 'PRIVATE_PROFILE_SENTINEL', '1999-01-01');
     assert.ok(!manager.members?.some(row => row.blocks.some(block => block.id === 'budget' || block.id === 'origin')));
@@ -194,7 +198,12 @@ try {
   });
   await check('member list pagination returns distinct names without private intake data', async () => {
     const pageGroup = await service.createGathering(owner.id, { ...friendInput, idempotency_key: key() });
-    for (let index = 0; index < 11; index++) { const actor = await db.user.create({ data: {} }); await service.joinGathering(pageGroup.gathering.id, actor.id); }
+    for (let index = 0; index < 11; index++) {
+      const actor = await db.user.create({ data: {} });
+      await db.privateProfile.create({data:{userId:actor.id,data:{nickname:'Fixture participant'}}});
+      await db.userAvatar.create({data:{userId:actor.id,bytes:Uint8Array.from(avatarBytes),contentType:'image/jpeg',digest:createHash('sha256').update(avatarBytes).digest('hex')}});
+      await service.joinGathering(pageGroup.gathering.id, actor.id);
+    }
     const first = valid(await service.getGathering(pageGroup.gathering.id, owner.id));
     assert.equal(first.members?.length, 10); assert.ok(first.next_member_cursor);
     const next = await service.getGatheringMembers(pageGroup.gathering.id, owner.id, first.next_member_cursor!);

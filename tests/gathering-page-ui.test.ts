@@ -17,6 +17,7 @@ vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({View:(p:any)
 vi.mock('../apps/miniprogram/src/components/privacy-consent',()=>({PrivacyConsent:()=>null}));
 vi.mock('../apps/miniprogram/src/features/gatherings/manage',()=>({GatheringManage:(p:{actor:string;session:string;snapshot:GatheringSnapshot;entry?:'share'|'manage'})=>{h.manage(p);return createElement('div',{className:'test-manage','data-actor':p.actor,'data-session':p.session,'data-member':String(p.snapshot.viewer.is_member),'data-entry':p.entry??'manage'},p.snapshot.gathering.title,p.snapshot.own?.intake.private.budget_note);}}));
 vi.mock('../apps/miniprogram/src/features/gatherings/designer',()=>({GatheringDesigner:(p:{actor:string;session:string;kind:string})=>{h.designer(p);return createElement('div',{className:'test-designer'},p.kind);}}));
+vi.mock('../apps/miniprogram/src/features/gatherings/profile-boundary',()=>({GatheringProfileBoundary:({children}:any)=>children}));
 import GatheringPage from '../apps/miniprogram/src/features/gatherings';
 
 let root:ReturnType<typeof createRoot>,host:HTMLDivElement;

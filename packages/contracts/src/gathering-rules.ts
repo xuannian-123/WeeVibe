@@ -9,7 +9,7 @@ export function privateGatheringQuestion(question: GatheringDetails['questions']
   return sensitive.test(question.title) || question.options.some(o => sensitive.test(o.label));
 }
 export function emptyGatheringIntake(): GatheringIntake {
-  return { public: {date:'',availability:'',note:'',keywords:{eat:[],drink:[],play:[],pace:[],atmosphere:[],experience:[],arrangement:[],venue:[],environment:[],travel:[],exertion:[]},confirmed_keys:[]},
+  return { public: {activity_nickname:'',date:'',availability:'',note:'',keywords:{eat:[],drink:[],play:[],pace:[],atmosphere:[],experience:[],arrangement:[],venue:[],environment:[],travel:[],exertion:[]},confirmed_keys:[]},
     private:{budget_min:null,budget_max:null,budget_note:'',origin:null,confirmed_keys:[]}, answers:[] };
 }
 export function emptyGatheringDetails(): GatheringDetails {

@@ -9,7 +9,7 @@ import { requirementMessageSelect, requirementMessages } from './requirements/me
 // Source messages are projected for the authenticated actor. Read state never
 // mutates approval/acceptance/handover state, and is not a proof of consent.
 export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
-  const [activities, decisions, offers, surveys] = await Promise.all([
+  const [activities, decisions, offers, surveys,gatheringNotices] = await Promise.all([
     tx.activity.findMany({ where: { OR: [{ currentManagerId: actor }, { segments: { some: { participations: { some: { userId: actor } } } } }] }, orderBy: { createdAt: 'desc' }, take: 100,
       include: {
         _count: { select: { applications: { where: { status: 'pending' } } } },
@@ -20,6 +20,7 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
     tx.activityApplication.findMany({ where: { applicantUserId: actor, status: { in: ['approved', 'rejected'] } }, orderBy: { decidedAt: 'desc' }, take: 100, select: { id: true, activityId: true, status: true, decidedAt: true, activity: { select: { name: true } } } }),
     tx.managementHandover.findMany({ where: { OR: [{ fromUserId: actor }, { toUserId: actor }] }, orderBy: { createdAt: 'desc' }, take: 100, select: { id: true, activityId: true, fromUserId: true, toUserId: true, status: true, createdAt: true, activity: { select: { name: true, currentManagerId: true, cancelledAt: true } } } }),
     tx.requirementSurvey.findMany({ where: { status: { not: 'draft' }, AND: [{ OR: [{ activityId: null, ownerUserId: actor }, { activity: { currentManagerId: actor } }, { responses: { some: { userId: actor } } }] }, { OR: [{ deadlineAt: { lte: now } }, { closedAt: { not: null } }] }] }, select: requirementMessageSelect, orderBy: { updatedAt: 'desc' }, take: 100 }),
+    tx.gatheringNotificationRecipient.findMany({where:{userId:actor},orderBy:[{createdAt:'desc'},{id:'asc'}],take:100,select:{id:true,createdAt:true,event:{select:{action:true,gatheringId:true,gathering:{select:{kind:true}}}}}}),
   ]);
   const messages: InboxMessage[] = [];
   for (const activity of activities) {
@@ -47,6 +48,11 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
     messages.push({ id: `handover:${offer.id}`, activity_id: offer.activityId, title: offer.activity.name, summary: offer.toUserId === actor ? '你收到一份活动管理交接邀请' : '查看你发起的管理交接进展', created_at: offer.createdAt.toISOString(), read: false, pending, status, section: 'handover' });
   }
   for (const survey of surveys) for (const source of requirementMessages(survey, new Set(), now)) messages.push({ ...source, title: source.title.slice(0, 200), summary: source.title.slice(0, 300), pending: false, status: '筹备进展', section: 'requirement' });
+  for(const notice of gatheringNotices){
+    const friend=notice.event.gathering.kind==='friend',updated=notice.event.action==='updated';
+    if(!['friend','team'].includes(notice.event.gathering.kind)||!['submitted','updated'].includes(notice.event.action))throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'筹备消息暂时无法核对');
+    messages.push({id:`gathering-notice:${notice.id}`,activity_id:null,gathering_id:notice.event.gatheringId,title:friend?'朋友出游有新填写':'团建问卷有新填写',summary:updated?'有成员更新了填写，点击查看本次筹备。':'有成员提交了填写，点击查看本次筹备。',created_at:notice.createdAt.toISOString(),read:false,pending:false,status:updated?'填写已更新':'收到新填写',section:'gathering'});
+  }
   const visible = [...new Map(messages.map(m => [m.id, m])).values()].sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id)).slice(0, 100);
   const reads = await tx.messageRead.findMany({ where: { userId: actor, messageId: { in: visible.map(m => m.id) } }, select: { messageId: true } });
   const readIds = new Set(reads.map(r => r.messageId));

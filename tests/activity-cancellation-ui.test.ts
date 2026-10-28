@@ -9,6 +9,8 @@ const {createElement,act}=req('react') as typeof import('../apps/miniprogram/nod
 const {createRoot}=req('react-dom/client') as {createRoot:(host:Element)=>{render:(element:ReturnType<typeof createElement>)=>void;unmount:()=>void}};
 (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
 const h=vi.hoisted(()=>({token:'session-a',modal:vi.fn(),transport:vi.fn(),busy:vi.fn(),refresh:vi.fn(),remember:vi.fn(),store:new Map<string,unknown>(),hide:[] as (()=>void)[],show:[] as (()=>void)[],unload:[] as (()=>void)[],controller:{} as any,apply:vi.fn(),decide:vi.fn(),beforeCommit:undefined as undefined|(()=>void)}));
+// Peer-operation lock tests start with a completed profile; the real gate is covered separately.
+vi.mock('../apps/miniprogram/src/features/gatherings/profile-boundary',()=>({GatheringProfileBoundary:({children}:any)=>children}));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>h.token,transport:h.transport}));
 // Instrument only execute→acknowledgement scheduling, retaining the real hook.
 vi.mock('../apps/miniprogram/src/platform/write-state',async importOriginal=>{const actual=await importOriginal<typeof import('../apps/miniprogram/src/platform/write-state')>();return{...actual,useStoredWrite:(options:any)=>actual.useStoredWrite({...options,execute:async(input:unknown)=>{const value=await options.execute(input);h.beforeCommit?.();return value;}})};});
