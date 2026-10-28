@@ -19,6 +19,9 @@
 !cloudfunctions/weevibeLogin/
 !cloudfunctions/weevibeLogin/proof.cjs
 !cloudfunctions/weevibeLogin/proof.d.cts
+!cloudfunctions/weevibeNotifyGathering/
+!cloudfunctions/weevibeNotifyGathering/protocol.cjs
+!cloudfunctions/weevibeNotifyGathering/protocol.d.cts
 **/node_modules
 **/node_modules/**
 **/.next

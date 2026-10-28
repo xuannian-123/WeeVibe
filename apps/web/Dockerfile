@@ -8,6 +8,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/web ./apps/web
 COPY packages/contracts ./packages/contracts
 COPY cloudfunctions/weevibeLogin/proof.cjs cloudfunctions/weevibeLogin/proof.d.cts ./cloudfunctions/weevibeLogin/
+COPY cloudfunctions/weevibeNotifyGathering/protocol.cjs cloudfunctions/weevibeNotifyGathering/protocol.d.cts ./cloudfunctions/weevibeNotifyGathering/
 COPY prisma ./prisma
 COPY scripts/prisma-check.mjs scripts/check-api-artifact.mjs ./scripts/
 RUN pnpm install --frozen-lockfile --filter weevibe --filter @weevibe/web...
