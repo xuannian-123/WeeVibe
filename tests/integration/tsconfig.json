@@ -12,6 +12,7 @@
     "../../scripts/check-cloud-identity-integration.ts",
     "../../scripts/check-requirements-integration.ts",
     "../../scripts/check-participation-invitations.ts",
-    "../../scripts/check-v38-preparation.ts"
+    "../../scripts/check-v38-preparation.ts",
+    "../../scripts/check-wg04-postgres.ts"
   ]
 }
