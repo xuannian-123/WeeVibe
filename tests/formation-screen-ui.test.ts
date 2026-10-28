@@ -10,10 +10,10 @@ const {createRoot}=req('react-dom/client') as {createRoot:(host:Element)=>{rende
 (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
 const h=vi.hoisted(()=>({controller:{} as any,modal:vi.fn(),transport:vi.fn(),refresh:vi.fn(),remember:vi.fn(),store:new Map<string,unknown>(),next:{} as any}));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=> 'session-a',transport:h.transport}));
-vi.mock('../apps/miniprogram/src/platform/activities',()=>({rememberActivity:h.remember}));
+vi.mock('../apps/miniprogram/src/platform/activities',async importOriginal=>({...await importOriginal<typeof import('../apps/miniprogram/src/platform/activities')>(),rememberActivity:h.remember}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{showModal:h.modal,getStorageSync:(key:string)=>h.store.get(key),setStorageSync:(key:string,value:unknown)=>h.store.set(key,value),removeStorageSync:(key:string)=>h.store.delete(key)},useDidHide:()=>{},useDidShow:()=>{},useUnload:()=>{}}));
 // Keep the real sibling MainSegmentPanel mounted; extend only the native primitive fixture.
-vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Radio:()=>null,RadioGroup:(p:any)=>createElement('div',{},p.children),Label:(p:any)=>createElement('label',{},p.children),Button:(p:any)=>createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{},p.children),Text:(p:any)=>createElement('span',{},p.children)}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({ Image:(p:any)=>createElement('img',{src:p.src,className:p.className}),Radio:()=>null,RadioGroup:(p:any)=>createElement('div',{},p.children),Label:(p:any)=>createElement('label',{},p.children),Button:(p:any)=>createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{},p.children),Text:(p:any)=>createElement('span',{},p.children)}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/use-activity-detail',()=>({useActivityDetail:()=>h.controller}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/itinerary',()=>({Itinerary:()=>null}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/more',()=>({ActivityMore:()=>null}));

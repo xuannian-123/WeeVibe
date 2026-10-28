@@ -12,7 +12,7 @@ const h=vi.hoisted(()=>({controller:{} as any,modal:vi.fn(),me:vi.fn(),transport
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=> 'session-a',api:{me:h.me},transport:h.transport}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{showModal:h.modal},useDidHide:()=>{},useDidShow:()=>{},useUnload:()=>{}}));
 // Keep the real sibling MainSegmentPanel mounted; extend only the native primitive fixture.
-vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Radio:()=>null,RadioGroup:(p:any)=>createElement('div',{},p.children),Label:(p:any)=>createElement('label',{},p.children),Button:(p:any)=>createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{},p.children),Text:(p:any)=>createElement('span',{},p.children)}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Image:(p:any)=>createElement('img',{src:p.src}),Radio:()=>null,RadioGroup:(p:any)=>createElement('div',{},p.children),Label:(p:any)=>createElement('label',{},p.children),Button:(p:any)=>createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{},p.children),Text:(p:any)=>createElement('span',{},p.children)}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/use-activity-detail',()=>({useActivityDetail:()=>h.controller}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/itinerary',()=>({Itinerary:()=>null}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/more',()=>({ActivityMore:()=>null}));
@@ -44,3 +44,10 @@ vi.mock('../apps/miniprogram/src/features/deadline/DeadlinePanel', () => ({ Dead
 
 // This existing feature suite isolates the booking sibling; booking-screen-ui and independent complete-Screen probes verify the new declaration/history composition.
 vi.mock('../apps/miniprogram/src/features/booking/BookingPanel', () => ({ BookingPanel: () => null }));
+it('places the participation entry before management panels and mounts the existing form once', async () => {
+  await render();
+  const text = document.body.textContent || '';
+  expect(text.indexOf('选择参加环节')).toBeGreaterThanOrEqual(0);
+  expect(text.indexOf('选择参加环节')).toBeLessThan(text.indexOf('交接同伴操作'));
+  expect(Array.from(document.querySelectorAll('button')).filter(button => button.textContent === '申请同伴操作')).toHaveLength(1);
+});

@@ -6,6 +6,7 @@ import { Action, Notice, Panel } from '../../components/ui';
 import { getToken } from '../../platform/api';
 import { ACTIVITY_SHARE_CANVAS, renderActivityCard } from './canvas';
 import { activityCardModel, cardLayout, QR_UNAVAILABLE } from './model';
+import './share-card.css';
 
 let instanceSequence = 0;
 /** Source may only come from the existing verified createInvitationSource result, never URL incomingId. */
@@ -74,13 +75,13 @@ export function ActivityShareCard(props: Props) {
       if (epoch.current === ticket && owner.current === expectedKey) { lock.current = ''; if (mounted.current) setBusy(''); }
     }
   }
-  return <Panel title="活动图片分享卡">
+  return <Panel title="把这次安排分享给朋友" className="wv-share-card">
     <Text className="caption">单张公开行程快照，不含成员名单、个人出发地或答卷。不会自动发送。</Text>
     <Notice>{QR_UNAVAILABLE}。图片不提供可扫码报名入口。</Notice>
     {!layout && <Notice tone="error">行程暂不能生成单张可读图片，请使用原生分享链接。</Notice>}
-    <Action disabled={!allowed || !!busy} onClick={() => { void generate(); }}>{busy === 'generate' ? '正在生成…' : '生成行程图片'}</Action>
+    <Action variant="primary" disabled={!allowed || !!busy} onClick={() => { void generate(); }}>{busy === 'generate' ? '正在生成…' : '生成行程图片'}</Action>
     {layout && <Canvas canvasId={canvasId} id={canvasId} style={{ position: 'fixed', left: '-10000px', top: 0, width: `${layout.width}px`, height: `${layout.height}px` }} />}
-    {currentImage && <View><Image src={currentImage.path} mode="widthFix" style={{ width: '100%' }} /><Action disabled={!allowed || !!busy} onClick={() => { void save(); }}>{busy === 'save' ? '正在保存…' : '保存图片到相册'}</Action></View>}
+    {currentImage && <View className="wv-share-preview"><Image src={currentImage.path} mode="widthFix" style={{ width: '100%' }} /><Action variant="primary" disabled={!allowed || !!busy} onClick={() => { void save(); }}>{busy === 'save' ? '正在保存…' : '保存图片到相册'}</Action></View>}
     {(!!busy || !!currentImage) && <Action variant="text" disabled={busy === 'save'} onClick={cancel}>{busy === 'generate' ? '取消生成' : '关闭图片预览'}</Action>}
     {message && <Notice>{message}</Notice>}
   </Panel>;
