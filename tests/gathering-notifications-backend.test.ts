@@ -57,8 +57,8 @@ describe('per-version gathering notifications (query double, real PG verified se
   });
 });
 
-describe('saved profile required at the actual gathering write boundaries',()=>{
-  it.each(['create','join','save','details','generate','finalize'])('blocks %s when stored avatar/nickname is incomplete before any new effect',async action=>{
+describe('account presentation is optional at the gathering write boundaries',()=>{
+  it.each(['create','join','save','details','generate','finalize'])('allows authenticated %s without an account avatar or nickname',async action=>{
     const provider={generate:vi.fn(async()=>gatheringFixturePlan())};
     const source=()=>gatheringSourceFingerprint(f.details(),[...f.members.values()].map(row=>({userId:row.userId,publicIntake:row.publicIntake,answers:row.answers,responseVersion:row.responseVersion})));
     let generationId:string|undefined;
@@ -66,12 +66,12 @@ describe('saved profile required at the actual gathering write boundaries',()=>{
     f.incompleteProfiles.add(action==='join'?bob:action==='save'?alice:owner);
     const before={members:f.members.size,events:f.events.size,generations:f.generations.size,gatherings:f.gatherings.size};
     const task=()=>action==='create'?createGathering(owner,{kind:'friend',idempotency_key:randomUUID(),details:gatheringFixtureDetails(),intake:gatheringFixtureIntake()}):action==='join'?joinGathering(id,bob):action==='save'?saveGatheringIntake(id,alice,input(1)):action==='details'?updateGatheringDetails(id,owner,{expected_revision:1,details:f.details()}):action==='generate'?generateGatheringItinerary(id,owner,{expected_source:source(),idempotency_key:randomUUID()},provider):finalizeGathering(id,owner,{expected_source:source(),generation_id:generationId,plan_id:'plan1'});
-    await expect(task()).rejects.toMatchObject({code:'INVALID_INPUT',status:400});
-    expect({members:f.members.size,events:f.events.size,generations:f.generations.size,gatherings:f.gatherings.size}).toEqual(before);
+    await expect(task()).resolves.toHaveProperty('gathering');expect(f.raw.privateProfile.findUnique).not.toHaveBeenCalled();expect(f.raw.userAvatar.findUnique).not.toHaveBeenCalled();
+    expect(f.gatherings.size).toBeGreaterThanOrEqual(before.gatherings);
   });
   it('acknowledges an already successful original save after profile removal without creating new writes',async()=>{
     const value=input(1);await saveGatheringIntake(id,alice,value);f.incompleteProfiles.add(alice);expect((await saveGatheringIntake(id,alice,value)).own?.version).toBe(2);expect(f.events.size).toBe(1);
-    await expect(saveGatheringIntake(id,alice,input(2))).rejects.toMatchObject({code:'INVALID_INPUT'});expect(f.events.size).toBe(1);
+    expect((await saveGatheringIntake(id,alice,input(2))).own?.version).toBe(3);expect(f.events.size).toBe(2);
   });
 });
 

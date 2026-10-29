@@ -78,5 +78,7 @@ export * from './booking';
 export * from './navigation';
 
 export * from './gatherings';
+export * from './gathering-avatars';
 export * from './gathering-reference';
 export * from './gathering-rules';
+export * from './arrangement-edit';

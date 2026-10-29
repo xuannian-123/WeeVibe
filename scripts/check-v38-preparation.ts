@@ -74,9 +74,7 @@ try {
   for (const actor of [owner.id, member.id]) assert.equal((await getActivityRoster(activity.activity_id, actor)).segments[0].members?.[0].display_name, 'V38 synthetic signup name');
   pass('real roster permissions: anonymous/outsider/pending counts only; manager/joined names');
   await updateAccount(member.id, { action: 'profile', profile: { nickname: 'CI member', birthday: '1999-01-02', signature: 'PRIVATE_SIGNATURE', introduction: 'PRIVATE_INTRODUCTION', bio: 'Opt-in biography', interests: ['徒步'], mbti: 'INFP', zodiac: '天秤座' } });
-  const privateView = await memberProfile(activity.activity_id, member.id, owner.id);
-  assert.equal(privateView.bio, undefined); assert.equal(privateView.mbti, undefined);
-  assert.ok(!JSON.stringify(privateView).includes('PRIVATE_')); assert.ok(!JSON.stringify(privateView).includes('1999-01-02'));
+  await assert.rejects(()=>memberProfile(activity.activity_id,member.id,owner.id),{code:'FORBIDDEN'});
   await assert.rejects(() => memberDirectory(activity.activity_id, outsider.id), { code: 'FORBIDDEN' });
   const nextPending = await applyToActivity(activity.activity_id, outsider.id, { idempotency_key: key(), expected_revision: (await db.activity.findUniqueOrThrow({ where: { id: activity.activity_id } })).revision, display_name: 'CI pending outsider', segments: [{ segment_id: activity.segments[0].segment_id, plan_revision: 1 }] });
   await assert.rejects(() => memberProfile(activity.activity_id, member.id, outsider.id), { code: 'FORBIDDEN' });
@@ -91,10 +89,8 @@ try {
   const completedMessage = (await getInbox(owner.id)).messages.find(m => m.id === applicationMessage.id);
   assert.equal(completedMessage?.pending, false); assert.equal(completedMessage?.read, true);
   await updateAccount(member.id, { action: 'profile', profile: { visibility: { bio: true, interests: true, mbti: false, zodiac: false } } });
-  const publicView = await memberProfile(activity.activity_id, member.id, outsider.id);
-  assert.equal(publicView.bio, 'Opt-in biography'); assert.deepEqual(publicView.interests, ['徒步']); assert.equal(publicView.mbti, undefined);
-  assert.ok(!JSON.stringify(publicView).includes('PRIVATE_')); assert.ok(!JSON.stringify(publicView).includes('1999-01-02'));
-  pass('navigation: real private/public profile projections and outsider/pending denial; read-all does not approve');
+  await assert.rejects(()=>memberProfile(activity.activity_id,member.id,outsider.id),{code:'FORBIDDEN'});
+  pass('navigation: retired member profiles deny every caller; read-all does not approve');
   await db.segment.update({ where: { id: activity.segments[0].segment_id }, data: { planRevision: 2 } });
   await db.activityEvent.createMany({ data: [0, 1].map(i => ({ activityId: activity.activity_id, actorUserId: owner.id, type: 'segment_capacity_changed', revision: 6 + i, detail: { segment_id: activity.segments[0].segment_id }, createdAt: new Date(Date.now() - 20 + i) })) });
   const reviewMessages = await getInbox(member.id);
@@ -103,10 +99,10 @@ try {
   assert.equal((await db.participation.findFirstOrThrow({ where: { activityId: activity.activity_id, userId: member.id } })).acceptedPlanRevision, 1);
   await db.activity.update({ where: { id: activity.activity_id }, data: { currentManagerId: outsider.id, managementRevision: { increment: 1 } } });
   await assert.rejects(() => memberDirectory(activity.activity_id, owner.id), { code: 'FORBIDDEN' });
-  assert.equal((await memberProfile(activity.activity_id, member.id, outsider.id)).bio, 'Opt-in biography');
+  await assert.rejects(()=>memberProfile(activity.activity_id,member.id,outsider.id),{code:'FORBIDDEN'});
   await db.participation.updateMany({ where: { activityId: activity.activity_id, userId: member.id }, data: { status: 'exited', exitedAt: new Date() } });
   await assert.rejects(() => memberDirectory(activity.activity_id, member.id), { code: 'FORBIDDEN' });
-  await assert.rejects(() => memberProfile(activity.activity_id, member.id, outsider.id), { code: 'NOT_FOUND' });
+  await assert.rejects(() => memberProfile(activity.activity_id, member.id, outsider.id), { code: 'FORBIDDEN' });
   pass('navigation: real arrangement read does not accept; old manager and exited member lose profile access');
   // CI service container is destroyed by the job. No shared data is ever cleaned here.
   console.log(`V38 real PostgreSQL fixture groups passed: ${checks.length}`);

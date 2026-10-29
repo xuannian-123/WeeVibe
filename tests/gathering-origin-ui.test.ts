@@ -6,17 +6,17 @@ const req=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json'));
 const {createElement,act,useState}=req('react') as typeof import('../apps/miniprogram/node_modules/@types/react');
 const {createRoot}=req('react-dom/client') as {createRoot:(host:Element)=>{render:(v:ReturnType<typeof createElement>)=>void;unmount:()=>void}};
 (globalThis as typeof globalThis&{IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
-const h=vi.hoisted(()=>({token:'session-a',permission:vi.fn(),locate:vi.fn(),search:vi.fn(),change:vi.fn(),hide:[] as (()=>void)[],show:[] as (()=>void)[],unload:[] as (()=>void)[]}));
+const h=vi.hoisted(()=>({token:'session-a',permission:vi.fn(),privacy:vi.fn(),map:vi.fn(),page:{},locate:vi.fn(),search:vi.fn(),change:vi.fn(),hide:[] as (()=>void)[],show:[] as (()=>void)[],unload:[] as (()=>void)[]}));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>h.token}));
-vi.mock('../apps/miniprogram/src/platform/location-permission',()=>({requireLocationPermission:h.permission,readPreciseLocation:h.locate,needsLocationSettings:()=>false}));
+vi.mock('../apps/miniprogram/src/platform/location-permission',()=>({requireLocationPermission:h.permission,requirePrivacyPermission:h.privacy,readPreciseLocation:h.locate,needsLocationSettings:()=>false}));
 vi.mock('../apps/miniprogram/src/features/shell/location-api',()=>({searchForSession:h.search,locationError:()=> '系统位置权限暂不可用，可手动填写'}));
 vi.mock('../apps/miniprogram/src/components/location-settings',()=>({LocationSettings:()=>null}));
-vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:()=> '杭州'},useDidShow:(fn:()=>void)=>h.show.push(fn),useDidHide:(fn:()=>void)=>h.hide.push(fn),useUnload:(fn:()=>void)=>h.unload.push(fn)}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:()=> '杭州',chooseLocation:h.map,getCurrentPages:()=>[h.page]},useDidShow:(fn:()=>void)=>h.show.push(fn),useDidHide:(fn:()=>void)=>h.hide.push(fn),useUnload:(fn:()=>void)=>h.unload.push(fn)}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({View:(p:any)=>createElement('div',{className:p.className},p.children),Text:(p:any)=>createElement('span',{className:p.className},p.children),Button:(p:any)=>createElement('button',{className:p.className,disabled:p.disabled,onClick:p.onClick},p.children),Input:(p:any)=>createElement('input',{className:p.className,disabled:p.disabled,value:p.value,placeholder:p.placeholder,onInput:(e:any)=>p.onInput?.({detail:{value:e.currentTarget.value}})}),Picker:()=>null,Textarea:()=>null}));
 import {GatheringOrigin} from '../apps/miniprogram/src/features/gatherings/origin-search';
 let root:ReturnType<typeof createRoot>,host:HTMLDivElement;
 const coords={latitude:30.1234567,longitude:120.1234567};
-beforeEach(()=>{host=document.createElement('div');document.body.append(host);root=createRoot(host);h.token='session-a';h.hide=[];h.show=[];h.unload=[];h.permission.mockReset().mockImplementation(async(guard:()=>void)=>guard());h.locate.mockReset().mockResolvedValue(coords);h.search.mockReset().mockResolvedValue({venues:[]});h.change.mockReset();});
+beforeEach(()=>{host=document.createElement('div');document.body.append(host);root=createRoot(host);h.token='session-a';h.hide=[];h.show=[];h.unload=[];h.privacy.mockReset().mockResolvedValue(undefined);h.map.mockReset();h.permission.mockReset().mockImplementation(async(guard:()=>void)=>guard());h.locate.mockReset().mockResolvedValue(coords);h.search.mockReset().mockResolvedValue({venues:[]});h.change.mockReset();});
 afterEach(async()=>{await act(async()=>root.unmount());document.body.innerHTML='';});
 async function render(props:Record<string,unknown>={}){await act(async()=>root.render(createElement(GatheringOrigin,{session:'session-a',value:{label:'保留的私人地址'},change:h.change,...props})));}
 function button(label:string){const b=Array.from(host.querySelectorAll('button')).find(b=>b.textContent===label);expect(b,label).toBeTruthy();return b!;}
@@ -30,4 +30,31 @@ describe('private departure location remains explicit and source-bound',()=>{
   it('explains native cancellation without exposing the raw response and retains manual input',async()=>{h.locate.mockRejectedValueOnce({errMsg:'getLocation:fail cancel PRIVATE_RAW_DETAIL'});await render();await click('获取定位');expect(host.textContent).toContain('已取消定位');expect(host.textContent).not.toContain('PRIVATE_RAW_DETAIL');expect(host.querySelector('input')!.value).toBe('保留的私人地址');});
   it('disables native location and editing in a read-only personal view',async()=>{await render({disabled:true});expect(button('获取定位').disabled).toBe(true);expect(button('搜索地址').disabled).toBe(true);expect(host.querySelector('input')!.disabled).toBe(true);await click('获取定位');expect(h.permission).not.toHaveBeenCalled();expect(h.change).not.toHaveBeenCalled();});
   it('clears coordinates while retaining the manually editable departure description',async()=>{function Connected(){const[value,change]=useState<GatheringIntake['private']['origin']>({label:'我选的出发区域',...coords,crs:'GCJ-02'});return createElement(GatheringOrigin,{session:'session-a',value,change});}await act(async()=>root.render(createElement(Connected)));await click('清除定位');expect(host.querySelector('input')!.value).toBe('我选的出发区域');expect(Array.from(host.querySelectorAll('button')).some(b=>b.textContent==='清除定位')).toBe(false);});
+});
+
+describe('private origin native map integration',()=>{
+  const place={name:'测试出发地',address:'苏州示例地址',latitude:31.2,longitude:120.3};
+  it('writes only private-origin fields without querying GPS, providers or submitting the form',async()=>{
+    h.map.mockImplementation(({success})=>success(place));await render();expect(h.map).not.toHaveBeenCalled();
+    await click('地图选择出发地');
+    expect(h.change).toHaveBeenCalledExactlyOnceWith({label:'测试出发地 苏州示例地址',latitude:31.2,longitude:120.3,crs:'GCJ-02'});
+    expect(h.search).not.toHaveBeenCalled();expect(h.locate).not.toHaveBeenCalled();expect(host.textContent).toContain('仅本人可见');
+  });
+  it('keeps manual input unchanged when the user cancels',async()=>{
+    h.map.mockImplementation(({fail})=>fail({errMsg:'chooseLocation:fail cancel'}));await render();await click('地图选择出发地');
+    expect(h.change).not.toHaveBeenCalled();expect(host.querySelector('input')!.value).toBe('保留的私人地址');
+  });
+  it('preserves the draft through a native hide/show without relaxing normal location guards',async()=>{
+    let finish!:(p:typeof place)=>void;h.map.mockImplementation(({success})=>{finish=success;});await render();await click('地图选择出发地');
+    await act(async()=>h.hide.slice(-2).forEach(fn=>fn()));
+    await act(async()=>finish(place));expect(h.change).not.toHaveBeenCalled();
+    await act(async()=>h.show.slice(-2).forEach(fn=>fn()));expect(h.change).toHaveBeenCalledOnce();
+  });
+  it('does not truncate an oversized address or replace the original',async()=>{
+    h.map.mockImplementation(({success})=>success({...place,address:'路'.repeat(300)}));await render();await click('地图选择出发地');
+    expect(h.change).not.toHaveBeenCalled();expect(host.textContent).toContain('原出发地已保留');
+  });
+  it('disables map selection when the answer is read-only',async()=>{
+    await render({disabled:true});await click('地图选择出发地');expect(h.map).not.toHaveBeenCalled();
+  });
 });

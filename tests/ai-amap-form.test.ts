@@ -11,6 +11,14 @@ function filledForm() {
   return form;
 }
 describe('AI and AMap editable form integration', () => {
+  it('preserves a native map selection in the draft and existing creation wire contract',()=>{
+    const form=filledForm();form.segments[0].venue={...venue,source:{provider:'wechat',source_api:'wx.chooseLocation'}};
+    expect(isActivityForm(JSON.parse(JSON.stringify(form)))).toBe(true);
+    const input=buildCreateInput(form,'fixture-native-map');
+    expect(input.segments[0].location.source_url).toContain('121.451445,31.227973');
+    expect(input.segments[0].fee.kind).toBe('unknown');
+    form.segments[0].address='手动改地址';expect(selectedVenueUrl(form.segments[0])).toBeNull();
+  });
   it('requires replacement confirmation for any existing draft field, not only basic fields', () => {
     expect(hasActivityDraftEdits(emptyForm())).toBe(false);
     for (const field of ['endTime', 'endDate', 'deadlineTime', 'deadlineDate', 'address', 'amount', 'feeNote', 'requirements'] as const) {

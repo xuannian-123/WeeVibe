@@ -47,18 +47,18 @@ describe('account UI recovery: actual components and extension client, fake tran
   const host=await render(createElement(ProfileForm,{ownerSession:mocks.token,initial:{nickname:'保留昵称'},saved:mocks.saved,close:mocks.close}));mocks.transport.mockResolvedValueOnce({status:404,body:'<html>PRIVATE_SENTINEL</html>'});await click('保存资料');expect(mocks.saved).not.toHaveBeenCalled();expect(mocks.close).not.toHaveBeenCalled();expect(host.querySelector('input')?.value).toBe('保留昵称');expect(host.textContent).toContain('写入结果未确认');expect(host.textContent).not.toContain('PRIVATE_SENTINEL');
  });
  it('keeps the inspiration page recoverable when favorites GET returns incompatible HTTP 200',async()=>{
-  const host=await render(createElement(Inspiration,{city:'北京',authenticated:true,login:()=>{}}));mocks.transport.mockResolvedValueOnce({status:200,body:{ok:true}});await click('我的收藏');expect(host.textContent).not.toContain('SCREEN_CRASH');expect(host.textContent).toMatch(/响应|版本|无法验证/);
+  const host=await render(createElement(Inspiration,{city:'北京',manualCity:true,authenticated:true,login:()=>{}}));mocks.transport.mockResolvedValueOnce({status:200,body:{ok:true}});await click('我的收藏');expect(host.textContent).not.toContain('SCREEN_CRASH');expect(host.textContent).toMatch(/响应|版本|无法验证/);
  });
 });
 
-async function showSavedVenue(){const host=await render(createElement(Inspiration,{city:'北京',authenticated:true,login:()=>{}}));const account=emptyAccountFixture();account.favorites=[accountVenue()];mocks.transport.mockResolvedValueOnce({status:200,body:account});await click('我的收藏');return host;}
+async function showSavedVenue(){const host=await render(createElement(Inspiration,{city:'北京',manualCity:true,authenticated:true,login:()=>{}}));const account=emptyAccountFixture();account.favorites=[accountVenue()];mocks.transport.mockResolvedValueOnce({status:200,body:account});await click('我的收藏');return host;}
 describe('account mutations do not manufacture success or lose current local state',()=>{
  it('keeps a displayed favorite after an unknown removal result and allows a verified retry',async()=>{
   const host=await showSavedVenue();mocks.transport.mockResolvedValueOnce({status:200,body:{ok:true}});await click('取消收藏');expect(host.textContent).toContain('离线测试公园');expect(host.textContent).toContain('响应无法验证');expect(mocks.toast).not.toHaveBeenCalled();
   mocks.transport.mockResolvedValueOnce({status:200,body:emptyAccountFixture()});await click('取消收藏');expect(host.textContent).not.toContain('离线测试公园');
  });
  it('does not toast a new favorite as saved after a malformed response',async()=>{
-  const host=await render(createElement(Inspiration,{city:'北京',authenticated:true,login:()=>{}}));// Search now uses the real fixed-session client; retain the original favorite assertion with a valid transport projection.
+  const host=await render(createElement(Inspiration,{city:'北京',manualCity:true,authenticated:true,login:()=>{}}));// Search now uses the real fixed-session client; retain the original favorite assertion with a valid transport projection.
   mocks.transport.mockResolvedValueOnce({status:200,body:{source:accountVenue().source,venues:[accountVenue()],excluded_count:0,pagination:false}});await click('搜索地点');mocks.transport.mockResolvedValueOnce({status:200,body:{ok:true}});await click('收藏地点');expect(mocks.toast).not.toHaveBeenCalled();expect(host.textContent).toContain('离线测试公园');
  });
  it('cannot act on A favorites after the session changes to B',async()=>{
@@ -82,7 +82,7 @@ describe('unknown account state and actor switch presentation',()=>{
  });
  it('hides A activity data immediately while reading a different B session',async()=>{
   const value={...emptyAccountFixture(),activities:[{activity_id:accountActivity,title:'A的私有活动',starts_at:null,ends_at:null,timezone:'UTC',status:'待参加',location:''}]};delete (value as any).activity_records;
-  mocks.me.mockResolvedValueOnce({user_id:accountActor});mocks.transport.mockResolvedValueOnce({status:200,body:value});const host=await render(createElement(Home));await act(async()=>{mocks.show.forEach(fn=>fn());await Promise.resolve();});expect(host.textContent).toContain('A的私有活动');
+  mocks.me.mockResolvedValueOnce({user_id:accountActor});mocks.transport.mockResolvedValueOnce({status:200,body:value});const host=await render(createElement(Home));await act(async()=>{mocks.show.forEach(fn=>fn());await Promise.resolve();});await click('查看全部　›');expect(host.textContent).toContain('A的私有活动');
   mocks.token='session-b';mocks.me.mockImplementationOnce(()=>new Promise(()=>{}));await act(async()=>{mocks.show.forEach(fn=>fn());await Promise.resolve();});expect(host.textContent).not.toContain('A的私有活动');
  });
  it('hides old private profile inputs after an account change is observed',async()=>{
@@ -96,7 +96,7 @@ it('binds profile initial data to its source session rather than the currently m
 
 it('keeps unsaved profile input during a same-account background refresh failure',async()=>{
  const value=emptyAccountFixture();value.profile.nickname='服务器昵称';mocks.me.mockResolvedValueOnce({user_id:accountActor});mocks.transport.mockResolvedValueOnce({status:200,body:value});const host=await render(createElement(Home));await act(async()=>{mocks.show.forEach(fn=>fn());await Promise.resolve();});
- const tab=Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='我的')!;await act(async()=>tab.click());const entry=Array.from(host.querySelectorAll('button')).find(s=>s.textContent==='编辑资料')!;await act(async()=>entry.click());const input=host.querySelector('input')!;await act(async()=>{input.value='本机未保存昵称';input.dispatchEvent(new Event('input',{bubbles:true}));});
+ const tab=Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='我的')!;await act(async()=>tab.click());const entry=Array.from(host.querySelectorAll('button')).find(s=>s.textContent==='设置头像（选填）')!;await act(async()=>entry.click());const input=host.querySelector('input')!;await act(async()=>{input.value='本机未保存昵称';input.dispatchEvent(new Event('input',{bubbles:true}));});
  mocks.me.mockResolvedValueOnce({user_id:accountActor});mocks.transport.mockResolvedValueOnce({status:404,body:'<html>missing</html>'});await act(async()=>{mocks.show.forEach(fn=>fn());await Promise.resolve();});
  expect(host.querySelector('input')?.value).toBe('本机未保存昵称');expect(host.textContent).toContain('HTTP 404');expect(mocks.token).toBe('session-a');
 });

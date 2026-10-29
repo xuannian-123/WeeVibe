@@ -7,14 +7,16 @@ const req = createRequire(resolve(process.cwd(), 'apps/miniprogram/package.json'
 const { createElement, act } = req('react') as typeof import('../apps/miniprogram/node_modules/@types/react');
 const { createRoot } = req('react-dom/client') as { createRoot: (host: Element) => { render: (element: ReturnType<typeof createElement>) => void; unmount: () => void } };
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const h = vi.hoisted(() => ({ transport: vi.fn(), storage: vi.fn(), location: vi.fn(), select: vi.fn(), hide: [] as (() => void)[] }));
+const h = vi.hoisted(() => ({ transport: vi.fn(), storage: vi.fn(), location: vi.fn(), select: vi.fn(), map: vi.fn(), privacy: vi.fn(), token: 'offline-fixture-session', page: {}, pages: [] as object[], hide: [] as (() => void)[], show: [] as (() => void)[], unload: [] as (() => void)[] }));
 vi.mock('../apps/miniprogram/src/platform/api', async () => {
   const { createApiClient } = await import('../packages/api-client/src');
-  return { api: createApiClient(h.transport, () => 'offline-fixture-session') };
+  return { api: createApiClient(h.transport, () => h.token), getToken: () => h.token };
 });
+vi.mock('../apps/miniprogram/src/platform/location-permission', () => ({ requirePrivacyPermission: h.privacy }));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({
-  default: { getStorageSync: h.storage, getFuzzyLocation: h.location, openLocation: h.location },
+  default: { getStorageSync: h.storage, getFuzzyLocation: h.location, openLocation: h.location, chooseLocation: h.map, getCurrentPages: () => h.pages },
   useDidHide: (fn: () => void) => h.hide.push(fn),
+  useDidShow: (fn: () => void) => h.show.push(fn), useUnload: (fn: () => void) => h.unload.push(fn),
 }));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components', () => ({
   Button: (p: any) => createElement('button', { onClick: p.onClick, disabled: p.disabled }, p.children),
@@ -29,7 +31,47 @@ const source = { provider: 'amap' as const, checked_at: '2026-10-26T00:00:00Z', 
 let root: ReturnType<typeof createRoot> | undefined;
 beforeEach(() => {
   h.storage.mockReset().mockReturnValue('杭州'); h.location.mockReset(); h.select.mockReset(); h.hide = [];
+  h.show = []; h.unload = []; h.pages = [h.page]; h.token = 'offline-fixture-session';
+  h.privacy.mockReset().mockResolvedValue(undefined); h.map.mockReset();
   h.transport.mockReset().mockResolvedValue({ status: 200, body: { source, venues: [], excluded_count: 0, pagination: false } });
+});
+
+describe('public form native map selection', () => {
+  const nativePlace = { name: '月亮湾', address: '苏州测试地址', latitude: 31.1234567, longitude: 120.1234567 };
+  it('opens only after click and passes a typed source without fabricating AMap metadata', async () => {
+    h.map.mockImplementation(({ success }) => success(nativePlace));
+    await render(); expect(h.map).not.toHaveBeenCalled(); await click('地图选择地点');
+    expect(h.select).toHaveBeenCalledExactlyOnceWith({ name: nativePlace.name, address: nativePlace.address,
+      location: { latitude: 31.123457, longitude: 120.123457, crs: 'GCJ-02' }, source: { provider: 'wechat', source_api: 'wx.chooseLocation' } });
+    expect(h.transport).not.toHaveBeenCalled();
+  });
+  it('starts from the original selected coordinates and cancellation does not overwrite them', async () => {
+    h.map.mockImplementation(({ fail }) => fail({ errMsg: 'chooseLocation:fail cancel' }));
+    const segment = emptySegment(); segment.place = '原场地'; segment.address = '原地址';
+    segment.venue = { name: segment.place, address: segment.address, location: { latitude: 31, longitude: 120, crs: 'GCJ-02' }, source };
+    await render(segment); await click('重新选择地点');
+    expect(h.map).toHaveBeenCalledWith(expect.objectContaining({ latitude: 31, longitude: 120 }));
+    expect(h.select).not.toHaveBeenCalled(); expect(segment.place).toBe('原场地');
+  });
+  it('waits for the native map to return before applying a selection', async () => {
+    let finish!: (value: typeof nativePlace) => void;
+    h.map.mockImplementation(({ success }) => { finish = success; });
+    await render(); await click('地图选择地点');
+    // The latest two registrations are the map hook and the normal search guard.
+    await act(async () => h.hide.slice(-2).forEach(fn => fn()));
+    await act(async () => finish(nativePlace)); expect(h.select).not.toHaveBeenCalled();
+    await act(async () => h.show.at(-1)!()); expect(h.select).toHaveBeenCalledOnce();
+  });
+  it.each(['token', 'page', 'disabled', 'unload'])('rejects an obsolete native result after %s changes', async reason => {
+    let finish!: (value: typeof nativePlace) => void;
+    h.map.mockImplementation(({ success }) => { finish = success; });
+    await render(); await click('地图选择地点');
+    if (reason === 'token') h.token = 'other-account';
+    if (reason === 'page') h.pages = [{}];
+    if (reason === 'disabled') await render(emptySegment(), true);
+    if (reason === 'unload') await act(async () => h.unload.at(-1)!());
+    await act(async () => finish(nativePlace)); expect(h.select).not.toHaveBeenCalled();
+  });
 });
 afterEach(async () => { if (root) await act(async () => root!.unmount()); root = undefined; document.body.innerHTML = ''; });
 async function render(segment: SegmentForm = emptySegment(), disabled = false, key = 'new-picker') {

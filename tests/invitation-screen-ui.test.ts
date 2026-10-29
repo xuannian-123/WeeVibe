@@ -8,15 +8,17 @@ const req=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json'));
 const {createElement,act}=req('react') as typeof import('../apps/miniprogram/node_modules/@types/react');
 const {createRoot}=req('react-dom/client') as {createRoot:(host:Element)=>{render:(element:ReturnType<typeof createElement>)=>void;unmount:()=>void}};
 (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
-const h=vi.hoisted(()=>({controller:{} as any,modal:vi.fn(),me:vi.fn(),transport:vi.fn(),created:vi.fn()}));
+const h=vi.hoisted(()=>({controller:{} as any,editor:{} as any,applicationState:{} as any,modal:vi.fn(),me:vi.fn(),transport:vi.fn(),created:vi.fn()}));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=> 'session-a',api:{me:h.me},transport:h.transport}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{showModal:h.modal},useDidHide:()=>{},useDidShow:()=>{},useUnload:()=>{}}));
 // Keep the real sibling MainSegmentPanel mounted; extend only the native primitive fixture.
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Image:(p:any)=>createElement('img',{src:p.src}),Radio:()=>null,RadioGroup:(p:any)=>createElement('div',{},p.children),Label:(p:any)=>createElement('label',{},p.children),Button:(p:any)=>createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{},p.children),Text:(p:any)=>createElement('span',{},p.children)}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/use-activity-detail',()=>({useActivityDetail:()=>h.controller}));
-vi.mock('../apps/miniprogram/src/features/activity-detail/itinerary',()=>({Itinerary:()=>null}));
+vi.mock('../apps/miniprogram/src/features/activity-detail/itinerary',()=>({Itinerary:()=>createElement('span',{},'行程挂载')}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/more',()=>({ActivityMore:()=>null}));
-vi.mock('../apps/miniprogram/src/features/applications/panels',()=>({ApprovalPanel:({state}:any)=>createElement('button',{disabled:state.anyBusy||!state.fresh},'审批同伴操作'),ApplicationForm:({state}:any)=>createElement('button',{disabled:state.anyBusy||!state.fresh},'申请同伴操作'),MyParticipationPanel:()=>null}));
+vi.mock('../apps/miniprogram/src/features/applications/panels',()=>({ApprovalPanel:({state}:any)=>createElement('button',{disabled:state.anyBusy||!state.fresh},'审批同伴操作'),ApplicationForm:({state}:any)=>{h.applicationState=state;return createElement('button',{disabled:state.anyBusy||!state.fresh},'申请同伴操作');},MyParticipationPanel:()=>createElement('span',{},'本人状态挂载')}));
+// Exercise the real Screen's editor/peer locks; the editor's actual lifecycle is covered by arrangement-editor-ui.
+vi.mock('../apps/miniprogram/src/features/arrangement-change/ArrangementEditor',()=>({ArrangementEditor:(p:any)=>{h.editor=p;return createElement('button',{disabled:!p.fresh||p.anyBusy},'安排编辑同伴操作');}}));
 vi.mock('../apps/miniprogram/src/features/participation/ParticipationActions',()=>({ParticipationActions:(p:any)=>createElement('button',{disabled:!p.fresh},'退出同伴操作')}));
 // This suite isolates its own writer; the real handover GET/lifecycle is covered in handover-ui and independent Screen tests.
 vi.mock('../apps/miniprogram/src/features/handover/HandoverPanel',()=>({HandoverPanel:(p:any)=>createElement('button',{disabled:p.anyBusy||!p.fresh},'交接同伴操作')}));
@@ -50,4 +52,33 @@ it('places the participation entry before management panels and mounts the exist
   expect(text.indexOf('选择参加环节')).toBeGreaterThanOrEqual(0);
   expect(text.indexOf('选择参加环节')).toBeLessThan(text.indexOf('交接同伴操作'));
   expect(Array.from(document.querySelectorAll('button')).filter(button => button.textContent === '申请同伴操作')).toHaveLength(1);
+  expect(text.match(/行程挂载/g)).toHaveLength(1);
+  expect(text.match(/本人状态挂载/g)).toHaveLength(1);
+  expect(Array.from(document.querySelectorAll('button')).filter(button => button.textContent === '安排编辑同伴操作')).toHaveLength(1);
+});
+
+it('blocks invitation and original application handlers during arrangement editing without self-blocking the editor', async () => {
+  await render(); const originalSubmit=h.applicationState.submit, originalRetry=h.applicationState.apply.send;
+  await act(async()=>h.editor.onBusyChange(true));
+  for(const name of ['审批同伴操作','申请同伴操作','退出同伴操作','交接同伴操作','准备带来源的邀请入口','选择参加环节'])expect(button(name).disabled).toBe(true);
+  expect(button('安排编辑同伴操作').disabled).toBe(false);
+  await act(async()=>{originalSubmit();await originalRetry();});
+  expect(h.controller.applications.submit).not.toHaveBeenCalled();expect(h.controller.applications.apply.send).not.toHaveBeenCalled();
+  await act(async()=>h.editor.onBusyChange(false));
+  for(const name of ['审批同伴操作','申请同伴操作','退出同伴操作','交接同伴操作','准备带来源的邀请入口'])expect(button(name).disabled).toBe(false);
+  expect(h.transport).not.toHaveBeenCalled();
+});
+
+it('blocks the editor during invitation identity preflight and releases it after source creation', async () => {
+  await render(); let finish!:(value:{user_id:string})=>void;
+  h.me.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;})); await click();
+  expect(button('安排编辑同伴操作').disabled).toBe(true);
+  await act(async()=>finish({user_id:applicantA})); expect(button('安排编辑同伴操作').disabled).toBe(false);
+  expect(h.created).toHaveBeenCalledExactlyOnceWith(applicationId);
+});
+
+it('preserves the new main formation guidance while keeping the invitation overview and source entry', async () => {
+  await render(); expect(document.body.textContent).toContain('主环节待补位');
+  expect(document.body.textContent).toContain('补齐后由发起人确认恢复，原成员不用重报');
+  expect(button('准备带来源的邀请入口')).toBeTruthy(); expect(button('选择参加环节')).toBeTruthy();
 });

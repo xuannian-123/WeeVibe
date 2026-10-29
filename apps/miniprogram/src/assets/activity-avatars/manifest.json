@@ -1,0 +1,173 @@
+{
+  "source": "用户提供的头像图片.zip；保留原图，本地缩小压缩；不同底色由界面绘制，不复制504份图片",
+  "images": [
+    {
+      "key": "rabbit",
+      "file": "rabbit.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 3932,
+      "original_sha256": "7a26683b0fa94a9c3b6769305a72763cd2195ac8816bd8e80d4b9bb07e735e8c"
+    },
+    {
+      "key": "hedgehog",
+      "file": "hedgehog.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 5017,
+      "original_sha256": "d7daf6dcaa21cc273ee8c118aaf28c858505c46665fb0b51ea90d0f74df0784f"
+    },
+    {
+      "key": "elephant",
+      "file": "elephant.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4433,
+      "original_sha256": "896f8a54178ce630ca99645ba5f010c0f84b077c48fdf45fd01f53a42b3ef991"
+    },
+    {
+      "key": "squirrel",
+      "file": "squirrel.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4993,
+      "original_sha256": "44868f217586e280700ce3f6e1c756cd9b97713a6c397e1ce23450343df15138"
+    },
+    {
+      "key": "panda",
+      "file": "panda.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4705,
+      "original_sha256": "c80e8ef395633b67fc2311fc23172ecd0c854e13e693ddc2d32c4e460d8b0332"
+    },
+    {
+      "key": "ox",
+      "file": "ox.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4275,
+      "original_sha256": "038646e8f5ceab966f0db285316710a0f7846bcb631d0876df1ccccd385621f6"
+    },
+    {
+      "key": "fox",
+      "file": "fox.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4838,
+      "original_sha256": "ccea8b03c7fb85c17bb57bcfc28f5f1405d741080d956078a7f45ed33d917c75"
+    },
+    {
+      "key": "dog",
+      "file": "dog.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4610,
+      "original_sha256": "e5541459bdf6574845a28eb9491ba85a9bf90d172e2ebe2dfc7e765791530f58"
+    },
+    {
+      "key": "lion",
+      "file": "lion.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4917,
+      "original_sha256": "99e7e2bec95335424992063df8a3585577a8d0ed5483384d48e381d60da9dfc3"
+    },
+    {
+      "key": "wolf",
+      "file": "wolf.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4530,
+      "original_sha256": "0a8ea3634f0fb2a86bfc325ef0a038a59f2ae51da466cdeaec3669d20ed2053c"
+    },
+    {
+      "key": "pig",
+      "file": "pig.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4214,
+      "original_sha256": "7ab9f45ac1e86a059407f34e6094a83805dcdf92dbba93b064c49d9a3cb61549"
+    },
+    {
+      "key": "cat",
+      "file": "cat.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4778,
+      "original_sha256": "947f9420ba1e81b322e53d10289f594f06455f464764f068ef3c86cd183ac945"
+    },
+    {
+      "key": "monkey",
+      "file": "monkey.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4864,
+      "original_sha256": "07a7009fd05a588bf766ae21a3a89850c8cfe0393de1d0b1b7b2eee6f31666b0"
+    },
+    {
+      "key": "sheep",
+      "file": "sheep.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 3745,
+      "original_sha256": "9d2a018533e551524ca481b618862aa61c103c81dd15499b51a1a77a33cd276f"
+    },
+    {
+      "key": "tiger",
+      "file": "tiger.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 5649,
+      "original_sha256": "fc572780d8f4653ed2e40e436213f678a923cffad18de676f77a25cd91ac47fe"
+    },
+    {
+      "key": "crab",
+      "file": "crab.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 5636,
+      "original_sha256": "77f715b2248505be71687b0de659d7336926b543e295264c9f486088887a237c"
+    },
+    {
+      "key": "giraffe",
+      "file": "giraffe.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4346,
+      "original_sha256": "55298661699d17e6759251edeed8a11ea096cd88656127f31bdc2208299c9825"
+    },
+    {
+      "key": "horse",
+      "file": "horse.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4702,
+      "original_sha256": "8a4b2e8e91a7388722336787c07aae8e82abdfec54c5c5cf50da1ecb546e6b13"
+    },
+    {
+      "key": "rooster",
+      "file": "rooster.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 3640,
+      "original_sha256": "271e21645d4f76a08c08c8114e34eee7d3cadd2d4da0f37fa6636746093d064b"
+    },
+    {
+      "key": "duck",
+      "file": "duck.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 3450,
+      "original_sha256": "4741942a2b80bec672b8faa312a99d7a514db23e246df37053565c8658a0c0a8"
+    },
+    {
+      "key": "deer",
+      "file": "deer.jpg",
+      "width": 160,
+      "height": 160,
+      "bytes": 4291,
+      "original_sha256": "e7e06b676410248f939682342b42a8cf09262e5c5e397b63a2c084a35033e4ab"
+    }
+  ]
+}

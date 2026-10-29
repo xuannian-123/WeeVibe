@@ -7,7 +7,7 @@ import { VenuePicker } from './venue-picker';
 import { checkValue, rebookCheckReady, type RebookChecks } from '../rebook/draft';
 import './activity-editor.css';
 
-export function ActivityEditor({ value, onChange, disabled, rebook }: { value: ActivityForm; onChange: (value: ActivityForm) => void; disabled: boolean; rebook?: { checks: RebookChecks; confirm: (ref: string, kind: 'location' | 'fee') => void } }) {
+export function ActivityEditor({ value, onChange, disabled, rebook, editing = false }: { value: ActivityForm; onChange: (value: ActivityForm) => void; disabled: boolean; editing?: boolean; rebook?: { checks: RebookChecks; confirm: (ref: string, kind: 'location' | 'fee') => void } }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const changeSegment = (ref: string, patch: Partial<SegmentForm>) => onChange({ ...value, segments: value.segments.map(s => s.ref === ref ? { ...s, ...patch } : s) });
   function reorder(index: number, offset: number) {
@@ -25,9 +25,9 @@ export function ActivityEditor({ value, onChange, disabled, rebook }: { value: A
       </Picker>
     </View></View>;
   return <View>
-    {!rebook && <AiCreate value={value} onApply={onChange} disabled={disabled} />}
+    {!rebook && !editing && <AiCreate value={value} onApply={onChange} disabled={disabled} />}
     <Panel title="这次想一起做什么？">
-      <Field label="活动名称" value={value.name} disabled={disabled} onChange={name => onChange({ ...value, name })} placeholder="例如：周末打球，再一起吃饭" />
+      <Field label="活动名称" value={value.name} disabled={disabled || editing} onChange={name => onChange({ ...value, name })} placeholder="例如：周末打球，再一起吃饭" />
       <Text className="caption">先约一件事也可以。有后续安排时，再添加环节。</Text>
     </Panel>
     {value.segments.map((s, index) => {
@@ -87,7 +87,7 @@ export function ActivityEditor({ value, onChange, disabled, rebook }: { value: A
           {value.segments.length > 1 && <Action variant="danger" disabled={disabled} onClick={() => {
             const segments = value.segments.filter(item => item.ref !== s.ref);
             onChange({ ...value, segments, attending: value.attending.filter(ref => ref !== s.ref), mainRef: segments.length === 1 ? segments[0].ref : value.mainRef === s.ref ? '' : value.mainRef });
-          }}>移除这段安排</Action>}
+          }}>{editing ? '取消这段安排并保留历史' : '移除这段安排'}</Action>}
         </View>}
       </Panel>;
     })}
@@ -100,11 +100,11 @@ export function ActivityEditor({ value, onChange, disabled, rebook }: { value: A
       <RadioGroup onChange={e => onChange({ ...value, mainRef: e.detail.value })}>{value.segments.map((s, i) =>
         <Label key={s.ref} className="choice"><Radio value={s.ref} checked={value.mainRef === s.ref} disabled={disabled} color="#27674f" /><Text>{s.name || `安排 ${i + 1}`}</Text></Label>)}</RadioGroup>
     </Panel>}
-    <Panel title="我参加哪些安排？">
+    {!editing && <Panel title="我参加哪些安排？">
       <Text className="caption">勾选你本人参加的环节。不勾选时，你只负责组织，不占名额。</Text>
       <CheckboxGroup onChange={e => onChange({ ...value, attending: e.detail.value })}>{value.segments.map((s, i) =>
         <Label key={s.ref} className="choice"><Checkbox value={s.ref} checked={value.attending.includes(s.ref)} disabled={disabled} color="#27674f" /><Text>{segmentName(value, s) || `安排 ${i + 1}`}</Text></Label>)}</CheckboxGroup>
       <Field label="活动里的称呼（可选）" value={value.nickname} disabled={disabled} onChange={nickname => onChange({ ...value, nickname })} placeholder="方便朋友认出你" />
-    </Panel>
+    </Panel>}
   </View>;
 }

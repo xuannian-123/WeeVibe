@@ -43,6 +43,8 @@ export function gatheringVisibleDetails(details: GatheringDetails, kind:'friend'
   if(kind==='friend'||owner)return details;
   const visible={...details};
   for(const field of ['date','title','start_time','end_date','end_time','place','address','description','approximate_time'] as const)if(!details.confirmed_details.includes(field))visible[field]='';
+  // Coordinates and the source's address must follow the same disclosure boundary.
+  if(!details.confirmed_details.includes('place')||!details.confirmed_details.includes('address'))delete visible.place_venue;
   if(!details.confirmed_details.includes('minimum'))visible.minimum=null;
   if(!details.confirmed_details.includes('capacity'))visible.capacity=null;
   if(!details.confirmed_details.includes('fee'))visible.fee={kind:'unknown',amount:null,note:''};

@@ -69,4 +69,17 @@ describe('formation actual service + original participation/application services
  it('same false marker clears stale legacy confirmation fields even if verification was already unknown',async()=>{h.activity.confirmedAt=new Date();h.activity.confirmedMainRevision=1;h.activity.confirmedPlanRevision=3;await changeFormation(activityId,manager,command('set-verification','repeat-unknown',false));expect([h.activity.confirmedAt,h.activity.confirmedMainRevision,h.activity.confirmedPlanRevision]).toEqual([null,null,null]);});
  it('keeps new confirmation atomic if an event write fails in the transaction adapter',async()=>{await verify();const revision=h.activity.revision,eventCount=h.events.length;h.tx.activityEvent.create.mockRejectedValueOnce(new Error('fixture event failure'));await expect(confirm()).rejects.toThrow('fixture event failure');expect(h.activity.revision).toBe(revision);expect(h.activity.confirmedAt).toBeNull();expect(h.events).toHaveLength(eventCount);expect(h.keys.size).toBe(1);});
 
+ it('old exit replay after a newly approved return does not exit again or claim a fresh exit',async()=>{
+  await verify();await confirm();
+  const input={action:'exit' as const,segment_ids:[mainId],expected_revision:h.activity.revision,idempotency_key:'exit-before-return'};
+  await changeParticipation(activityId,members[0],input);
+  const applied=await applyToActivity(activityId,members[0],{idempotency_key:'return-after-exit',expected_revision:h.activity.revision,segments:[{segment_id:mainId,plan_revision:3}]});
+  await decideApplication(activityId,applied.viewer.applications.at(-1)!.application_id,manager,{idempotency_key:'approve-return',expected_revision:h.activity.revision,decision:'approve'});
+  const revision=h.activity.revision,eventCount=h.events.length;
+  const replayed=await changeParticipation(activityId,members[0],input);
+  expect(replayed.activity.viewer.participations.find(p=>p.segment_id===mainId)?.status).toBe('joined');
+  expect(replayed.notice).toContain('本次未重复变更');expect(replayed.notice).not.toContain('已退出所选环节');
+  expect(h.activity.revision).toBe(revision);expect(h.events).toHaveLength(eventCount);
+ });
+
 });
