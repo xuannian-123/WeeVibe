@@ -16,8 +16,8 @@ const request=(body:unknown)=>new Request('https://fixture.test/api/v1/profile-e
 const draftInput={title:'测试',description:'',starts_at:'',deadline_at:'',timezone:'Asia/Shanghai',locations:[],questions:[]};
 const activityInput={idempotency_key:'profile-entry-key',name:'朋友活动',timezone:'Asia/Shanghai',main_segment_ref:'s1',participating_segment_refs:[],segments:[{client_ref:'s1',type:'sport',name:'打球',starts_at:'2030-01-02T12:00:00+08:00',ends_at:'2030-01-02T14:00:00+08:00',deadline_at:'2030-01-01T12:00:00+08:00',minimum_participants:1,capacity:4,location:{name:'公开场地',address:null,source_url:null},fee:{kind:'unknown',amount_cents:null,currency:'CNY',note:''},requirements:''}]};
 const context={params:Promise.resolve({collectionId:id})};
-beforeEach(()=>{for(const fn of Object.values(h))fn.mockReset();h.auth.mockResolvedValue({user_id:actor});h.profile.mockRejectedValue(new ServiceError('INVALID_INPUT',400,'请先保存头像和昵称'));});
-describe('legacy public creation/filling entry routes share the persisted-profile gate',()=>{
+beforeEach(()=>{for(const fn of Object.values(h))fn.mockReset();h.auth.mockResolvedValue({user_id:actor});[h.create,h.apply,h.requirementCreate,h.requirementCommand,h.generate].forEach(fn=>fn.mockResolvedValue({ok:true}));h.profile.mockRejectedValue(new ServiceError('INVALID_INPUT',400,'请先保存头像和昵称'));});
+describe('legacy public writes require trusted identity without requiring account presentation',()=>{
   const cases=[
     ['create activity',()=>create(request(activityInput))],
     ['apply activity',()=>apply(request({idempotency_key:'profile-entry-key',expected_revision:1,segments:[{segment_id:id,plan_revision:1}]}),{params:Promise.resolve({activityId:id})})],
@@ -28,9 +28,14 @@ describe('legacy public creation/filling entry routes share the persisted-profil
     ['finalize requirements',()=>requirementCommand(request({action:'finalize',expected_revision:1,final_selection:{location_id:null,location_other:null,note:''}}),context)],
     ['generate AI draft',()=>draft(request({text:'一起打球',selected_date:'2030-01-02',source_revision:1}))],
   ] as const;
-  it.each(cases)('blocks %s before domain writes or supplier work',async(_label,run)=>{
-    const response=await run();expect(response.status).toBe(400);expect(h.profile).toHaveBeenCalledExactlyOnceWith(actor);
-    expect([h.create,h.apply,h.requirementCreate,h.requirementCommand,h.generate].every(fn=>fn.mock.calls.length===0)).toBe(true);
+  it.each(cases)('allows authenticated %s without a saved account avatar or nickname',async(_label,run)=>{
+    const response=await run();expect(response.status).toBe(200);expect(h.profile).not.toHaveBeenCalled();
+    expect([h.create,h.apply,h.requirementCreate,h.requirementCommand,h.generate].reduce((n,fn)=>n+fn.mock.calls.length,0)).toBe(1);
+  });
+  it.each(cases)('still blocks unauthenticated %s before any write',async(_label,run)=>{
+    h.auth.mockRejectedValue(new ServiceError('UNAUTHENTICATED',401,'请先登录'));
+    expect((await run()).status).toBe(401);
+    expect([h.create,h.apply,h.requirementCreate,h.requirementCommand,h.generate].every(fn=>!fn.mock.calls.length)).toBe(true);
   });
   it('keeps closing an existing collection and read-only access available without completing profile',async()=>{
     h.requirementCommand.mockResolvedValue({ack:true});h.read.mockResolvedValue({view:true});

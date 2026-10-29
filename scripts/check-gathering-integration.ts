@@ -218,7 +218,7 @@ try {
     { id: 'q_origin', title: '个人出发地点', type: 'text', required: false, options: [] },
     { id: 'q_text', title: '其他建议', type: 'text', required: false, options: [] },
   ];
-  let team = valid(await service.createGathering(owner.id, { kind: 'team', idempotency_key: key(), details: teamDetails, intake: emptyGatheringIntake() }));
+  let team = valid(await service.createGathering(owner.id, { kind: 'team', idempotency_key: key(), details: teamDetails, intake:{...emptyGatheringIntake(),public:{...emptyGatheringIntake().public,activity_nickname:'团建局头'}} }));
   const teamId = team.gathering.id;
   await service.joinGathering(teamId, member.id);
   const teamIntake = intake('Team own public draft', 'TEAM_PRIVATE');
@@ -252,7 +252,7 @@ try {
     await assert.rejects(() => service.updateGatheringDetails(teamId, member.id, { expected_revision: team.gathering.revision, details: teamDetails }), { code: 'FORBIDDEN' });
     await assert.rejects(() => service.updateGatheringDetails(teamId, owner.id, { expected_revision: team.gathering.revision + 1, details: teamDetails }), { code: 'VERSION_CONFLICT' });
     await assert.rejects(() => service.updateGatheringDetails(teamId, owner.id, { expected_revision: team.gathering.revision, details: { ...teamDetails, questions: [] } }));
-    const fresh = valid(await service.createGathering(owner.id, { kind: 'team', idempotency_key: key(), details: teamDetails, intake: emptyGatheringIntake() }));
+    const fresh = valid(await service.createGathering(owner.id, { kind: 'team', idempotency_key: key(), details: teamDetails, intake:{...emptyGatheringIntake(),public:{...emptyGatheringIntake().public,activity_nickname:'团建局头'}} }));
     await service.joinGathering(fresh.gathering.id, outsider.id);
     const changed = valid(await service.updateGatheringDetails(fresh.gathering.id, owner.id, { expected_revision: fresh.gathering.revision, details: { ...teamDetails, title: 'Changed questionnaire source' } }));
     assert.equal(changed.gathering.revision, fresh.gathering.revision + 1);

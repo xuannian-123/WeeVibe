@@ -16,7 +16,7 @@ export function gatheringBackendFixture(kind:'friend'|'team'='friend'){
   const events=new Map<string,GatheringSubmissionEvent>(),recipients=new Map<string,GatheringNotificationRecipient>(),outbox=new Map<string,GatheringPushOutbox>(),incompleteProfiles=new Set<string>();
   const project=(row:unknown,select?:Record<string,boolean>)=>row&&select?Object.fromEntries(Object.entries(row).filter(([k])=>select[k])):row;
   const seed=(userId:string,intake=gatheringFixtureIntake(),version=1,id=gatheringId)=>{
-    const row:GatheringMember={gatheringId:id,userId,animalId:'cat',publicIntake:intake.public as never,privateIntake:intake.private as never,answers:intake.answers as never,responseVersion:version,firstSubmissionSequence:version>0?0:null,lastWriteKey:null,lastWriteHash:null,createdAt:new Date(),updatedAt:new Date()};members.set(`${id}:${userId}`,row);return row;
+    const row:GatheringMember={gatheringId:id,userId,animalId:'cat',avatarKey:null,publicIntake:intake.public as never,privateIntake:intake.private as never,answers:intake.answers as never,responseVersion:version,firstSubmissionSequence:version>0?0:null,lastWriteKey:null,lastWriteHash:null,createdAt:new Date(),updatedAt:new Date()};members.set(`${id}:${userId}`,row);return row;
   };
   seed(gatheringOwner);seed(gatheringAlice,gatheringFixtureIntake('想一起唱歌'));
   const locks:string[]=[];let onLock:(()=>void)|undefined;
@@ -32,7 +32,7 @@ export function gatheringBackendFixture(kind:'friend'|'team'='friend'){
       findUnique:vi.fn(async({where,select}:any)=>project(members.get(`${where.gatheringId_userId.gatheringId}:${where.gatheringId_userId.userId}`),select)??null),
       findMany:vi.fn(async({where,select,take}:any)=>[...members.values()].filter(m=>m.gatheringId===where.gatheringId&&(!where.userId?.gt||m.userId>where.userId.gt)&&(!where.responseVersion||m.responseVersion>where.responseVersion.gt)&&(!where.firstSubmissionSequence||m.firstSubmissionSequence!==null&&m.firstSubmissionSequence<where.firstSubmissionSequence.lt)).sort((a,b)=>a.userId.localeCompare(b.userId)).slice(0,take).map(m=>project(m,select))),
       count:vi.fn(async({where}:any)=>[...members.values()].filter(m=>m.gatheringId===where.gatheringId&&(!where.responseVersion||m.responseVersion>where.responseVersion.gt)).length),
-      create:vi.fn(async({data}:any)=>{const row={animalId:'cat',responseVersion:0,firstSubmissionSequence:null,lastWriteKey:null,lastWriteHash:null,createdAt:new Date(),updatedAt:new Date(),...data} as GatheringMember;members.set(`${row.gatheringId}:${row.userId}`,row);return row;}),
+      create:vi.fn(async({data}:any)=>{const row={animalId:'cat',avatarKey:null,responseVersion:0,firstSubmissionSequence:null,lastWriteKey:null,lastWriteHash:null,createdAt:new Date(),updatedAt:new Date(),...data} as GatheringMember;members.set(`${row.gatheringId}:${row.userId}`,row);return row;}),
       update:vi.fn(async({where,data}:any)=>{const key=`${where.gatheringId_userId.gatheringId}:${where.gatheringId_userId.userId}`,old=members.get(key)!;const row={...old,...data,responseVersion:data.responseVersion?old.responseVersion+data.responseVersion.increment:old.responseVersion,updatedAt:new Date()};members.set(key,row);return row;}),
     },
     gatheringGeneration:{

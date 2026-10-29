@@ -11,6 +11,7 @@ import {GatheringManage} from './manage';
 import {GatheringProfileBoundary} from './profile-boundary';
 import {gatheringMessage,readGathering} from './client';
 import './gatherings.css';
+import '../../design-c.css';
 import {GatheringDesignChrome} from './page-chrome';
 
 export default function GatheringPage(){

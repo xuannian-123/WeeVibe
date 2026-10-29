@@ -395,6 +395,7 @@ model GatheringMember {
   userId String @db.Uuid
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
   animalId String @default(dbgenerated("((ARRAY['cat','dog','fox','rabbit','bear','panda','koala','tiger','lion','penguin','owl','capybara'])[1 + floor(random() * 12)::int])"))
+  avatarKey String?
   publicIntake Json
   privateIntake Json
   answers Json
@@ -405,6 +406,7 @@ model GatheringMember {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@id([gatheringId, userId])
+  @@unique([gatheringId, avatarKey])
   @@index([userId, updatedAt])
 }
 

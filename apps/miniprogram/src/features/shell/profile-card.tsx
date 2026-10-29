@@ -7,16 +7,11 @@ import { getToken } from '../../platform/api';
 import './navigation.css';
 
 export function ProfileCard({ profile, session, avatarPath = '', edit, settings }: { profile: Omit<MemberProfile, 'user_id' | 'avatar'> & { avatar?: MemberProfile['avatar'] }; session?: string; avatarPath?: string; edit?: () => void; settings?: () => void }) {
-  const [cover, setCover] = useState(''), [avatar, setAvatar] = useState(avatarPath);
-  useEffect(() => { if (session !== getToken()) return; try { setCover(profile.cover_style === 'custom' && profile.cover_image ? cacheProfileImage(profile.cover_image) : ''); setAvatar(profile.avatar ? cacheProfileImage(profile.avatar) : avatarPath); } catch { setCover(''); setAvatar(avatarPath); } }, [profile.cover_image?.digest, profile.cover_style, profile.avatar?.digest, avatarPath, session]);
+  const [avatar, setAvatar] = useState(avatarPath);
+  useEffect(()=>{if(session!==getToken())return;try{setAvatar(profile.avatar?cacheProfileImage(profile.avatar):avatarPath);}catch{setAvatar(avatarPath);}},[profile.avatar?.digest,avatarPath,session]);
   if (session !== getToken()) return null;
-  return <View className="wv-personal-card"><View className={`wv-profile-cover ${profile.cover_style === 'custom' ? 'mint' : profile.cover_style}`}>
-    {cover ? <Image className="wv-cover-image" mode="aspectFill" src={cover}/> : <View className="wv-cover-pattern"><UiIcon name="spark"/><Text>GOOD TIMES, TOGETHER</Text></View>}
-    {settings && <Button ariaLabel="设置" className="wv-cover-settings" onClick={settings}><UiIcon name="settings"/><Text className="wv-sr-only">设置</Text></Button>}
-  </View><View className="wv-profile-body"><View className="wv-profile-identity"><View className="wv-avatar-button">{avatar ? <Image className="wv-avatar" src={avatar}/> : <UiIcon name="user"/>}</View>{edit && <Button className="wv-edit-profile" onClick={edit}>编辑资料</Button>}</View>
-    <Text className="wv-personal-name">{profile.nickname || '你好，新朋友'}</Text>
-    {profile.bio && <Text className="wv-personal-bio">{profile.bio}</Text>}
-    {!!profile.interests?.length && <View className="wv-interest-tags">{profile.interests.map((s, i) => <Text className={i % 2 ? 'lilac' : 'mint'} key={s}>{s}</Text>)}</View>}
-    {(profile.mbti || profile.zodiac) && <View className="wv-personal-optional">{profile.mbti && <Text>{profile.mbti}</Text>}{profile.zodiac && <Text>{profile.zodiac}</Text>}</View>}
-  </View></View>;
+  return <View className="wv-personal-card wv-simple-identity">
+    {settings&&<Button ariaLabel="设置" className="wv-cover-settings" onClick={settings}><UiIcon name="settings"/><Text className="wv-sr-only">设置</Text></Button>}
+    <View className="wv-profile-identity"><Button className="wv-avatar-button" onClick={edit} ariaLabel="修改头像昵称">{avatar?<Image className="wv-avatar" src={avatar}/>:<UiIcon name="user"/>}</Button><View><Text className="wv-personal-name">{profile.nickname||'你好，新朋友'}</Text>{edit&&<Button className="wv-edit-profile" onClick={edit}>{profile.nickname&&avatar?'修改头像昵称':!profile.nickname&&!avatar?'设置头像昵称（选填）':!profile.nickname?'设置昵称（选填）':'设置头像（选填）'}</Button>}</View></View>
+  </View>;
 }

@@ -3,7 +3,7 @@ import Taro from '@tarojs/taro';
 import { Button, ScrollView, Text, View } from '@tarojs/components';
 import { UiIcon } from './ui-icon';
 let nextSheet=0;
-export function Sheet({title,close,children,className='',overlayClassName=''}:{title:string;close:()=>void;children:ReactNode;className?:string;overlayClassName?:string}) {
+export function Sheet({title,close,children,footer,className='',overlayClassName=''}:{title:string;close:()=>void;children:ReactNode;footer?:ReactNode;className?:string;overlayClassName?:string}) {
   const [id]=useState(()=>`wv-sheet-${++nextSheet}`);
   const baseHeight=useRef(typeof Taro.getWindowInfo==='function'?Taro.getWindowInfo().windowHeight:700),keyboard=useRef(0);
   const [layout,setLayout]=useState({height:Math.round(baseHeight.current*.65),bottom:0});
@@ -16,7 +16,7 @@ export function Sheet({title,close,children,className='',overlayClassName=''}:{t
       const bottom=Math.max(0,keyboard.current-Math.max(0,baseHeight.current-windowHeight));
       Taro.createSelectorQuery().select(`#${id}`).boundingClientRect(rect=>{
         if(!alive||!rect||Array.isArray(rect)||!Number.isFinite(rect.height))return;
-        const height=Math.max(100,Math.min(rect.height,available*.88-74));
+        const height=Math.max(80,Math.min(rect.height,available*.88-74-(footer?86:0)));
         setLayout(old=>old.height===height&&old.bottom===bottom?old:{height,bottom});
       }).exec();
     };
@@ -24,9 +24,9 @@ export function Sheet({title,close,children,className='',overlayClassName=''}:{t
     const changed=(event:{height:number})=>{keyboard.current=Math.max(0,event.height);schedule();};
     schedule();Taro.onKeyboardHeightChange?.(changed);
     return()=>{alive=false;Taro.offKeyboardHeightChange?.(changed);};
-  },[children]);
+  },[children,footer]);
   return <View className={`wv-overlay wv-polish-overlay ${overlayClassName}`} style={{bottom:`${layout.bottom}px`}} catchMove onClick={close}><View className={`wv-sheet wv-polish-sheet ${className}`} onClick={e=>e.stopPropagation()}>
     <View className="wv-sheet-grip"/><View className="wv-sheet-header"><Text className="wv-title">{title}</Text><Button className="wv-sheet-close" ariaLabel="关闭弹层" hoverClass="wv-pressed" onClick={close}><UiIcon name="close"/><Text className="wv-sr-only">关闭弹层</Text></Button></View>
-    <ScrollView scrollY className="wv-sheet-scroll" style={{height:`${layout.height}px`}}><View id={id} className="wv-sheet-inner">{children}</View></ScrollView>
+    <ScrollView scrollY className="wv-sheet-scroll" style={{height:`${layout.height}px`}}><View id={id} className="wv-sheet-inner">{children}</View></ScrollView>{footer&&<View className="wv-sheet-footer">{footer}</View>}
   </View></View>;
 }
