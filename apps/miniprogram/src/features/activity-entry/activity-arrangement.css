@@ -1,0 +1,18 @@
+.ia-arrangement{font-family:inherit;color:#222;margin:28px 0}
+.ia-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 18px}
+.ia-heading>text:first-child{font-size:35px;font-weight:800;line-height:1.4}
+.ia-heading>text:last-child{font-size:21px;color:#929088;line-height:1.5}
+.ia-card{background:#fff;border-radius:28px;overflow:hidden;margin-bottom:20px}
+.ia-card-heading{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:22px 26px;background:#eee6fb}
+.ia-main .ia-card-heading{background:#e8f8d4}.ia-cancelled .ia-card-heading{background:#eceae5}
+.ia-name{min-width:0;flex:1;font-size:28px;font-weight:700;line-height:1.5;overflow-wrap:anywhere}
+.ia-badge{flex-shrink:0;font-size:21px;line-height:1.5;color:#62843c;font-weight:600}
+.ia-card-body{padding:2px 26px 8px}
+.ia-row{display:flex;align-items:flex-start;gap:22px;padding:18px 0;border-bottom:1px solid #f1efea}
+.ia-row:last-child{border-bottom:0}
+.ia-label{width:62px;flex-shrink:0;color:#96928b;font-size:24px;line-height:1.65}
+.ia-value{min-width:0;flex:1;font-size:25px;line-height:1.65;color:#33312e}
+.ia-value>text{display:block;overflow-wrap:anywhere;word-break:break-word}
+.ia-value .ia-note{font-size:23px;color:#96928b;line-height:1.6;margin-top:5px;font-weight:400}
+.ia-value .ia-cost{font-size:27px;font-weight:700;color:#222;line-height:1.5}
+.ia-status{background:#f3effa;border-radius:16px;padding:14px 18px;margin:14px 0 12px;color:#7e6a9e;font-size:23px;line-height:1.6}

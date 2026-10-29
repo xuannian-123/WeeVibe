@@ -35,21 +35,27 @@ try {
   const page = (method, params) => send(method, params, sessionId);
   await page('Page.enable');
   const evidence = [];
-  for (const [mode, width] of [['guest', 375], ['pending', 375], ['participant', 375], ['changed', 375], ['cancelled', 375], ['manager', 430], ['long', 320], ['card', 375], ['guest', 1440]]) {
+  for (const [mode, width, expanded = false] of [['guest', 375], ['pending', 375], ['participant', 375], ['changed', 375], ['cancelled', 375], ['manager', 430], ['long', 320], ['card', 375], ['guest', 1440], ['guest', 375, true], ['long', 320, true], ['manager', 430, true], ['cancelled', 375, true], ['guest', 1440, true]]) {
     await page('Emulation.setDeviceMetricsOverride', { width, height: 844, deviceScaleFactor: 1, mobile: true });
-    await page('Page.navigate', { url: `${pathToFileURL(path.join(output, 'index.html')).href}?view=${mode}` });
+    await page('Page.navigate', { url: `${pathToFileURL(path.join(output, 'index.html')).href}?view=${mode}${expanded ? '&expanded=1' : ''}` });
     const readiness = await page('Runtime.evaluate', { expression: `(async()=>{await document.fonts.ready;for(let i=0;i<100;i++){if(document.querySelector('#root')?.children.length&&[...document.images].every(img=>img.complete)&&(${JSON.stringify(mode)}!=='card'||document.querySelector('#root>img'))){await new Promise(r=>setTimeout(r,150));return true}await new Promise(r=>setTimeout(r,50))}return false})()`, awaitPromise: true, returnByValue: true });
     if (!readiness.result.value) throw new Error(`PREVIEW_NOT_READY:${mode}`);
-    if (mode === 'guest') {
+    if (mode === 'guest' && !expanded) {
       const clicked = await page('Runtime.evaluate', { expression: `(async()=>{[...document.querySelectorAll('button')].find(b=>b.textContent?.startsWith('登录并选择参加环节'))?.click();await new Promise(r=>setTimeout(r,80));const ok=document.body.textContent.includes('先登录，再申请');[...document.querySelectorAll('button')].find(b=>b.textContent==='返回活动')?.click();await new Promise(r=>setTimeout(r,80));return ok&&!!document.querySelector('.iv-title')})()`, awaitPromise:true, returnByValue:true });
       if (!clicked.result.value) throw new Error('PREVIEW_NAVIGATION_FAILED');
     }
+    if(expanded){const ready=await page('Runtime.evaluate',{expression:`(async()=>{for(let i=0;i<50;i++){if(document.querySelector('.ia-arrangement'))return true;await new Promise(r=>setTimeout(r,50))}return false})()`,awaitPromise:true,returnByValue:true});if(!ready.result.value)throw new Error('EXPANDED_NOT_READY');}
     const metrics = await page('Runtime.evaluate', { expression: `JSON.stringify({viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight,images:[...document.images].filter(img=>img.naturalWidth>0).length})`, returnByValue: true });
     const data = JSON.parse(metrics.result.value);
     if (data.viewport !== width || data.scrollWidth > width) throw new Error(`HORIZONTAL_OVERFLOW:${mode}:${JSON.stringify(data)}`);
     const capture = await page('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width, height: Math.min(data.height, 16000), scale: 1 } });
-    await writeFile(path.join(output, `${mode}-${width}.png`), Buffer.from(capture.data, 'base64'));
-    evidence.push({ mode, width, ...data });
+    await writeFile(path.join(output, `${mode}${expanded ? '-expanded' : ''}-${width}.png`), Buffer.from(capture.data, 'base64'));
+    if(expanded){
+      const check=await page('Runtime.evaluate',{expression:`JSON.stringify({legacy:!!document.querySelector('.iv-expanded .activity-itinerary'),cards:document.querySelectorAll('.ia-card').length,top:document.querySelector('.ia-arrangement').getBoundingClientRect().top+scrollY,height:document.querySelector('.ia-arrangement').getBoundingClientRect().height})`,returnByValue:true});
+      const expandedData=JSON.parse(check.result.value);if(expandedData.legacy||expandedData.cards===0)throw new Error('LEGACY_ARRANGEMENT_DETECTED');
+      if(mode==='guest'&&width===375){const crop=await page('Page.captureScreenshot',{format:'png',captureBeyondViewport:true,clip:{x:0,y:expandedData.top,width,height:expandedData.height,scale:1}});await writeFile(path.join(output,'expanded-detail-375.png'),Buffer.from(crop.data,'base64'));}
+    }
+    evidence.push({ mode, width, expanded, ...data });
   }
   await writeFile(path.join(output, 'layout-evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
   console.log(JSON.stringify(evidence));

@@ -4,7 +4,7 @@ import type { ActivityDetail } from '@weevibe/contracts';
 import type { InvitationSourceView } from '@weevibe/contracts/src/invitations';
 import { Action, Notice } from '../../components/ui';
 import { formationProgress } from '../formation/progress';
-import { Itinerary } from '../activity-detail/itinerary';
+import { ActivityArrangement } from './ActivityArrangement';
 import { overviewModel, type DetailSection } from './overview-model';
 import './invitation-overview.css';
 
@@ -50,6 +50,6 @@ export function ActivityOverview({ detail, sourceId, source, sourceLoading, sour
     <View className="iv-primary-area"><Button className="iv-primary-button" disabled={busy} onClick={() => open(model.primary.section)}>{model.primary.label}<Text> →</Text></Button><Text className="iv-application-note">{model.open ? '申请获批后才占用名额，费用与完整安排请先核对' : model.status}</Text></View>
     {detail.viewer.is_manager && <Button className="iv-manager-button" disabled={busy} onClick={() => open('approval')}>处理参加申请{model.approvals ? `（${model.approvals}）` : ''} →</Button>}
     <View className="iv-bottom-links"><Button disabled={busy} onClick={() => setExpanded(v => !v)}>{expanded ? '收起完整安排' : '查看完整安排'}{expanded ? ' −' : ' ＋'}</Button><Button disabled={busy} onClick={() => open('invitation')}>分享邀请 ↗</Button><Button disabled={busy} onClick={refresh}>刷新安排</Button></View>
-    {expanded && <View className="iv-expanded"><Itinerary detail={detail}/><View className="iv-people"><Text className="iv-small">活动状态</Text><Text>{progress.label}</Text><Text className="iv-small">{progress.guidance}</Text><Text className="iv-small">原发起人</Text><Text>公开昵称暂未提供</Text><Text className="iv-small">当前管理者</Text><Text>{detail.viewer.is_manager ? '你正在负责此活动' : '由当前管理者处理申请与安排'}</Text><Text className="iv-small">邀请分享者</Text><Text>{shareName || (sourceId ? '未提供公开昵称' : '公开活动入口，未附邀请来源')}</Text><Text className="iv-small">邀请分享者不一定是原发起人；时间均为北京时间。</Text></View></View>}
+    {expanded && <View className="iv-expanded"><ActivityArrangement detail={detail}/><View className="iv-people"><Text className="iv-small">活动状态</Text><Text>{progress.label}</Text><Text className="iv-small">{progress.guidance}</Text><Text className="iv-small">原发起人</Text><Text>公开昵称暂未提供</Text><Text className="iv-small">当前管理者</Text><Text>{detail.viewer.is_manager ? '你正在负责此活动' : '由当前管理者处理申请与安排'}</Text><Text className="iv-small">邀请分享者</Text><Text>{shareName || (sourceId ? '未提供公开昵称' : '公开活动入口，未附邀请来源')}</Text><Text className="iv-small">邀请分享者不一定是原发起人；时间均为北京时间。</Text></View></View>}
   </View>;
 }

@@ -91,3 +91,21 @@ it('keeps original creator and current manager separate in the full arrangement 
  expect(document.querySelector('.iv-people')?.textContent).toContain('原发起人公开昵称暂未提供');
  expect(document.querySelector('.iv-people')?.textContent).toContain('你正在负责此活动');
 });
+
+it('renders the new full-arrangement cards without mounting the original itinerary layout',async()=>{
+ await render(); await act(async()=>button('查看完整安排 ＋').click());
+ const expanded=document.querySelector('.iv-expanded')!;
+ expect(expanded.querySelector('.ia-arrangement')).not.toBeNull();
+ expect(expanded.querySelectorAll('.ia-card')).toHaveLength(h.controller.detail.segments.length);
+ expect(expanded.querySelector('.activity-itinerary')).toBeNull();
+ expect(expanded.querySelector('.activity-facts')).toBeNull();
+ expect(expanded.textContent).toContain('尚未确认费用，不代表免费');
+});
+it('separates the fee amount from notes and preserves zero-cost and cancelled history',async()=>{
+ const d=h.controller.detail;d.segments[0].fee={kind:'per_person',amount_cents:0,currency:'CNY',note:'现场核对'};
+ d.cancelled_at=d.server_time;
+ await render(); await act(async()=>button('查看完整安排 ＋').click());
+ expect(document.querySelector('.ia-cost')?.textContent).toBe('¥0.00 / 人');
+ expect(document.querySelector('.ia-arrangement')?.textContent).toContain('参考费用，非已付款；现场核对');
+ expect(document.querySelector('.ia-arrangement')?.textContent).toContain('原安排记录，未自动退订或退款');
+});

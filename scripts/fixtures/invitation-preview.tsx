@@ -24,6 +24,7 @@ if (mode === 'manager') detail.applications = [{ application_id: applicationId, 
 function Preview() {
   const [section, setSection] = useState('overview');
   const [notice, setNotice] = useState('');
+  useEffect(()=>{if(new URLSearchParams(location.search).get('expanded')==='1'){setTimeout(()=>{Array.from(document.querySelectorAll('button')).find(b=>b.textContent?.startsWith('查看完整安排'))?.click();},100);}},[]);
   const state = useApplications({ id: detail.activity_id, detail, session: getToken(), fresh: true, refresh: async () => {} });
   const login = {busy:false, login:async()=>{setNotice('离线预览不执行微信登录；实际小程序将调用真实微信登录。');}};
   return <div className="screen activity-page activity-invitation-page">
