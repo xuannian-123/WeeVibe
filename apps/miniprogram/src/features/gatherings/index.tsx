@@ -15,7 +15,7 @@ import '../../design-c.css';
 import {GatheringDesignChrome} from './page-chrome';
 
 export default function GatheringPage(){
-  const[designChrome,setDesignChrome]=useState<'nickname'|'plan'|'result'|null>(null);
+  const[designChrome,setDesignChrome]=useState<'nickname'|'plan'|'result'|'interview'|null>(null);
   const params=useRouter().params,parsedId=activityIdSchema.safeParse(params.id),id=parsedId.success?parsedId.data:'',kind=params.new==='friend'||params.new==='team'?params.new:undefined,entry=params.entry==='share'?'share':'manage';
   const[identity,setIdentity]=useState<{actor:string;session:string}>(),[stored,setStored]=useState<{actor:string;session:string;data:GatheringSnapshot}>(),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
   const snapshot=identity&&stored?.actor===identity.actor&&stored.session===identity.session&&stored.data.gathering.id===id?stored.data:undefined;

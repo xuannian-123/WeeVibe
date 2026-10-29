@@ -2,6 +2,7 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {createRequire} from 'node:module';
 import {resolve} from 'node:path';
+import {ApiClientError} from '../packages/api-client/src';
 import type {GatheringSnapshot} from '../packages/contracts/src';
 import {gatheringId,gatheringOwner,gatheringPeer,gatheringPlanFixture,gatheringUiFixture} from './gathering-ui-fixtures';
 const requireMini=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json'));
@@ -12,7 +13,7 @@ const h=vi.hoisted(()=>({token:'session-a',store:new Map<string,unknown>(),trans
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>h.token,transport:h.transport}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:(key:string)=>h.store.get(key),setStorageSync:(key:string,v:unknown)=>h.store.set(key,v),removeStorageSync:(key:string)=>h.store.delete(key),showModal:h.modal,pageScrollTo:h.scrollTo,env:{USER_DATA_PATH:'/tmp'},getFileSystemManager:()=>({writeFileSync:vi.fn()})},useDidShow:(f:()=>void)=>h.show.push(f),useDidHide:(f:()=>void)=>h.hide.push(f),useUnload:()=>{},usePageScroll:(fn:(e:{scrollTop:number})=>void)=>{h.pageScroll=fn;}}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({View:(p:any)=>createElement('div',{className:p.className},p.children),Text:(p:any)=>createElement('span',{},p.children),Button:(p:any)=>createElement('button',{className:p.className,disabled:p.disabled,onClick:p.onClick,'data-open-type':p.openType},p.children),Image:()=>null}));
-vi.mock('../apps/miniprogram/src/features/gatherings/intake-editor',()=>({GatheringIntakeEditor:(p:any)=>{h.saving=!!p.saving;h.intakeReadOnly=!!p.readOnly;return createElement('button',{disabled:p.saving,onClick:()=>p.done(h.intake)},'完成本人整理');}}));
+vi.mock('../apps/miniprogram/src/features/gatherings/intake-editor',()=>({GatheringIntakeEditor:(p:any)=>{h.saving=!!p.saving;h.intakeReadOnly=!!p.readOnly;return createElement('div',{},createElement('button',{disabled:p.saving,onClick:()=>p.done(h.intake)},'完成本人整理'),p.saveFeedback?.message&&createElement('span',{'data-testid':'editor-save-feedback'},p.saveFeedback.message),p.saveFeedback?.pending&&createElement('button',{'data-testid':'editor-save-retry',disabled:p.saveFeedback.busy,onClick:p.saveFeedback.retry},'编辑器内核对保存')); }}));
 vi.mock('../apps/miniprogram/src/features/gatherings/questionnaire',()=>({GatheringQuestionnaire:(p:any)=>{h.readOnly=!!p.readOnly;return createElement('div',{},p.readOnly?'只读本人问卷':createElement('button',{onClick:()=>p.save(h.intake)},'保存本人问卷'));}}));
 vi.mock('../apps/miniprogram/src/features/gatherings/details-editor',()=>({GatheringDetailsEditor:()=>createElement('div',{},'修改基本信息')}));
 vi.mock('../apps/miniprogram/src/features/gatherings/subscription',()=>({useGatheringSubscription:()=>({busy:false,requestFromTap:async()=>undefined,record:async()=>{}}),GatheringSubscription:()=>null}));
@@ -135,3 +136,7 @@ it.each(['missing','different-plan','unlocked'])('does not display a success res
 });
 
 it('shows local animal avatars and activity nicknames with no profile links or private budget/origin in integration',async()=>{await render(gatheringUiFixture('friend',false),gatheringPeer);expect(text()).toContain('朋友乙');expect(host.querySelectorAll('.gg-person button')).toHaveLength(0);expect(host.querySelectorAll('.gg-avatar-link')).toHaveLength(0);expect(text()).not.toContain('PRIVATE_ONLY');expect(h.transport).not.toHaveBeenCalled();});
+
+it('passes pending save state and the exact original retry into the editor while leaving its save action locked',async()=>{
+  h.transport.mockRejectedValueOnce(new ApiClientError('NETWORK_ERROR','未知写入结果',0));await render();await click('内容整合看看每个人已经整理好的想法↗');await click('修改我的想法');await click('完成本人整理');expect(h.transport).toHaveBeenCalledOnce();expect(h.saving).toBe(true);expect(button('完成本人整理').disabled).toBe(true);expect(host.querySelector('[data-testid="editor-save-feedback"]')?.textContent).toContain('原内容已保留');const original=h.transport.mock.calls[0][0];let finish!:(value:unknown)=>void;h.transport.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));const recovery=host.querySelector<HTMLButtonElement>('[data-testid="editor-save-retry"]')!;expect(recovery.disabled).toBe(false);await act(async()=>recovery.click());expect(h.transport).toHaveBeenCalledTimes(2);expect(h.transport.mock.calls[1][0]).toEqual(original);expect(host.querySelector<HTMLButtonElement>('[data-testid="editor-save-retry"]')?.disabled).toBe(true);expect(button('完成本人整理').disabled).toBe(true);await act(async()=>finish({status:200,body:gatheringUiFixture()}));expect(h.updated).toHaveBeenCalledOnce();expect(host.querySelector('[data-testid="editor-save-retry"]')).toBeNull();expect(text()).toContain('服务端已确认保存');
+});
