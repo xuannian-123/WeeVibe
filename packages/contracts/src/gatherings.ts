@@ -47,6 +47,8 @@ export const gatheringKeywordGroups = ['eat','drink','play','pace','atmosphere',
 export const gatheringPublicIntakeSchema = z.object({
   activity_nickname:text(32).default(''),
   date: optionalDate, availability: text(200), note: text(1000),
+  keyword_notes:z.object({eat:text(500).optional(),drink:text(500).optional(),play:text(500).optional()}).strict().optional(),
+  selected_places:z.array(z.object({group:z.enum(['eat','drink','play']),option:text(40).min(1),venue:venueSelectionSchema}).strict()).max(10).optional(),
   keywords: z.record(z.enum(gatheringKeywordGroups), z.array(text(40).min(1)).max(20)),
   confirmed_keys: z.array(key).max(100),
 }).strict();

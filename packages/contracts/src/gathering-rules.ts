@@ -24,8 +24,12 @@ export function gatheringPublicBlocks(raw: unknown): GatheringBlock[] {
   for (const section of gatheringSections) for (const group of section.groups) {
     const chosen=value.keywords[group.id];
     if(chosen.some(option=>!(group.options as readonly string[]).includes(option)) || new Set(chosen).size!==chosen.length) throw Error('关键词选项不正确');
-    group.options.forEach((option,index)=>{if(chosen.includes(option))add(`${group.id}_${index}`,group.title,option);});
+    const notes=value.keyword_notes?.[group.id as 'eat'|'drink'|'play'];
+    if(notes&&privateGatheringInputText.test(notes))throw Error('预算和个人出发地点请填写在仅本人可见的栏位');
+    let used=false;group.options.forEach((option,index)=>{if(chosen.includes(option)){const detail=notes?.startsWith(option+'：')?notes:option;used=used||detail===notes;add(`${group.id}_${index}`,group.title,detail);}});
+    if(notes&&!used)add(`${group.id}_note`,group.title,notes);
   }
+  for(const place of value.selected_places??[]){const group=gatheringSections[0].groups.find(g=>g.id===place.group);if(!group?.options.includes(place.option)||!value.keywords[place.group].includes(place.option))throw Error('地点与所选活动分类不一致');}
   if(privateGatheringInputText.test(value.note) || privateGatheringInputText.test(value.availability)) throw Error('预算和个人出发地点请填写在仅本人可见的栏位');
   add('note','补充想法',value.note);
   if(value.confirmed_keys.some(id=>!blocks.some(b=>b.id===id)) || new Set(value.confirmed_keys).size!==value.confirmed_keys.length)throw Error('确定项与当前填写内容不一致，请重新选择');
