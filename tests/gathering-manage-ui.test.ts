@@ -11,7 +11,7 @@ const{createRoot}=requireMini('react-dom/client') as {createRoot:(host:Element)=
 const h=vi.hoisted(()=>({token:'session-a',store:new Map<string,unknown>(),transport:vi.fn(),modal:vi.fn(),refresh:vi.fn(),updated:vi.fn(),hide:[] as (()=>void)[],show:[] as (()=>void)[],pageScroll:undefined as ((e:{scrollTop:number})=>void)|undefined,scrollTo:vi.fn().mockResolvedValue({}),readOnly:false,intakeReadOnly:false,saving:false,intake:undefined as unknown}));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>h.token,transport:h.transport}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:(key:string)=>h.store.get(key),setStorageSync:(key:string,v:unknown)=>h.store.set(key,v),removeStorageSync:(key:string)=>h.store.delete(key),showModal:h.modal,pageScrollTo:h.scrollTo,env:{USER_DATA_PATH:'/tmp'},getFileSystemManager:()=>({writeFileSync:vi.fn()})},useDidShow:(f:()=>void)=>h.show.push(f),useDidHide:(f:()=>void)=>h.hide.push(f),useUnload:()=>{},usePageScroll:(fn:(e:{scrollTop:number})=>void)=>{h.pageScroll=fn;}}));
-vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({View:(p:any)=>createElement('div',{className:p.className},p.children),Text:(p:any)=>createElement('span',{},p.children),Button:(p:any)=>createElement('button',{className:p.className,disabled:p.disabled,onClick:p.onClick},p.children),Image:()=>null}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({View:(p:any)=>createElement('div',{className:p.className},p.children),Text:(p:any)=>createElement('span',{},p.children),Button:(p:any)=>createElement('button',{className:p.className,disabled:p.disabled,onClick:p.onClick,'data-open-type':p.openType},p.children),Image:()=>null}));
 vi.mock('../apps/miniprogram/src/features/gatherings/intake-editor',()=>({GatheringIntakeEditor:(p:any)=>{h.saving=!!p.saving;h.intakeReadOnly=!!p.readOnly;return createElement('button',{disabled:p.saving,onClick:()=>p.done(h.intake)},'完成本人整理');}}));
 vi.mock('../apps/miniprogram/src/features/gatherings/questionnaire',()=>({GatheringQuestionnaire:(p:any)=>{h.readOnly=!!p.readOnly;return createElement('div',{},p.readOnly?'只读本人问卷':createElement('button',{onClick:()=>p.save(h.intake)},'保存本人问卷'));}}));
 vi.mock('../apps/miniprogram/src/features/gatherings/details-editor',()=>({GatheringDetailsEditor:()=>createElement('div',{},'修改基本信息')}));
@@ -64,7 +64,7 @@ it('requires an explicit final choice and sends only its generation, plan and so
   const value=gatheringUiFixture();value.itinerary=gatheringPlanFixture();const finalized=structuredClone(value);finalized.final_choice={generation_id:gatheringId,plan_id:'plan1',finalized_at:'2030-11-01T00:01:00Z'};finalized.viewer.can_respond=false;finalized.viewer.can_generate=false;h.transport.mockResolvedValue({status:200,body:finalized});await render(value);await click('活动安排2 套方案，点击查看顺序环节↗');await act(async()=>host.querySelector<HTMLButtonElement>('.gg-plan-card')!.click());
   h.modal.mockResolvedValueOnce({confirm:false});await click('确定采用这套方案');expect(h.transport).not.toHaveBeenCalled();await click('确定采用这套方案');
   expect(h.transport).toHaveBeenCalledOnce();expect(h.transport.mock.calls[0][0]).toMatchObject({path:`/api/v1/gatherings/${gatheringId}/finalize`,body:{generation_id:gatheringId,plan_id:'plan1',expected_source:'a'.repeat(64)}});expect(Object.keys(h.transport.mock.calls[0][0].body).sort()).toEqual(['expected_source','generation_id','plan_id']);
-  expect(host.querySelectorAll('.gg-plan-card')).toHaveLength(1);expect(text()).toContain('最终方案');await click('内容整合');await click('查看我的 AI 整理');expect(h.intakeReadOnly).toBe(true);
+  expect(host.querySelectorAll('.gg-final-stop')).toHaveLength(3);expect(text()).toContain('筹备方案已定案');await click('查看完整安排');expect(text()).toContain('安排1 · 吃饭');await click('← 返回全部方案');expect(text()).toContain('筹备方案已定案');await click('查看我的填写');expect(h.intakeReadOnly).toBe(true);
 });
 it('does not offer an adopt action for a stale proposal',async()=>{const value=gatheringUiFixture();value.itinerary={...gatheringPlanFixture(),stale:true};await render(value);await click('活动安排2 套方案，点击查看顺序环节↗');await act(async()=>host.querySelector<HTMLButtonElement>('.gg-plan-card')!.click());expect(button('确定采用这套方案').disabled).toBe(true);expect(h.transport).not.toHaveBeenCalled();});
 
@@ -100,6 +100,38 @@ it('requires a verifiable source before allowing a final choice',async()=>{
   const value=gatheringUiFixture();value.itinerary=gatheringPlanFixture();value.source_fingerprint=null;await render(value);
   await click('活动安排2 套方案，点击查看顺序环节↗');await act(async()=>host.querySelector<HTMLButtonElement>('.gg-plan-card')!.click());
   expect(button('确定采用这套方案').disabled).toBe(true);expect(text()).toContain('方案来源暂时无法核对');expect(h.transport).not.toHaveBeenCalled();
+});
+
+function finalSnapshot(owner=true){const value=gatheringUiFixture('friend',owner);value.itinerary=gatheringPlanFixture();value.final_choice={generation_id:gatheringId,plan_id:'plan2',finalized_at:'2030-11-01T00:01:00Z'};value.viewer.can_respond=false;value.viewer.can_generate=false;return value;}
+
+it('reopens a persisted final choice with only its chosen plan and native share entry',async()=>{
+  await render(finalSnapshot(false),gatheringPeer,'share');expect(text()).toContain('筹备方案已定案');
+  expect(text()).toContain('下午茶');expect(text()).not.toContain('打台球');expect(text()).not.toContain('PRIVATE_ONLY');
+  expect(button('分享给朋友').getAttribute('data-open-type')).toBe('share');expect(text()).not.toContain('确定采用这套方案');
+  await click('查看我的填写');expect(h.intakeReadOnly).toBe(true);expect(h.transport).not.toHaveBeenCalled();
+});
+
+it('keeps a finalized shared visitor read-only without any private response entry',async()=>{
+  const value=finalSnapshot(false);value.viewer.is_member=false;value.own=null;value.members=null;value.gathering.has_responded=false;
+  await render(value,gatheringPeer,'share');expect(text()).toContain('筹备方案已定案');expect(text()).not.toContain('查看我的填写');
+  expect(text()).not.toContain('继续填写');expect(text()).not.toContain('PRIVATE_ONLY');expect(h.transport).not.toHaveBeenCalled();
+});
+
+it('distinguishes a saved final choice from missing arrangement content',async()=>{
+  const value=finalSnapshot();value.itinerary=null;await render(value);
+  expect(text()).toContain('定案记录已保存，暂时无法核对完整安排');expect(button('查看完整安排').disabled).toBe(true);
+  await click('重新读取安排');expect(h.refresh).toHaveBeenCalledOnce();expect(h.transport).not.toHaveBeenCalled();
+});
+
+it.each(['missing','different-plan','unlocked'])('does not display a success result for an unverified %s finalization receipt',async failure=>{
+  const value=gatheringUiFixture();value.itinerary=gatheringPlanFixture();await render(value);
+  await click('活动安排2 套方案，点击查看顺序环节↗');await act(async()=>host.querySelector<HTMLButtonElement>('.gg-plan-card')!.click());
+  const result=finalSnapshot();if(failure==='missing')result.final_choice=null;
+  if(failure==='different-plan')result.final_choice!.plan_id='plan2';
+  if(failure==='unlocked'){result.final_choice!.plan_id='plan1';result.viewer.can_respond=true;}
+  h.transport.mockResolvedValue({status:200,body:result});await click('确定采用这套方案');
+  expect(h.updated).not.toHaveBeenCalled();expect(host.querySelector('.gg-final-result')).toBeNull();
+  expect(text()).toContain('上次操作结果待核对');expect(text()).not.toContain('筹备方案已定案');
 });
 
 it('shows local animal avatars and activity nicknames with no profile links or private budget/origin in integration',async()=>{await render(gatheringUiFixture('friend',false),gatheringPeer);expect(text()).toContain('朋友乙');expect(host.querySelectorAll('.gg-person button')).toHaveLength(0);expect(host.querySelectorAll('.gg-avatar-link')).toHaveLength(0);expect(text()).not.toContain('PRIVATE_ONLY');expect(h.transport).not.toHaveBeenCalled();});
