@@ -11,6 +11,7 @@ vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>h.token,transp
 vi.mock('../apps/miniprogram/src/platform/avatar',()=>({uploadAvatar:vi.fn()}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{},useDidShow:()=>{},useDidHide:()=>{},useUnload:()=>{}}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({
+ ScrollView:(p:any)=>createElement('div',{},p.children),
  Switch:(p:any)=>createElement('input',{type:'checkbox',checked:p.checked,disabled:p.disabled,onChange:(e:any)=>p.onChange?.({detail:{value:e.currentTarget.checked}})}),
  View:(p:any)=>createElement('div',{},p.children),Text:(p:any)=>createElement('span',{},p.children),
  Button:(p:any)=>{if(typeof p.children==='string')h.actions.set(p.children,p.onClick);return createElement('button',{onClick:p.onClick,disabled:p.disabled},p.children);},

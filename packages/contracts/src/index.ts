@@ -85,3 +85,5 @@ export * from './arrangement-edit';
 
 export * from './inspiration';
 export * from './inspiration-seed';
+
+export * from './gathering-workflow';

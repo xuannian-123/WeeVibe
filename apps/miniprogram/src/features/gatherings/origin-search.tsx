@@ -6,9 +6,10 @@ import {needsLocationSettings} from '../../platform/location-permission';
 import {LocationSettings} from '../../components/location-settings';
 import {GatheringField} from './fields';
 import {useGatheringSource} from './use-source';
+import {COriginView} from '../design-c/interview-origin-view';
 import {useMapPicker} from '../../platform/use-map-picker';
 type Origin=GatheringIntake['private']['origin'];
-export function GatheringOrigin({session,value,change,disabled=false}:{session:string;value:Origin;change:(v:Origin)=>void;disabled?:boolean}){
+export function GatheringOrigin({session,value,change,disabled=false,appearance='default'}:{appearance?:'default'|'c';session:string;value:Origin;change:(v:Origin)=>void;disabled?:boolean}){
   const source=useGatheringSource(session),lock=useRef(false),blocked=useRef(disabled);blocked.current=disabled;const[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[denied,setDenied]=useState(false);
   const choose=useMapPicker(disabled,session);
   async function selectMap(){
@@ -25,6 +26,7 @@ export function GatheringOrigin({session,value,change,disabled=false}:{session:s
     finally{lock.current=false;if(source.alive())setBusy(false);}
   }
   if(!source.valid())return <Text className="gg-notice">登录来源已变化，私人出发地点已隐藏。</Text>;
+  if(appearance==='c')return <COriginView value={value} disabled={disabled} busy={busy} notice={notice} denied={denied} current={source.valid} change={label=>{if(!disabled&&!lock.current&&source.valid())change(label.trim()?{label}:null);}} selectMap={()=>void selectMap()} clearCoordinates={()=>{if(!disabled&&!lock.current&&source.valid())change(value?.label?{label:value.label}:null);}} permissionChanged={granted=>{setDenied(!granted);setNotice(granted?'位置权限已开启，请再次点击地图选择出发地。':'可继续手动填写出发地点。');}}/>;
   return <View><GatheringField label="从哪出发" privateField value={value?.label||''} disabled={busy||disabled} placeholder="手动填写出发地址" change={label=>{if(!disabled&&source.valid())change(label.trim()?{label}:null);}}/>
     <View className="gg-inline"><Button className="gg-soft" disabled={busy||disabled} onClick={()=>void selectMap()}>地图选择出发地</Button>{value&&(value.latitude!==undefined||value.longitude!==undefined)&&<Button className="gg-link" disabled={busy||disabled} onClick={()=>{if(!disabled&&source.valid())change(value?.label?{label:value.label}:null);}}>清除定位</Button>}</View>
     {notice&&<Text className="gg-notice">{notice}</Text>}{denied&&<LocationSettings current={source.valid} changed={granted=>{setDenied(!granted);setNotice(granted?'位置权限已开启，请再次点击地图选择出发地。':'可继续手动填写出发地点。');}}/>}

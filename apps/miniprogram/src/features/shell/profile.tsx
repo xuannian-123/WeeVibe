@@ -1,16 +1,15 @@
-import { UiIcon } from '../../components/ui-icon';
+import { CIdentityEditor } from '../design-c/profile-view';
+import { CAction, CNotice, CSheet } from '../design-c/ui';
 import { useEffect, useRef, useState } from 'react';
 import Taro from '@tarojs/taro';
 import { getToken } from '../../platform/api';
 import { uploadAvatar } from '../../platform/avatar';
-import { View, Text, Input, Button, Image } from '@tarojs/components';
 import { requestAccount, type AccountProfile } from '../../platform/account-api';
 import { errorText } from '../../platform/page-state';
-import { Action, Notice } from '../../components/ui';
 import { profilePresentationSchema } from '@weevibe/contracts';
 import { requirePrivacyPermission } from '../../platform/location-permission';
 export type ProfileData = AccountProfile;
-export function ProfileForm({ initial, ownerSession, close, saved, avatarSaved }: { initial: ProfileData; ownerSession: string | undefined; close:()=>void; saved:(p:ProfileData)=>void; avatarSaved?:(path:string)=>void }) {
+export function ProfileForm({ initial, ownerSession, close, saved, avatarSaved, initialNicknameFocus=false }: { initialNicknameFocus?:boolean; initial: ProfileData; ownerSession: string | undefined; close:()=>void; saved:(p:ProfileData)=>void; avatarSaved?:(path:string)=>void }) {
   const [data,setData]=useState<ProfileData>(initial); const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [avatar,setAvatar]=useState('');const [persistedAvatar,setPersistedAvatar]=useState(initial.avatar_url || '');
   const editorToken=useRef(ownerSession);const operationLock=useRef(false);const [avatarBusy,setAvatarBusy]=useState(false);
   async function saveAvatar(){if(!canEdit() || !avatar)return;operationLock.current=true;setAvatarBusy(true);setError('');try{const path=await uploadAvatar(avatar,editorToken.current);if(!sameSource())return;setAvatar('');setPersistedAvatar(path);avatarSaved?.(path);if(sameSource())setError('头像已保存到服务器，下次登录可恢复。');}catch(e){if(sameSource())setError(errorText(e));}finally{operationLock.current=false;if(mounted.current)setAvatarBusy(false);}}
@@ -22,7 +21,7 @@ export function ProfileForm({ initial, ownerSession, close, saved, avatarSaved }
   const sameSource=()=>mounted.current && !!editorToken.current && editorToken.current===getToken() && source.current.owner===editorToken.current && source.current.epoch===renderEpoch;
   const canEdit=()=>sameSource() && !operationLock.current;
   const field=(key:keyof ProfileData,value:string)=>{if(!canEdit()){if(mounted.current)setError('当前操作或账号已变化，请核对资料后重试');return;}const next={...currentData.current,[key]:value};currentData.current=next;setData(next);};
-  const [nicknameFocus,setNicknameFocus]=useState(false);
+  const [nicknameFocus,setNicknameFocus]=useState(initialNicknameFocus);
   const extra=profilePresentationSchema.parse(data);
   function previewAvatar(path:string){if(!canEdit()||!path)return;setAvatar(path);setError('已选择新头像，点击“保存头像”后生效。');}
   async function chooseCustomAvatar(){
@@ -45,10 +44,6 @@ export function ProfileForm({ initial, ownerSession, close, saved, avatarSaved }
     }catch(e){if(sameSource() && operationTicket.current===ticket)setError(errorText(e));}
     finally{if(operationTicket.current===ticket){operationLock.current=false;if(mounted.current)setBusy(false);}}
   }
-  if(!editorToken.current || editorToken.current!==getToken() || ownerSession!==editorToken.current)return <Notice>登录账号已变化，原账号的私人资料已隐藏；请返回后重新打开。<Action onClick={close}>返回</Action></Notice>;
-  return <View className="wv-profile-editor"><View className="wv-section"><Text className="wv-muted">头像昵称仅用于本人账户；活动中使用本次活动昵称和动物头像，均无需预先完善账号资料。</Text></View>
-  <View className="wv-identity-editor"><Text className="wv-section-title">头像</Text><View className="wv-identity-row"><View className="wv-avatar-button">{avatar || persistedAvatar ? <Image className="wv-avatar" src={avatar || persistedAvatar}/> : <UiIcon name="user"/>}</View><View className="wv-identity-actions"><Button className="action action-secondary" disabled={avatarBusy||busy} openType="chooseAvatar" onChooseAvatar={e=>previewAvatar(e.detail.avatarUrl)}>使用微信头像</Button><Button className="wv-link" disabled={avatarBusy||busy} onClick={()=>void chooseCustomAvatar()}>从相册自定义</Button></View></View><Text className="wv-muted">在微信选择面板中确认头像，也可以上传自己的图片。</Text></View>
-  {avatar && <Action disabled={avatarBusy || busy} onClick={()=>void saveAvatar()}>{avatarBusy?'上传头像中…':'保存头像'}</Action>}
-  <View className="field"><View className="wv-nickname-heading"><Text className="field-label">昵称</Text><Button className="wv-link" disabled={busy||avatarBusy} onClick={()=>{if(canEdit())setNicknameFocus(true);}}>使用微信昵称</Button></View><Input type="nickname" adjustPosition cursorSpacing={24} confirmType="done" value={data.nickname || ''} focus={nicknameFocus} disabled={busy||avatarBusy} maxlength={32} placeholder="填写昵称，或选择键盘上的微信昵称" onInput={e=>field('nickname',e.detail.value)} onConfirm={e=>field('nickname',e.detail.value)} onBlur={e=>{setNicknameFocus(false);field('nickname',e.detail.value);}}/><Text className="wv-muted">点击“使用微信昵称”，在键盘上方选择微信提供的昵称；也可以直接输入。</Text></View>
-  {error && <Notice>{error}</Notice>}<Action variant="primary" disabled={busy || avatarBusy} onClick={()=>void submit()}>{busy?'保存中…':'保存资料'}</Action><Action disabled={busy || avatarBusy} onClick={close}>返回</Action></View>;
+  if(!editorToken.current || editorToken.current!==getToken() || ownerSession!==editorToken.current)return <CNotice>登录账号已变化，原账号的私人资料已隐藏；请返回后重新打开。<CAction onClick={close}>返回</CAction></CNotice>;
+  return <CSheet title="头像与昵称" close={close} footer={<CAction variant="primary" disabled={busy||avatarBusy} onClick={()=>void submit()}>{busy?'保存中…':'保存资料'}</CAction>}><CIdentityEditor hideActions nickname={data.nickname||''} avatar={avatar||persistedAvatar} selectedAvatar={!!avatar} busy={busy} avatarBusy={avatarBusy} focus={nicknameFocus} notice={error} choose={previewAvatar} custom={()=>void chooseCustomAvatar()} saveAvatar={()=>void saveAvatar()} setNickname={value=>field('nickname',value)} focusNickname={value=>{if(!value||canEdit())setNicknameFocus(value);}} save={()=>void submit()} close={close}/></CSheet>;
 }

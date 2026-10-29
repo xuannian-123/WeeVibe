@@ -33,12 +33,16 @@ function record(num: number, extra: Partial<AccountActivityRecord> = {}): Accoun
   return { activity_id: `${String(num).padStart(8, '0')}-3333-4333-8333-333333333333`, title: `活动-${num}`, timezone: 'Asia/Shanghai', starts_at: '2030-01-02T00:00:00.000Z', ends_at: '2030-01-02T02:00:00.000Z', phase: 'upcoming', time_scope: 'activity', location: '公开场地', cancelled: false, participation_cancelled: false, is_manager: false, joined_segment_count: 0, exited_segment_count: 0, pending_application_count: 0, awaiting_acceptance: false, ...extra };
 }
 let host: HTMLDivElement, root: ReturnType<typeof createRoot>;
-beforeEach(() => { host = document.createElement('div'); document.body.append(host); root = createRoot(host); mocks.token = 'session-a'; mocks.onShow.clear(); mocks.request.mockReset(); mocks.me.mockReset().mockResolvedValue({ user_id: '11111111-1111-4111-8111-111111111111' }); mocks.open.mockReset(); mocks.relaunch.mockReset(); });
+beforeEach(() => { host = document.createElement('div'); document.body.append(host); root = createRoot(host); mocks.token = 'session-a'; mocks.onShow.clear(); mocks.request.mockReset(); mocks.me.mockReset().mockResolvedValue({ user_id: '11111111-1111-4111-8111-111111111111' }); mocks.open.mockReset().mockResolvedValue({}); mocks.relaunch.mockReset().mockResolvedValue({}); });
 afterEach(async () => { await act(async () => root.unmount()); document.body.innerHTML = ''; });
 const render = (records: AccountActivityRecord[], initialFilter?: 'joined') => act(async () => root.render(createElement(AccountActivityList, { records, initialFilter, onOpen: mocks.open })));
 async function click(text: string) { const button = Array.from(host.querySelectorAll('button')).find(b => b.textContent === text); expect(button).toBeTruthy(); await act(async () => button!.click()); }
 const cards = () => Array.from(host.querySelectorAll('.activity-card'));
 const home = async (data: unknown) => { mocks.request.mockResolvedValue(data); await act(async () => root.render(createElement(Home))); await act(async () => { mocks.onShow.forEach(fn=>fn()); await Promise.resolve(); }); };
+async function enterAccountPage(routePage: 'activities' | 'settings') {
+  await act(async () => root.render(createElement<NonNullable<Parameters<typeof Home>[0]>>(Home, { key: routePage, routePage })));
+  await act(async () => { mocks.onShow.forEach(fn=>fn()); await Promise.resolve(); });
+}
 describe('account activity role/status UI (React + Taro mocks, not native WeChat)', () => {
   it('finds all four relationships with filters while manager/participant overlap stays one card', async () => {
     const joined = record(1, { is_manager: true, joined_segment_count: 1, time_scope: 'participation' }), pending = record(2, { pending_application_count: 1 }), exited = record(3, { exited_segment_count: 1 });
@@ -65,15 +69,20 @@ describe('account activity role/status UI (React + Taro mocks, not native WeChat
   it('integrates the new account field on GO without promoting pending to legacy participation', async () => {
     await home({ favorites: [], profile: {}, activities: [], activity_records: [record(1, { is_manager: true }), record(2, { pending_application_count: 1 })], invitations: [], messages: [] });
     expect(cards()).toHaveLength(2); expect(host.textContent).toContain('我在管理'); expect(host.textContent).not.toContain('当前后端仅提供');
-    await click('查看全部　›'); await click('待审批'); await act(async () => (cards()[0] as HTMLElement).click()); expect(mocks.open).toHaveBeenCalledWith({ url: '/pages/activity/index?id=00000002-3333-4333-8333-333333333333' });
+    await click('全部 →'); expect(mocks.open).toHaveBeenLastCalledWith({ url: '/pages/account/index?page=activities&group=all' }); await enterAccountPage('activities'); await click('我参与的'); await click('待审批'); await act(async () => (cards()[0] as HTMLElement).click()); expect(mocks.open).toHaveBeenCalledWith({ url: '/pages/activity/index?id=00000002-3333-4333-8333-333333333333' });
   });
   it('does not fill GO recent activity slots with history from an older backend', async () => {
     await home({ favorites: [], profile: {}, activities: [{ activity_id: record(1).activity_id, title: '旧后端已参加', starts_at: record(1).starts_at, ends_at: record(1).ends_at, timezone: 'Asia/Shanghai', status: '待参加', location: '场地' }], invitations: [], messages: [] });
-    expect(host.textContent).not.toContain('旧后端已参加');expect(host.textContent).toContain('未提供近期活动状态');await click('查看全部　›');expect(host.textContent).toContain('旧后端已参加'); expect(host.textContent).not.toContain('申请待审批 · 不占席位');
+    expect(host.textContent).not.toContain('旧后端已参加');expect(host.textContent).toContain('未提供近期活动状态');await click('全部 →'); expect(mocks.open).toHaveBeenLastCalledWith({ url: '/pages/account/index?page=activities&group=all' }); await enterAccountPage('activities');expect(host.textContent).toContain('旧后端已参加'); expect(host.textContent).not.toContain('申请待审批 · 不占席位');
   });
   it('logout clears previous account lists rather than exposing them to the next session', async () => {
     await home({ favorites: [], profile: { nickname: '前账号' }, activities: [], activity_records: [record(1, { is_manager: true })], invitations: [], messages: [] });
-    await click('我的'); await click('设置'); await click('退出登录'); await click('GO');
-    expect(host.textContent).not.toContain('活动-1'); expect(host.textContent).toContain('微信登录'); expect(mocks.relaunch).toHaveBeenCalledWith({ url: '/pages/index/index' });
+    await click('我的'); await click('设置'); expect(mocks.open).toHaveBeenLastCalledWith({ url: '/pages/account/index?page=settings' }); await enterAccountPage('settings');
+    await click('退出登录'); expect(mocks.token).toBe('session-a'); expect(mocks.relaunch).not.toHaveBeenCalled();
+    await click('取消'); expect(mocks.token).toBe('session-a'); expect(mocks.relaunch).not.toHaveBeenCalled();
+    await click('退出登录'); await click('退出');
+    expect(mocks.token).toBeUndefined(); expect(mocks.relaunch).toHaveBeenCalledWith({ url: '/pages/index/index?tab=me' });
+    await act(async () => root.render(createElement(Home, { key: 'after-logout' }))); await act(async () => { mocks.onShow.forEach(fn=>fn()); await Promise.resolve(); });
+    expect(host.textContent).not.toContain('活动-1'); expect(host.textContent).toContain('微信登录');
   });
 });

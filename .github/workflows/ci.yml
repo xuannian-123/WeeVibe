@@ -73,6 +73,7 @@ jobs:
           pnpm exec tsx scripts/check-gathering-notifications.ts --fixture-only
           pnpm exec tsx scripts/check-gathering-presentation.ts --fixture-only
           pnpm exec tsx scripts/check-inspiration-intake.ts --fixture-only
+          pnpm exec tsx scripts/check-gathering-workflow.ts --fixture-only
       - run: node scripts/prepare-cloud-identity-fixture.mjs --fixture-only
       - name: Start standalone and test real PG transactions
         shell: bash

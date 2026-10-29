@@ -1,0 +1,43 @@
+.c-account-tools{padding-bottom:calc(40px + env(safe-area-inset-bottom))}
+.c-account-tools .c-account-tools-heading{position:sticky;top:0;z-index:12;min-height:124px;padding:28px 0;background:#f8f6f0}
+.c-account-tools-heading>text{font-size:40px;line-height:1.35;word-break:break-all}
+.c-account-tools-heading>button{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:44px;height:62px}
+.c-account-tools-heading .c-icon{width:42px;height:42px}
+.c-account-tools-hint{display:block;font-size:22px;line-height:1.8;color:#79776f;margin:24px 0}
+.c-account-tools-centered{text-align:center}
+.c-account-tools-empty{padding:80px 0;text-align:center;font-size:30px;font-weight:800}
+.c-account-tools-empty .c-account-tools-hint{font-weight:400;margin:20px 0 46px}
+.c-account-tools .c-saved-invitation{display:block;box-sizing:border-box;width:100%;border:2px solid #e2ded3;border-radius:26px;background:#ffffff55;padding:30px 28px;margin:20px 0;text-align:left}
+.c-saved-invitation-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.c-saved-invitation-heading>text:first-child{min-width:0;flex:1;font-size:32px;font-weight:800;line-height:1.5;word-break:break-all}
+.c-saved-invitation-heading .c-pill{font-size:20px;line-height:1.5;max-width:180px;white-space:normal;word-break:break-all}
+.c-saved-invitation-meta{display:flex;align-items:flex-start;gap:10px;margin:26px 0;font-size:22px;line-height:1.65;color:#79776f}
+.c-saved-invitation-meta .c-icon{width:28px;height:28px;margin-top:4px}
+.c-saved-invitation-meta>text{min-width:0;word-break:break-all}
+.c-saved-invitation-bottom{display:flex;justify-content:flex-end;align-items:center;border-top:2px solid #e5e2d9;padding-top:20px;font-size:22px;line-height:1.65}
+.c-manual-intro{display:block;font-size:26px;line-height:1.9;white-space:pre-line;margin:40px 0 70px}
+.c-manual-label{display:block;font-size:26px;font-weight:700;margin:28px 0 16px}
+.c-manual-input{box-sizing:border-box;display:block;width:100%;height:102px;border:2px solid #cbc6b9;border-radius:20px;background:#ffffff88;padding:24px;font-size:28px;line-height:1.5;color:#222}
+.c-manual-error{display:block;min-height:4px;font-size:22px;line-height:1.8;color:#bd4c65;margin:16px 0}
+.c-ui .c-account-tools-full{display:flex;width:100%}
+.c-ui .c-account-tools-full[disabled]{background:#d2d2c9;border-color:transparent;color:#88877d;opacity:1}
+.c-account-tools-error{display:flex;flex-direction:column;gap:12px;border:2px solid #e3c4c7;border-radius:24px;background:#fff2ed;padding:30px 28px;margin:26px 0 36px;color:#7b615e;font-size:22px;line-height:1.8;word-break:break-all}
+.c-account-tools-error-title{display:block;font-size:26px;color:#222;font-weight:800}
+.c-account-tools-error .c-action{align-self:flex-start;min-height:68px;padding:14px 28px;margin-top:14px;font-size:24px}
+.c-more-menu-overlay{position:fixed;inset:0;z-index:80;background:#18181520}
+.c-more-menu{position:absolute;top:122px;right:40px;box-sizing:border-box;width:372px;max-width:calc(100% - 64px);border:2px solid #e6e1d6;border-radius:24px;background:#fffdf7;box-shadow:0 14px 50px #2222;overflow:hidden}
+.c-ui .c-more-menu button{display:flex;align-items:center;gap:18px;width:100%;padding:28px 26px;text-align:left;font-size:24px;line-height:1.65}
+.c-more-menu button+button{border-top:2px solid #e5e2d9}
+.c-more-menu button>.c-icon:first-child{width:40px;height:40px}
+.c-more-menu button>text{flex:1;min-width:0;word-break:break-all}
+.c-more-menu button>.c-icon:last-child{width:30px;height:30px}
+.c-logout-overlay{position:fixed;inset:0;z-index:95;display:flex;align-items:center;justify-content:center;padding:40px;background:#18181579}
+.c-logout-dialog{box-sizing:border-box;width:100%;max-height:90vh;overflow:auto;border-radius:36px;background:#f8f6f0;padding:42px 38px 40px;text-align:center}
+.c-logout-title{display:block;font-size:38px;font-weight:800;line-height:1.5}
+.c-logout-copy{display:block;font-size:24px;line-height:1.9;margin:34px 0 56px}
+.c-logout-actions{display:flex;gap:20px}
+.c-logout-actions>.c-action{flex:1;min-width:0;min-height:90px;padding:20px 16px;font-size:24px}
+.c-login-copy{display:block;font-size:24px;line-height:1.9;margin:20px 0}
+.c-account-login-sheet .c-account-tools-hint{font-size:22px;margin-bottom:12px}
+.c-account-login-sheet .c-account-tools-error{margin-bottom:0}
+@media(max-width:350px){.c-account-tools-heading>text{font-size:37px}.c-more-menu{right:32px}.c-logout-overlay{padding:32px}.c-logout-dialog{padding:36px 32px}.c-logout-copy{font-size:24px;margin-bottom:42px}}
