@@ -1,0 +1,24 @@
+/* Approved C nickname screen. Scoped to this step; no global controls or later steps change. */
+.gg-nickname{background:#f8f6f0;color:#222;min-width:0;padding:22px 0 calc(220px + env(safe-area-inset-bottom));font-size:28px}
+.gg-nickname button{box-sizing:border-box;white-space:normal;line-height:1.5;color:#222;font-size:28px;font-weight:700;margin:0}
+.gg-nickname button::after{border:0}.gg-nickname button[disabled]{opacity:.45}
+.gg-nickname-intro{margin-bottom:38px}.gg-nickname-eyebrow{display:block;font-weight:700;font-size:26px;margin-bottom:22px}
+.gg-nickname-title{display:block;font-size:clamp(48px,8.6vw,68px);font-weight:900;line-height:1.25;letter-spacing:-2px}
+.gg-nickname-title>text{display:block;position:relative;width:fit-content;padding-bottom:15px}
+.gg-nickname-title>text::after{content:'';position:absolute;bottom:0;left:0;width:84%;height:8px;border-radius:10px;background:#a7f05a;transform:rotate(-2deg)}
+.gg-nickname-subtitle{display:block;font-size:28px;color:#706f70;line-height:1.7;margin-top:26px}
+.gg-nickname-mode{display:flex;border:1px solid #dcd9d2;border-radius:60px;padding:5px;gap:5px;margin-bottom:38px}
+.gg-nickname-mode>button{flex:1;background:transparent;border-radius:50px;padding:13px 18px;min-height:76px;display:flex;align-items:center;justify-content:center}
+.gg-nickname-mode>button.selected{background:#a7f05a}
+.gg-nickname-progress{margin-bottom:32px;font-size:26px;font-weight:600}.gg-nickname-progress>view{display:flex;gap:14px;margin-top:20px}
+.gg-nickname-progress>view>view{flex:1;height:9px;border-radius:9px;background:#dedddc}.gg-nickname-progress>view>view.current{background:#a7f05a}
+.gg-nickname-card{background:#fff9;border:1px solid #dfdcd5;border-radius:30px;padding:30px;position:relative}
+.gg-nickname-card::before{content:'';position:absolute;width:48px;height:18px;background:#b7a4f8;right:25px;top:-8px;transform:rotate(14deg)}
+.gg-nickname-card .gg-field{margin:0 0 24px}.gg-nickname-card .gg-label{font-size:28px;color:#222;font-weight:700;display:block;margin:0 0 20px}
+.gg-nickname-input{box-sizing:border-box;width:100%;border:1px solid #cfcdce;border-radius:22px;height:96px;padding:0 22px;font-size:30px;background:#fff}
+.gg-nickname .gg-nickname-adopt{background:transparent;border:1px solid #a9a7a7;border-radius:60px;min-height:80px;padding:16px;width:100%}
+.gg-nickname-hint{display:block;font-size:26px;line-height:1.7;color:#706f70;margin-top:18px}
+.gg-nickname-footer{position:fixed;left:0;right:0;z-index:8;background:#f8f6f0;padding:18px 36px calc(12px + env(safe-area-inset-bottom));border-top:1px solid #eeeae1}
+.gg-nickname .gg-nickname-next{background:#a7f05a;border-radius:60px;min-height:96px;padding:22px;width:100%;font-size:32px}
+.gg-nickname .gg-nickname-cancel{background:transparent;color:#706f70;font-size:26px;font-weight:400;width:100%;padding:18px 10px 6px;min-height:70px}
+.gg-nickname-keyboard .gg-nickname-intro{display:none}.gg-nickname-keyboard .gg-nickname-mode{margin-bottom:22px}
