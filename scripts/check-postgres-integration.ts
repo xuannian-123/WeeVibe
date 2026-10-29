@@ -88,11 +88,11 @@ async function prepare(database: string, api: URL) {
     assert.equal((await one('/api/v1/me')).body.user_id, alice.id);
     assert.equal((await two('/api/v1/me')).body.user_id, bob.id);
   });
-  await check('public_writes_require_real_saved_nickname_and_uploaded_jpeg',async()=>{
-    // These are intentionally fresh actors. Exercise the actual HTTP gate before
-    // preparing profiles; neither a display_name nor a fixture session qualifies.
-    error(await manage('/api/v1/activities',input),400,'INVALID_INPUT');
-    assert.equal(await db!.activityMutationKey.count({where:{actorUserId:manager.id,key:input.idempotency_key}}),0);
+  await check('public_writes_allow_trusted_identity_before_optional_account_presentation',async()=>{
+    // Fresh trusted identities may organize before setting account presentation.
+    // Keep optional image upload validation and receipt checks independently.
+    const early=detail(await manage('/api/v1/activities',input));assert.equal(early.viewer.is_manager,true);assert.equal(early.viewer.participations.length,0);
+    assert.equal(await db!.activityMutationKey.count({where:{actorUserId:manager.id,key:input.idempotency_key}}),1);
     const sharp=createRequire(import.meta.url)('../apps/web/node_modules/sharp') as (options:unknown)=>{jpeg:()=>{toBuffer:()=>Promise<Buffer>}};
     const jpeg=await sharp({create:{width:16,height:16,channels:3,background:'#dce9df'}}).jpeg().toBuffer();
     for(const [actor,nickname]of [[manager,'PG fixture organizer'],[alice,'PG fixture Alice'],[bob,'PG fixture Bob']] as const){
@@ -100,7 +100,7 @@ async function prepare(database: string, api: URL) {
       const saved=await call('/api/v1/account',{action:'profile',profile:{nickname}},'PATCH');
       assert.equal(saved.status,200,'Fixture nickname must be saved through the real account route');
       assert.equal((saved.body.profile as {nickname?:string}).nickname,nickname);
-      if(actor.id===manager.id)error(await manage('/api/v1/activities',input),400,'INVALID_INPUT');
+      if(actor.id===manager.id)assert.equal(detail(await manage('/api/v1/activities',input)).activity_id,early.activity_id);
       const uploaded=await call('/api/v1/account/avatar',{base64:jpeg.toString('base64')});
       assert.equal(uploaded.status,200,'Fixture avatar must pass actual image validation and storage');
       const image=avatarResultSchema.parse(uploaded.body).avatar;assert.ok(image);
@@ -110,7 +110,7 @@ async function prepare(database: string, api: URL) {
       assert.equal(stored.digest,createHash('sha256').update(bytes).digest('hex'));assert.equal(image.digest,stored.digest);
       assert.equal(((await db!.privateProfile.findUniqueOrThrow({where:{userId:actor.id}})).data as {nickname?:string}).nickname,nickname);
     }
-    assert.equal(await db!.activity.count({where:{currentManagerId:manager.id}}),0,'Profile preparation must not create an activity');
+    assert.equal(await db!.activity.count({where:{currentManagerId:manager.id}}),1,'Optional profile updates must not create another activity');
   });
   await check('create_multi_segment_manager_does_not_auto_join_or_form', async () => {
     activity = detail(await manage('/api/v1/activities', input));

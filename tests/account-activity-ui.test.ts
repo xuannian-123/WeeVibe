@@ -67,9 +67,9 @@ describe('account activity role/status UI (React + Taro mocks, not native WeChat
     expect(cards()).toHaveLength(2); expect(host.textContent).toContain('我在管理'); expect(host.textContent).not.toContain('当前后端仅提供');
     await click('查看全部　›'); await click('待审批'); await act(async () => (cards()[0] as HTMLElement).click()); expect(mocks.open).toHaveBeenCalledWith({ url: '/pages/activity/index?id=00000002-3333-4333-8333-333333333333' });
   });
-  it('older backend falls back only to real joined activities with an explicit incomplete-list warning', async () => {
+  it('does not fill GO recent activity slots with history from an older backend', async () => {
     await home({ favorites: [], profile: {}, activities: [{ activity_id: record(1).activity_id, title: '旧后端已参加', starts_at: record(1).starts_at, ends_at: record(1).ends_at, timezone: 'Asia/Shanghai', status: '待参加', location: '场地' }], invitations: [], messages: [] });
-    expect(host.textContent).toContain('旧后端已参加'); expect(host.textContent).toContain('不能视为完整列表'); expect(host.textContent).not.toContain('申请待审批 · 不占席位');
+    expect(host.textContent).not.toContain('旧后端已参加');expect(host.textContent).toContain('未提供近期活动状态');await click('查看全部　›');expect(host.textContent).toContain('旧后端已参加'); expect(host.textContent).not.toContain('申请待审批 · 不占席位');
   });
   it('logout clears previous account lists rather than exposing them to the next session', async () => {
     await home({ favorites: [], profile: { nickname: '前账号' }, activities: [], activity_records: [record(1, { is_manager: true })], invitations: [], messages: [] });

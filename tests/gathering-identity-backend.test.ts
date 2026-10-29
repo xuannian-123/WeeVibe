@@ -61,12 +61,12 @@ describe('activity identity stays separate from personal profile and AI preferen
     const source=JSON.stringify(gatheringModelSource(f.details(),await readGatheringRows(f.tx,id)));
     expect(source).not.toMatch(/ACTIVITY_ALIAS_DO_NOT_SEND|activity_nickname|animalId|animal_id|capybara/);expect(source).toContain('一起吃饭');
   });
-  it('keeps team organizer identity based on their real saved profile rather than the unused activity alias',async()=>{
+  it('uses the team organizer activity alias and never reads the global profile',async()=>{
     f=gatheringBackendFixture('team');h.tx=f.tx;
     const input=emptyGatheringIntake();input.public.activity_nickname='不能代替真实团建资料';f.seed(owner,input,0);
     const bytes=Buffer.from([0xff,0xd8,0xff,0xd9]);
     f.raw.userAvatar.findMany.mockResolvedValue([{userId:owner,bytes,contentType:'image/jpeg',digest:createHash('sha256').update(bytes).digest('hex'),updatedAt:new Date()}] as never);
-    const view=await gatheringSnapshotTx(f.tx,id,bob);expect(view.gathering.owner.nickname).toBe('局头');expect(view.gathering.owner.animal_id).toBeUndefined();expect(view.gathering.owner.avatar?.content_type).toBe('image/jpeg');
+    const view=await gatheringSnapshotTx(f.tx,id,bob);expect(view.gathering.owner.nickname).toBe('不能代替真实团建资料');expect(view.gathering.owner.animal_id).toBe('cat');expect(view.gathering.owner.avatar).toBeNull();expect(f.raw.privateProfile.findMany).not.toHaveBeenCalled();expect(f.raw.userAvatar.findMany).not.toHaveBeenCalled();
   });
   it('acknowledges legacy successful requests with missing alias using the original hash without new writes',async()=>{
     const old=saveInput();delete (old.intake.public as unknown as Record<string,unknown>).activity_nickname;

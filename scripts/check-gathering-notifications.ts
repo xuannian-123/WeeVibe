@@ -51,11 +51,11 @@ try{
   const owner=await actor(),a=await actor(),b=await actor(),idle=await actor(),incomplete=await actor(false);
   const details={...emptyGatheringDetails(),date:new Date(Date.now()+86400000*7).toISOString().slice(0,10),title:'合成通知验收',confirmed_details:['date','title'] as ('date'|'title')[]};
   const created=await service.createGathering(owner.id,{kind:'friend',idempotency_key:randomUUID(),details,intake:intake('Owner public')}),id=created.gathering.id;
-  await check('migration fifteen installs notification constraints and incomplete profile cannot create an event',async()=>{
+  await check('notification constraints remain while account presentation is optional',async()=>{
     const migrations=await db.$queryRaw<{migration_name:string}[]>`SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL`;
     assert.ok(migrations.length>=15);assert.ok(migrations.some(row=>row.migration_name==='20261028190000_gathering_notifications'));
-    await assert.rejects(()=>service.createGathering(incomplete.id,{kind:'friend',idempotency_key:randomUUID(),details,intake:intake('blocked')}),{code:'INVALID_INPUT'});
-    assert.equal(await db.gatheringSubmissionEvent.count({where:{actorUserId:incomplete.id}}),0);
+    await service.createGathering(incomplete.id,{kind:'friend',idempotency_key:randomUUID(),details,intake:intake('allowed without profile')});
+    assert.equal(await db.gatheringSubmissionEvent.count({where:{actorUserId:incomplete.id}}),1);
     const status=await json(await subscription.GET(new Request('http://localhost/api/v1/gatherings/notifications/subscription',{headers:{Authorization:`Bearer ${incomplete.token}`}})));assert.equal(status.enabled,false);
   });
   let savedA:Awaited<ReturnType<typeof save>>;
@@ -121,7 +121,7 @@ try{
   });
   await check('team notifications and inbox are organizer-only while friend inbox keeps immutable per-version messages without original answers',async()=>{
     const teamDetails={...details,deadline_at:new Date(Date.now()+86400000).toISOString(),questions:[{id:'q1',title:'需要什么',type:'text' as const,required:true,options:[]}]};
-    const team=await service.createGathering(owner.id,{kind:'team',idempotency_key:randomUUID(),details:teamDetails,intake:emptyGatheringIntake()});
+    const team=await service.createGathering(owner.id,{kind:'team',idempotency_key:randomUUID(),details:teamDetails,intake:intake('团建局头')});
     for(const member of [a,b]){const value=intake('PRIVATE_SENTINEL');value.answers=[{question_id:'q1',option_ids:[],other:'',text:'RAW_ANSWER'}];await service.saveGatheringIntake(team.gathering.id,member.id,{expected_revision:team.gathering.revision,expected_version:0,join_if_needed:true,idempotency_key:randomUUID(),intake:value});}
     const recipients=await db.gatheringNotificationRecipient.findMany({where:{event:{gatheringId:team.gathering.id}}});assert.equal(recipients.length,2);assert.ok(recipients.every(row=>row.userId===owner.id));
     for(const member of [owner,a,b,idle]){

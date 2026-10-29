@@ -1,11 +1,8 @@
-import { Prisma } from '@prisma/client';
 import sharp from 'sharp';
 import { createHash } from 'node:crypto';
-import { memberDirectorySchema, memberProfileSchema, type MemberProfile } from '@weevibe/contracts';
-import { withDb } from './db';
+import { memberProfileSchema, type MemberProfile } from '@weevibe/contracts';
 import { ServiceError } from './http';
-import { emptyProfile, parsePrivateProfile, type PrivateProfileInput } from './account-rules';
-import type { Tx } from './activities/state';
+import { type PrivateProfileInput } from './account-rules';
 const coverBuckets = new Map<string, { count: number; expires: number }>();
 
 export function publicProfile(profile: PrivateProfileInput, userId: string, avatar: MemberProfile['avatar'] = null): MemberProfile {
@@ -17,33 +14,10 @@ export function publicProfile(profile: PrivateProfileInput, userId: string, avat
     ...(profile.visibility.zodiac && profile.zodiac ? { zodiac: profile.zodiac } : {}),
   });
 }
-async function authorize(tx: Tx, activityId: string, actor: string) {
-  const activity = await tx.activity.findUnique({ where: { id: activityId }, select: { currentManagerId: true, cancelledAt: true } });
-  if (!activity || activity.cancelledAt) throw new ServiceError('NOT_FOUND', 404, '此活动的成员主页暂不可查看');
-  const participates = (userId: string) => tx.participation.findFirst({ where: { activityId, userId, status: 'joined', segment: { cancelledAt: null } }, select: { id: true } });
-  if (activity.currentManagerId !== actor && !await participates(actor)) throw new ServiceError('FORBIDDEN', 403, '仅本活动组织者和已加入成员可查看成员主页');
-  return { activity, participates };
-}
-export function memberDirectory(activityId: string, actor: string) {
-  return withDb(db => db.$transaction(async tx => {
-    const { activity } = await authorize(tx, activityId, actor);
-    const rows = await tx.participation.findMany({ where: { activityId, status: 'joined', segment: { cancelledAt: null } }, select: { userId: true, displayName: true }, orderBy: { joinedAt: 'asc' }, take: 2001 });
-    if (rows.length > 2000) throw new ServiceError('ROSTER_LIMIT_EXCEEDED', 503, '成员列表超出完整读取上限，请联系组织者');
-    const members = new Map(rows.map(p => [p.userId, { user_id: p.userId, display_name: p.displayName }]));
-    if (!members.has(activity.currentManagerId)) members.set(activity.currentManagerId, { user_id: activity.currentManagerId, display_name: '活动组织者' });
-    if (members.size > 2000) throw new ServiceError('ROSTER_LIMIT_EXCEEDED', 503, '成员列表超出完整读取上限，请联系组织者');
-    return memberDirectorySchema.parse({ members: [...members.values()] });
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }));
-}
-export function memberProfile(activityId: string, userId: string, actor: string) {
-  return withDb(db => db.$transaction(async tx => {
-    const { activity, participates } = await authorize(tx, activityId, actor);
-    if (activity.currentManagerId !== userId && !await participates(userId)) throw new ServiceError('NOT_FOUND', 404, '此用户当前不是本活动已加入成员');
-    const [saved, image] = await Promise.all([tx.privateProfile.findUnique({ where: { userId }, select: { data: true } }), tx.userAvatar.findUnique({ where: { userId }, select: { bytes: true, digest: true } })]);
-    const profile = saved ? parsePrivateProfile(saved.data) : emptyProfile;
-    return publicProfile(profile, userId, image ? { base64: Buffer.from(image.bytes).toString('base64'), content_type: 'image/jpeg', digest: image.digest } : null);
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }));
-}
+/** Kept as explicit retired endpoints for older clients. Never query or project
+ * account photos, nicknames or past public-profile fields to another member. */
+export async function memberDirectory(_activityId:string,_actor:string):Promise<never>{throw new ServiceError('FORBIDDEN',403,'成员主页已取消，请在活动中查看报名昵称');}
+export async function memberProfile(_activityId:string,_userId:string,_actor:string):Promise<never>{throw new ServiceError('FORBIDDEN',403,'成员主页已取消，请在活动中查看报名昵称');}
 export async function normalizeCover(input: unknown, actor?: string) {
   if (actor) {
     const now = Date.now(); for (const [key, value] of coverBuckets) if (value.expires <= now) coverBuckets.delete(key);

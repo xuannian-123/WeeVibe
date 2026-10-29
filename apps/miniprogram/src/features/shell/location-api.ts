@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro';
 import { ApiClientError, createApiClient, type Transport } from '@weevibe/api-client';
-import { activityIdSchema, apiErrorSchema, cityLookupInputSchema, cityLookupResultSchema, gcj02Schema, type VenueSearchInput } from '@weevibe/contracts';
+import { activityIdSchema, apiErrorSchema, cityLookupInputSchema, cityLookupResultSchema, gcj02Schema, type VenueCategory, type VenueSearchInput } from '@weevibe/contracts';
 import { getToken, transport } from '../../platform/api';
 import { errorText } from '../../platform/page-state';
 import { unrecognizedResponseMessage } from '../../platform/response-error';
@@ -52,10 +52,10 @@ export async function locateCityForSession(session: string | undefined, assertCu
     const result = cityLookupResultSchema.parse(response.body); source.guard(); return result;
   } catch (error) { return safeFailure(error); }
 }
-export async function nearbyForSession(session: string | undefined, keyword: string, assertCurrent: () => void) {
+export async function nearbyForSession(session: string | undefined, keyword: string, assertCurrent: () => void,category:VenueCategory='custom') {
   try {
     const source = await locate(session, assertCurrent); source.guard();
-    const result = await source.client.nearbyVenues({ center: source.location, category: 'custom', keyword: keyword.trim() || '休闲', radius_m: 3000, page_size: 10 });
+    const result = await source.client.nearbyVenues({ center: source.location, category, keyword: keyword.trim() || '休闲', radius_m: 3000, page_size: 10 });
     source.guard(); return result;
   } catch (error) { return safeFailure(error); }
 }

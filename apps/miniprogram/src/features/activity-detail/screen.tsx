@@ -26,6 +26,7 @@ import { DeadlinePanel } from '../deadline/DeadlinePanel';
 import { BookingPanel } from '../booking/BookingPanel';
 import { MainSegmentPanel } from '../main-segment/MainSegmentPanel';
 import './activity.css';
+import '../../design-c.css';
 
 export default function ActivityDetailScreen() {
   const { id, incomingInvitationId, outgoingInvitationId, setOutgoingInvitationId, detail, userId, read, login, applications, attributions, showMore, setShowMore } = useActivityDetail();

@@ -3,17 +3,17 @@ import { Prisma, type Gathering } from '@prisma/client';
 import {
   gatheringCreateSchema, gatheringMemberSaveSchema, gatheringDetailsSchema, gatheringDetailsUpdateSchema, gatheringIntakeSchema,gatheringFinalizeSchema,
   gatheringItinerarySchema, gatheringPublicBlocks, gatheringOwnBlocks, gatheringVisibleDetails, emptyGatheringIntake,
-  gatheringPublicIntakeSchema,gatheringAnimalIdSchema,gatheringAnimalIds,
+  gatheringPublicIntakeSchema,gatheringAnimalIdSchema,gatheringAnimalIds,gatheringAvatarKeySchema,
   type GatheringDetails, type GatheringIntake, type GatheringSnapshot, type GatheringSummary,
 } from '@weevibe/contracts';
 import { withDb } from '../db';
 import { ServiceError } from '../http';
 import { mutation } from '../activities/mutation';
 import type { Tx } from '../activities/state';
-import { consumeRequirementBudget, organizerAvatarProjection } from '../requirements/service';
+import { consumeRequirementBudget } from '../requirements/service';
 import { gatheringSourceFingerprint, gatheringTeamStatistics, type PublicGatheringRow } from './privacy';
-import {assertGatheringProfile} from './profile';
 import {enqueueGatheringSubmission} from './notifications';
+import {allocateGatheringAvatar} from './avatars';
 
 export const gatheringJson=(value:unknown)=>JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const hash=(value:unknown)=>{
@@ -34,17 +34,17 @@ export async function lockGathering(tx:Tx,id:string){
 }
 export function assertGatheringOwner(row:Gathering,actor:string){if(row.ownerUserId!==actor)throw new ServiceError('FORBIDDEN',403,'仅局头可以执行这个操作');}
 export function assertGatheringEditable(row:Gathering){if(row.finalizedAt)throw new ServiceError('INVALID_INPUT',409,'这次出游已定案，不能再修改或加入');}
-export async function readGatheringRows(tx:Tx,id:string):Promise<Array<PublicGatheringRow&{animalId:string}>>{
+export async function readGatheringRows(tx:Tx,id:string):Promise<Array<PublicGatheringRow&{animalId:string;avatarKey:string|null}>>{
   // Deliberately exclude every other member's privateIntake from all shared reads.
   const rows=await tx.gatheringMember.findMany({where:{gatheringId:id},orderBy:{userId:'asc'},take:501,
-    select:{userId:true,publicIntake:true,answers:true,responseVersion:true,animalId:true}});
+    select:{userId:true,publicIntake:true,answers:true,responseVersion:true,animalId:true,avatarKey:true}});
   if(rows.length>500)throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'当前筹备超出完整读取上限');
   return rows;
 }
 function normalizeIntake(raw:unknown,details:GatheringDetails,validateRequired:boolean,kind:string):GatheringIntake{
   const parsed=gatheringIntakeSchema.safeParse(raw);if(!parsed.success)throw invalid('请检查预算、填写内容和确定项');
   const intake=parsed.data;
-  if(kind==='friend'&&!intake.public.activity_nickname)throw invalid('请先填写这次活动使用的昵称');
+  if(!intake.public.activity_nickname)throw invalid('请先填写这次活动使用的昵称');
   try{gatheringOwnBlocks(intake);}catch(e){throw invalid(e instanceof Error?e.message:undefined);}
   const answers=intake.answers;
   if(new Set(answers.map(a=>a.question_id)).size!==answers.length||answers.some(a=>!details.questions.some(q=>q.id===a.question_id)))throw invalid('问题已变化，请刷新后重新填写');
@@ -64,20 +64,11 @@ function summary(row:Gathering,actor:string,details:GatheringDetails,count:numbe
   const visible=gatheringVisibleDetails(details,row.kind as 'friend'|'team',row.ownerUserId===actor);
   return {id:row.id,kind:row.kind as 'friend'|'team',title:visible.title||(row.kind==='friend'?'朋友出游':'一起团建'),date:visible.date,stage:row.currentGenerationId?'arranged':'collecting',is_owner:row.ownerUserId===actor,has_responded:responded,member_count:count,updated_at:row.updatedAt.toISOString()};
 }
-async function identities(tx:Tx,userIds:string[]){
-  const ids=[...new Set(userIds)],profiles=await tx.privateProfile.findMany({where:{userId:{in:ids}},select:{userId:true,data:true}});
-  const avatars=await tx.userAvatar.findMany({where:{userId:{in:ids}},select:{userId:true,bytes:true,contentType:true,digest:true,updatedAt:true}});
-  return (userId:string)=>{
-    const data=profiles.find(p=>p.userId===userId)?.data;
-    const nickname=data&&typeof data==='object'&&!Array.isArray(data)&&typeof data.nickname==='string'?data.nickname.slice(0,32):'微信用户';
-    return {user_id:userId,nickname,avatar:organizerAvatarProjection(avatars.find(a=>a.userId===userId)??null)};
-  };
-}
-function friendIdentities(rows:{userId:string;publicIntake:unknown;animalId:string}[]){
+function friendIdentities(rows:{userId:string;publicIntake:unknown;animalId:string;avatarKey?:string|null}[]){
   const people=new Map(rows.map(row=>{
     const input=gatheringPublicIntakeSchema.safeParse(row.publicIntake),animal=gatheringAnimalIdSchema.safeParse(row.animalId);
-    if(!input.success||!animal.success)throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'活动昵称与动物头像暂时无法核对');
-    return [row.userId,{user_id:row.userId,nickname:input.data.activity_nickname||'还未设置活动昵称',avatar:null,animal_id:animal.data}] as const;
+    if(!input.success||!animal.success||row.avatarKey&&!gatheringAvatarKeySchema.safeParse(row.avatarKey).success)throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'活动昵称与动物头像暂时无法核对');
+    return [row.userId,{user_id:row.userId,nickname:input.data.activity_nickname||'还未设置活动昵称',avatar:null,animal_id:animal.data,...(row.avatarKey?{avatar_key:row.avatarKey}:{})}] as const;
   }));
   return(userId:string)=>{const person=people.get(userId);if(!person)throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'未找到活动内身份');return person;};
 }
@@ -88,7 +79,7 @@ export async function gatheringSnapshotTx(tx:Tx,id:string,actor:string):Promise<
   const own=await tx.gatheringMember.findUnique({where:{gatheringId_userId:{gatheringId:id,userId:actor}}});
   const rows=await readGatheringRows(tx,id),isMember=!!own;
   const page=row.kind==='friend'&&isMember?rows.slice(0,10):[];
-  const person=row.kind==='friend'?friendIdentities(rows):await identities(tx,[row.ownerUserId,...page.map(r=>r.userId)]);
+  const person=friendIdentities(rows);
   const ownIntake=own?gatheringIntakeSchema.parse({public:own.publicIntake,private:own.privateIntake,answers:own.answers}):null;
   const source=gatheringSourceFingerprint(details,rows);
   const finalChoice=row.finalGenerationId&&row.finalPlanId&&row.finalizedAt?{generation_id:row.finalGenerationId,plan_id:row.finalPlanId,finalized_at:row.finalizedAt.toISOString()}:null;
@@ -120,12 +111,11 @@ export async function createGathering(actor:string,raw:unknown){
   return mutation(async tx=>{
     const previous=await tx.gathering.findUnique({where:{ownerUserId_creationKey:{ownerUserId:actor,creationKey:input.idempotency_key}}});
     if(previous){if(previous.creationHash!==fingerprint)throw new ServiceError('IDEMPOTENCY_CONFLICT',409,'原请求已用于其他筹备内容');return gatheringSnapshotTx(tx,previous.id,actor);}
-    await assertGatheringProfile(tx,actor);
     const intake=normalizeIntake(input.intake,input.details,false,input.kind);
     assertDetails(input.details,input.kind,new Date());
     const submitted=input.kind==='friend';
     const row=await tx.gathering.create({data:{ownerUserId:actor,kind:input.kind,details:gatheringJson(input.details),creationKey:input.idempotency_key,creationHash:fingerprint,submissionSequence:submitted?1:0}});
-    await tx.gatheringMember.create({data:{gatheringId:row.id,userId:actor,animalId:randomAnimal(),publicIntake:gatheringJson(intake.public),privateIntake:gatheringJson(intake.private),answers:gatheringJson(intake.answers),responseVersion:submitted?1:0,firstSubmissionSequence:submitted?1:null}});
+    await tx.gatheringMember.create({data:{gatheringId:row.id,userId:actor,animalId:randomAnimal(),avatarKey:await allocateGatheringAvatar(tx,row.id),publicIntake:gatheringJson(intake.public),privateIntake:gatheringJson(intake.private),answers:gatheringJson(intake.answers),responseVersion:submitted?1:0,firstSubmissionSequence:submitted?1:null}});
     if(submitted)await enqueueGatheringSubmission(tx,row,actor,1,1);
     return gatheringSnapshotTx(tx,row.id,actor);
   });
@@ -137,12 +127,11 @@ export async function joinGathering(id:string,actor:string){
     assertGatheringEditable(row);
     const previous=await tx.gatheringMember.findUnique({where:{gatheringId_userId:{gatheringId:id,userId:actor}}});
     if(!previous){
-      await assertGatheringProfile(tx,actor);
       if(!mayRespond(row,details,new Date()))throw new ServiceError('INVALID_INPUT',409,'问卷已截止，暂不接受新的填写');
       const count=await tx.gatheringMember.count({where:{gatheringId:id}});
       if(count>=500||details.capacity!==null&&count>=details.capacity)throw new ServiceError('CAPACITY_FULL',409,'当前筹备已达到填写人数上限');
       const empty=emptyGatheringIntake();
-      await tx.gatheringMember.create({data:{gatheringId:id,userId:actor,animalId:randomAnimal(),publicIntake:gatheringJson(empty.public),privateIntake:gatheringJson(empty.private),answers:gatheringJson([])}});
+      await tx.gatheringMember.create({data:{gatheringId:id,userId:actor,animalId:randomAnimal(),avatarKey:await allocateGatheringAvatar(tx,id),publicIntake:gatheringJson(empty.public),privateIntake:gatheringJson(empty.private),answers:gatheringJson([])}});
     }
     return gatheringSnapshotTx(tx,id,actor);
   });
@@ -156,7 +145,6 @@ export async function saveGatheringIntake(id:string,actor:string,raw:unknown){
     if(!own&&!input.join_if_needed)throw new ServiceError('FORBIDDEN',403,'请先确认参与这次筹备');
     if(own?.lastWriteKey===input.idempotency_key){if(own.lastWriteHash!==fingerprint)throw new ServiceError('IDEMPOTENCY_CONFLICT',409,'此保存请求已用于其他内容');return gatheringSnapshotTx(tx,id,actor);}
     assertGatheringEditable(row);
-    await assertGatheringProfile(tx,actor);
     if(row.revision!==input.expected_revision)throw gatheringConflict();
     if((own?.responseVersion??0)!==input.expected_version)throw gatheringConflict();
     if(!mayRespond(row,details,new Date()))throw new ServiceError('INVALID_INPUT',409,'已到填写截止，原输入保留');
@@ -167,7 +155,7 @@ export async function saveGatheringIntake(id:string,actor:string,raw:unknown){
     else{
       const count=await tx.gatheringMember.count({where:{gatheringId:id}});
       if(count>=500||details.capacity!==null&&count>=details.capacity)throw new ServiceError('CAPACITY_FULL',409,'当前筹备已达到填写人数上限');
-      await tx.gatheringMember.create({data:{gatheringId:id,userId:actor,animalId:randomAnimal(),...response,responseVersion:1}});
+      await tx.gatheringMember.create({data:{gatheringId:id,userId:actor,animalId:randomAnimal(),avatarKey:await allocateGatheringAvatar(tx,id),...response,responseVersion:1}});
     }
     await tx.gathering.update({where:{id},data:{updatedAt:new Date(),submissionSequence:{increment:1}}});
     await enqueueGatheringSubmission(tx,row,actor,version,sequence);
@@ -180,7 +168,6 @@ export async function updateGatheringDetails(id:string,actor:string,raw:unknown)
   await consumeRequirementBudget(actor);
   return mutation(async tx=>{
     const row=await lockGathering(tx,id);assertGatheringOwner(row,actor);assertGatheringEditable(row);if(row.revision!==input.expected_revision)throw gatheringConflict();
-    await assertGatheringProfile(tx,actor);
     const details=input.details,old=gatheringDetailsSchema.parse(row.details);assertDetails(details,row.kind,new Date());
     if(JSON.stringify(details.questions)!==JSON.stringify(old.questions)&&await tx.gatheringMember.count({where:{gatheringId:id,responseVersion:{gt:0}}}))throw invalid('已有人填写，题目不能再修改；可以补充其他安排');
     await tx.gathering.update({where:{id},data:{details:gatheringJson(details),revision:{increment:1}}});
@@ -197,7 +184,6 @@ export async function finalizeGathering(id:string,actor:string,raw:unknown){
       if(row.finalGenerationId===input.generation_id&&row.finalPlanId===input.plan_id)return gatheringSnapshotTx(tx,id,actor);
       throw new ServiceError('INVALID_INPUT',409,'已选定最终方案，不能改选');
     }
-    await assertGatheringProfile(tx,actor);
     const generation=await tx.gatheringGeneration.findUnique({where:{id:input.generation_id}});
     if(!generation||generation.gatheringId!==id||generation.status!=='ready')throw new ServiceError('INVALID_INPUT',409,'该方案尚未完成或不属于这次出游');
     const source=gatheringSourceFingerprint(gatheringDetailsSchema.parse(row.details),await readGatheringRows(tx,id));
@@ -211,7 +197,7 @@ export async function finalizeGathering(id:string,actor:string,raw:unknown){
 export function getGatheringMembers(id:string,actor:string,cursor:string|undefined){return withDb(db=>db.$transaction(async tx=>{
   const row=await tx.gathering.findUnique({where:{id}}),member=await tx.gatheringMember.findUnique({where:{gatheringId_userId:{gatheringId:id,userId:actor}},select:{userId:true}});
   if(!row||!member||row.kind!=='friend')throw new ServiceError('FORBIDDEN',403,'当前不能查看成员内容');
-  const rows=await tx.gatheringMember.findMany({where:{gatheringId:id,...(cursor?{userId:{gt:cursor}}:{})},orderBy:{userId:'asc'},take:11,select:{userId:true,publicIntake:true,responseVersion:true,animalId:true}});
+  const rows=await tx.gatheringMember.findMany({where:{gatheringId:id,...(cursor?{userId:{gt:cursor}}:{})},orderBy:{userId:'asc'},take:11,select:{userId:true,publicIntake:true,responseVersion:true,animalId:true,avatarKey:true}});
   const page=rows.slice(0,10),person=friendIdentities(page);
   return {members:page.map(r=>({person:person(r.userId),blocks:r.responseVersion>0?gatheringPublicBlocks(r.publicIntake):[],submitted:r.responseVersion>0})),next_cursor:rows.length>10?page.at(-1)!.userId:null};
 },{isolationLevel:Prisma.TransactionIsolationLevel.RepeatableRead}));}

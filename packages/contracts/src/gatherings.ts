@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { avatarAssetSchema } from './avatar';
 import { idempotencyKeySchema } from './activities';
 import { venueSelectionSchema } from './venues';
+import {gatheringAvatarKeySchema} from './gathering-avatars';
 
 const id = z.uuid();
 const text = (max: number) => z.string().trim().max(max);
@@ -84,7 +85,7 @@ export const gatheringItinerarySchema = z.object({
 export type GatheringItinerary = z.infer<typeof gatheringItinerarySchema>;
 export const gatheringGenerateSchema = z.object({expected_source:z.string().regex(/^[a-f0-9]{64}$/),idempotency_key:idempotencyKeySchema}).strict();
 export const gatheringFinalizeSchema = z.object({expected_source:z.string().regex(/^[a-f0-9]{64}$/),generation_id:id,plan_id:key}).strict();
-export const gatheringPersonSchema = z.object({user_id:id,nickname:text(32),avatar:avatarAssetSchema.nullable(),animal_id:gatheringAnimalIdSchema.optional()}).strict();
+export const gatheringPersonSchema = z.object({user_id:id,nickname:text(32),avatar:avatarAssetSchema.nullable(),animal_id:gatheringAnimalIdSchema.optional(),avatar_key:gatheringAvatarKeySchema.optional()}).strict();
 export const gatheringMemberPublicSchema = z.object({person:gatheringPersonSchema,blocks:z.array(gatheringBlockSchema).max(100),submitted:z.boolean()}).strict();
 export const gatheringStatsSchema = z.object({
   respondent_count:z.number().int().nonnegative(),
