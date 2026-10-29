@@ -38,9 +38,17 @@ export function ArrangementEditor({ detail, session, fresh, anyBusy, refresh, on
   const stale = !!form && sourceRevision !== detail.revision;
   async function inspect() {
     if (blocked || !form || stale || lock.current) return;
+    let input: EditArrangementInput;
+    try { input = editInputFromForm(detail, form, newKey()); }
+    catch (error) {
+      // Only this local form conversion is safe to display directly. Transport
+      // failures below continue through the fixed, non-sensitive error mapper.
+      setPreview(undefined);
+      setMessage(error instanceof Error ? error.message : '请核对安排中的字段后再预览');
+      return;
+    }
     lock.current = true; setBusy(true); setMessage(''); const guard = guardFor();
     try {
-      const input = editInputFromForm(detail, form, newKey());
       const result = await requestArrangementEdit(detail.activity_id, actor!, session, input, true, guard); guard();
       if (!('viewer_user_id' in result) || result.revision !== latest.current.detail.revision) throw new Error('活动已更新，请重新读取再编辑');
       setPreview({ data: result, input });
