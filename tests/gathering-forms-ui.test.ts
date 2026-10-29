@@ -9,12 +9,13 @@ const req=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json'));
 const {createElement,act,useState}=req('react') as typeof import('../apps/miniprogram/node_modules/@types/react');
 const {createRoot}=req('react-dom/client') as {createRoot:(host:Element)=>{render:(v:ReturnType<typeof createElement>)=>void;unmount:()=>void}};
 (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
-const h=vi.hoisted(()=>({token:'session-a',organize:vi.fn(),request:vi.fn(),account:vi.fn(),redirect:vi.fn(),done:vi.fn(),cancel:vi.fn(),save:vi.fn(),store:new Map<string,unknown>(),show:[] as (()=>void)[],hide:[] as (()=>void)[],unload:[] as (()=>void)[]}));
+const h=vi.hoisted(()=>({token:'session-a',map:vi.fn(),privacy:vi.fn(),page:{},organize:vi.fn(),request:vi.fn(),account:vi.fn(),redirect:vi.fn(),done:vi.fn(),cancel:vi.fn(),save:vi.fn(),store:new Map<string,unknown>(),show:[] as (()=>void)[],hide:[] as (()=>void)[],unload:[] as (()=>void)[]}));
+vi.mock('../apps/miniprogram/src/platform/location-permission',()=>({requirePrivacyPermission:h.privacy,requireLocationPermission:vi.fn(),readPreciseLocation:vi.fn(),needsLocationSettings:()=>false}));
 vi.mock('../apps/miniprogram/src/platform/account-api',()=>({requestAccount:h.account}));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>h.token}));
 vi.mock('../apps/miniprogram/src/features/gatherings/client',()=>({organizeGathering:h.organize,gatheringRequest:h.request,parseGatheringSnapshot:(v:unknown)=>v,gatheringMessage:(e:unknown)=>e instanceof Error?e.message:'整理暂未完成'}));
 vi.mock('../apps/miniprogram/src/features/gatherings/subscription',()=>({useGatheringSubscription:()=>({config:{enabled:false},authorizing:false,busy:false,pending:undefined,notice:'',requestFromTap:async()=>undefined,record:async()=>{},retry:async()=>{},reload:async()=>{}}),GatheringSubscription:()=>null}));
-vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:(k:string)=>h.store.get(k),setStorageSync:(k:string,v:unknown)=>h.store.set(k,v),removeStorageSync:(k:string)=>h.store.delete(k),navigateBack:vi.fn().mockResolvedValue({}),reLaunch:vi.fn().mockResolvedValue({}),redirectTo:h.redirect},useDidShow:(fn:()=>void)=>h.show.push(fn),useDidHide:(fn:()=>void)=>h.hide.push(fn),useUnload:(fn:()=>void)=>h.unload.push(fn)}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getCurrentPages:()=>[h.page],chooseLocation:h.map,getStorageSync:(k:string)=>h.store.get(k),setStorageSync:(k:string,v:unknown)=>h.store.set(k,v),removeStorageSync:(k:string)=>h.store.delete(k),navigateBack:vi.fn().mockResolvedValue({}),reLaunch:vi.fn().mockResolvedValue({}),redirectTo:h.redirect},useDidShow:(fn:()=>void)=>h.show.push(fn),useDidHide:(fn:()=>void)=>h.hide.push(fn),useUnload:(fn:()=>void)=>h.unload.push(fn)}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({
   View:(p:any)=>createElement('div',{className:p.className},p.children),Text:(p:any)=>createElement('span',{className:p.className},p.children),
   Button:(p:any)=>createElement('button',{className:p.className,disabled:p.disabled,onClick:p.onClick},p.children),
@@ -33,7 +34,7 @@ const A='11111111-1111-4111-8111-111111111111';
 const ID='22222222-2222-4222-8222-222222222222';
 function createdSnapshot(){return {gathering:{id:ID,title:'朋友出游',date:'2030-11-10',kind:'friend',owner:{user_id:A}},viewer:{is_owner:true}};}
 let root:ReturnType<typeof createRoot>,host:HTMLDivElement;
-beforeEach(()=>{host=document.createElement('div');document.body.append(host);root=createRoot(host);h.token='session-a';h.store.clear();h.show=[];h.hide=[];h.unload=[];h.account.mockReset().mockResolvedValue({profile:{nickname:'真实已保存昵称'}});h.organize.mockReset().mockResolvedValue({summary:'想一起吃饭聊天',source:'ai',blocks:[]});h.request.mockReset().mockImplementation(async(_session,_path,_method,_body,parse)=>parse(createdSnapshot()));h.redirect.mockReset().mockResolvedValue({});h.done.mockReset();h.save.mockReset();h.cancel.mockReset();});
+beforeEach(()=>{host=document.createElement('div');document.body.append(host);root=createRoot(host);h.token='session-a';h.map.mockReset();h.privacy.mockReset().mockResolvedValue(undefined);h.store.clear();h.show=[];h.hide=[];h.unload=[];h.account.mockReset().mockResolvedValue({profile:{nickname:'真实已保存昵称'}});h.organize.mockReset().mockResolvedValue({summary:'想一起吃饭聊天',source:'ai',blocks:[]});h.request.mockReset().mockImplementation(async(_session,_path,_method,_body,parse)=>parse(createdSnapshot()));h.redirect.mockReset().mockResolvedValue({});h.done.mockReset();h.save.mockReset();h.cancel.mockReset();});
 afterEach(async()=>{await act(async()=>root.unmount());document.body.innerHTML='';});
 async function render(element:ReturnType<typeof createElement>){await act(async()=>root.render(element));}
 function text(){return host.textContent||'';}
@@ -96,5 +97,26 @@ describe('HTML activity details and safe draft continuation',()=>{
   it.each(['owner','viewer','kind'] as const)('preserves the original create request when response %s does not match its source',async mismatch=>{
     const details=emptyGatheringDetails();details.date='2030-11-10';h.store.set(`weevibe-gathering-draft-v1:${A}:friend`,{actor:A,details,intake:intake(),reviewed:true});const wrong=createdSnapshot();if(mismatch==='owner')wrong.gathering.owner.user_id=ID;if(mismatch==='viewer')wrong.viewer.is_owner=false;if(mismatch==='kind')wrong.gathering.kind='team';h.request.mockImplementationOnce(async(_s,_p,_m,_body,parse)=>parse(wrong));
     await render(createElement(GatheringDesigner,{actor:A,session:'session-a',kind:'friend'}));await click('发起活动 ↗');await click('确认并发起活动');expect(text()).not.toContain('这次相聚已发起');expect(h.store.has(`weevibe-gathering-created-v1:${A}`)).toBe(false);expect(h.store.has(`weevibe-gathering-create-pending-v1:${A}:friend`)).toBe(true);const original=h.request.mock.calls[0][3];await click('沿用原请求核对并重试');expect(h.request.mock.calls[1][3]).toEqual(original);expect(text()).toContain('这次相聚已发起');
+  });
+});
+
+
+describe('C gathering public map fields',()=>{
+  const native={name:'月亮湾',address:'苏州示例路',latitude:31.2,longitude:120.3};
+  it('fills the public meeting point without submitting and clears map metadata after manual edits',async()=>{
+    h.map.mockImplementation(({success})=>success(native));
+    await render(createElement(GatheringDetailsEditor,{initial:emptyGatheringDetails(),kind:'friend',section:'plan',session:'session-a',save:h.save,cancel:h.cancel}));
+    await click('地图选择地点');expect(h.save).not.toHaveBeenCalled();
+    await click('保存，返回出游');
+    expect(h.save.mock.calls[0][0]).toMatchObject({place:native.name,address:native.address,place_venue:{location:{latitude:31.2,longitude:120.3},source:{provider:'wechat',source_api:'wx.chooseLocation'}}});
+    await input('在哪里集合','手动改的新地点');await click('保存，返回出游');
+    expect(h.save.mock.calls.at(-1)![0].place_venue).toBeUndefined();
+  });
+  it('retains the selected coordinates and source in a team candidate',async()=>{
+    h.map.mockImplementation(({success})=>success(native));
+    const initial=emptyGatheringDetails();initial.candidate_places=[{id:'p1',label:'原候选'}];
+    await render(createElement(GatheringDetailsEditor,{initial,kind:'team',section:'questionnaire',session:'session-a',save:h.save,cancel:h.cancel}));
+    await click('地图选择地点');expect(h.save).not.toHaveBeenCalled();await click('保存，返回团建');
+    expect(h.save.mock.calls[0][0].candidate_places[0]).toMatchObject({id:'p1',label:native.name,venue:{location:{latitude:31.2,longitude:120.3}}});
   });
 });
