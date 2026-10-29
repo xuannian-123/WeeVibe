@@ -12,7 +12,6 @@ import { useActivityDetail } from './use-activity-detail';
 import { RosterPanel } from '../roster/RosterPanel';
 import { ActivityOverview } from '../activity-entry/ActivityOverview';
 import { useInvitationSource } from '../activity-entry/use-invitation-source';
-import { Itinerary } from './itinerary';
 import { ActivityMore } from './more';
 import { ParticipationActions } from '../participation/ParticipationActions';
 import { FormationPanel } from '../formation/FormationPanel';
@@ -75,7 +74,7 @@ export default function ActivityDetailScreen() {
     decision: { ...applications.decision, send: async (...args: Parameters<typeof applications.decision.send>) => { if (!otherWriteBusy) await applications.decision.send(...args); } }
   };
   if (!id) return <View id="activity-activity" className="screen activity-page"><Panel title="没有找到这个活动"><Notice>活动入口不完整，请向朋友重新获取邀请。</Notice><Action onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>返回首页</Action></Panel></View>;
-  return <View id="activity-activity" className="screen activity-page">
+  return <View id="activity-activity" className={`screen activity-page ${section==='overview'?'activity-invitation-page':''}`}>
     {section!=='overview' && <View className="activity-hero">
       <Text className="activity-eyebrow">{BRAND_NAME} · 一起出发</Text>
       <Text className="activity-title">{detail?sectionTitles[section]||detail.name:'正在读取安排'}</Text>
@@ -90,7 +89,7 @@ export default function ActivityDetailScreen() {
     </View>}
     {detail&&section!=='overview'&&<Text className="caption">{detail.name}</Text>}
     {detail&&section!=='overview'&&<Action disabled={anyBusy} onClick={()=>setSection('overview')}>返回活动</Action>}
-    {detail && section==='overview' && <ActivityOverview detail={detail} sourceId={sourceId} source={source.data} sourceLoading={source.loading} sourceError={source.error} busy={anyBusy || login.busy || read.loading || !!read.error} retrySource={source.retry} refresh={() => { void read.refresh(); }} open={next => { if (!anyBusy && !login.busy) setSection(next); }} />}
+    {detail && section==='overview' && <ActivityOverview key={`overview:${id}:${userId ?? 'guest'}`} suggest={() => { if(!anyBusy) void Taro.navigateTo({url:`/pages/requirements/index?activity_id=${detail.activity_id}`}).catch(() => { void Taro.showToast?.({title:'暂时无法打开，请重试',icon:'none'}); }); }} detail={detail} sourceId={sourceId} source={source.data} sourceLoading={source.loading} sourceError={source.error} busy={anyBusy || login.busy || read.loading || !!read.error} retrySource={source.retry} refresh={() => { void read.refresh(); }} open={next => { if (!anyBusy && !login.busy) setSection(next); }} />}
     {!detail && !read.loading && <Text className="activity-title">活动邀请</Text>}
     {read.loading && !detail && <Notice>正在加载活动安排…</Notice>}
     {read.error && <Notice>{read.error} 当前内容可能已过时，请刷新后再操作。</Notice>}
@@ -109,14 +108,11 @@ export default function ActivityDetailScreen() {
 
     <View hidden={section!=='withdrawal'} style={{display:section==='withdrawal'?'':'none'}}>{detail && <WithdrawalPanel key={`withdrawal:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!editBusy && !read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !formationBusy && !arrangementBusy && !cancellationBusy && !handoverBusy && !rebookBusy && !mainSegmentBusy && !login.busy && !capacityBusy && !deadlineBusy && !bookingBusy} anyBusy={anyBusy || login.busy} refresh={read.refresh} onBusyChange={setWithdrawalBusy} />}</View>
 
-    <View hidden={section!=='overview'} style={{display:section==='overview'?'':'none'}}>{detail && <Itinerary detail={detail} />}</View>
-    {detail&&section==='overview'&&<View className="core-flow-menu">{[['apply','选择参加环节'],['participation','管理我的参加'],['arrangement','查看变化并决定'],['roster','查看成员名单'],['withdrawal','撤回申请'],['invitation','分享邀请'],...(detail.viewer.is_manager?[['approval','处理参加申请'],['formation','核实与确认成局'],['edit','修改活动安排'],['handover','管理交接'],['booking','核实与预订'],['main','更换主要环节'],['capacity','调整人数'],['deadline','调整截止'],['cancel','取消活动']]:[]),['rebook','再约一次']].filter(([to])=>actionsExpanded || ['roster','invitation'].includes(to)).map(([to,label])=><Action key={to} disabled={anyBusy} onClick={()=>setSection(to)}>{label}</Action>)}</View>}
+    {detail&&section==='overview'&&<View className="core-flow-menu">{[['apply','选择参加环节'],['participation','管理我的参加'],['arrangement','查看变化并决定'],['roster','查看成员名单'],['withdrawal','撤回申请'],['invitation','分享邀请'],...(detail.viewer.is_manager?[['approval','处理参加申请'],['formation','核实与确认成局'],['edit','修改活动安排'],['handover','管理交接'],['booking','核实与预订'],['main','更换主要环节'],['capacity','调整人数'],['deadline','调整截止'],['cancel','取消活动']]:[]),['rebook','再约一次']].filter(()=>actionsExpanded).map(([to,label])=><Action key={to} disabled={anyBusy} onClick={()=>setSection(to)}>{label}</Action>)}</View>}
     {detail&&section==='overview'&&<Action variant="text" disabled={anyBusy} onClick={()=>setActionsExpanded(v=>!v)}>{actionsExpanded?'收起更多操作':'更多活动操作'}</Action>}
 
     <View hidden={section!=='roster'} style={{display:section==='roster'?'':'none'}}>{detail && <RosterPanel key={`roster:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!editBusy && !read.error && !read.loading && !anyBusy && !login.busy && !capacityBusy && !deadlineBusy && !bookingBusy} refresh={read.refresh} />}</View>
 
-    {detail && section==='overview' && <Action onClick={() => { void Taro.navigateTo({ url: `/pages/requirements/index?activity_id=${detail.activity_id}` }); }}>填写／管理需求</Action>}
-    {detail && section==='overview' && <Text className="caption">填写需求不等于报名获席位，原申请审批流程保留。</Text>}
     <View hidden={section!=='participation'} style={{display:section==='participation'?'':'none'}}>{detail && <ParticipationActions key={`${detail.activity_id}:${userId ?? "guest"}`} detail={detail} session={read.data?.session} fresh={!editBusy && !read.error && !read.loading && !applications.anyBusy && !invitationBusy && !formationBusy && !arrangementBusy && !withdrawalBusy && !cancellationBusy && !handoverBusy && !rebookBusy && !mainSegmentBusy && !login.busy && !capacityBusy && !deadlineBusy && !bookingBusy} refresh={read.refresh} onBusyChange={setParticipationBusy} />}</View>
 
     {detail && section==='apply' && sourceId !== undefined && !sourceReady && <Notice>{source.loading ? '正在核验邀请来源…' : source.error || '邀请来源未通过核验，请返回活动重新核验。'}</Notice>}

@@ -8,9 +8,9 @@ const req=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json'));
 const {createElement,act}=req('react') as typeof import('../apps/miniprogram/node_modules/@types/react');
 const {createRoot}=req('react-dom/client') as {createRoot:(host:Element)=>{render:(element:ReturnType<typeof createElement>)=>void;unmount:()=>void}};
 (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
-const h=vi.hoisted(()=>({controller:{} as any,modal:vi.fn(),me:vi.fn(),transport:vi.fn(),created:vi.fn()}));
+const h=vi.hoisted(()=>({controller:{} as any,modal:vi.fn(),me:vi.fn(),transport:vi.fn(),created:vi.fn(),navigate:vi.fn()}));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=> 'session-a',api:{me:h.me},transport:h.transport}));
-vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{showModal:h.modal},useDidHide:()=>{},useDidShow:()=>{},useUnload:()=>{}}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{showModal:h.modal,navigateTo:h.navigate},useDidHide:()=>{},useDidShow:()=>{},useUnload:()=>{}}));
 // Keep the real sibling MainSegmentPanel mounted; extend only the native primitive fixture.
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Radio:()=>null,RadioGroup:(p:any)=>createElement('div',{},p.children),Label:(p:any)=>createElement('label',{},p.children),Button:(p:any)=>createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{hidden:p.hidden,style:p.style,id:p.id,className:p.className},p.children),Text:(p:any)=>createElement('span',{className:p.className},p.children)}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/use-activity-detail',()=>({useActivityDetail:()=>h.controller}));
@@ -22,7 +22,7 @@ vi.mock('../apps/miniprogram/src/features/participation/ParticipationActions',()
 vi.mock('../apps/miniprogram/src/features/handover/HandoverPanel',()=>({HandoverPanel:(p:any)=>createElement('button',{disabled:p.anyBusy||!p.fresh},'交接同伴操作')}));
 import ActivityDetailScreen from '../apps/miniprogram/src/features/activity-detail/screen';
 let root:ReturnType<typeof createRoot>|undefined;
-beforeEach(()=>{const detail=applicationDetail();h.controller={id:applicationActivity,detail,userId:applicantA,read:{data:{detail,session:'session-a'},loading:false,error:'',refresh:vi.fn()},login:{busy:false,error:''},applications:{fresh:true,anyBusy:false,apply:{send:vi.fn()},decision:{send:vi.fn()},submit:vi.fn(),decide:vi.fn()},setOutgoingInvitationId:h.created};h.created.mockReset();h.modal.mockReset().mockResolvedValue({confirm:true});h.me.mockReset().mockResolvedValue({user_id:applicantA});h.transport.mockReset().mockResolvedValue({status:200,body:{invitation_id:applicationId,activity_id:applicationActivity,title:'source',inviter_display_name:null,inviter_avatar_url:null,starts_at:null,ends_at:null,timezone:'UTC',cancelled:false,source_only:true}});});
+beforeEach(()=>{const detail=applicationDetail();h.controller={id:applicationActivity,detail,userId:applicantA,read:{data:{detail,session:'session-a'},loading:false,error:'',refresh:vi.fn()},login:{busy:false,error:''},applications:{fresh:true,anyBusy:false,apply:{send:vi.fn()},decision:{send:vi.fn()},submit:vi.fn(),decide:vi.fn()},setOutgoingInvitationId:h.created};h.navigate.mockReset().mockResolvedValue({});h.created.mockReset();h.modal.mockReset().mockResolvedValue({confirm:true});h.me.mockReset().mockResolvedValue({user_id:applicantA});h.transport.mockReset().mockResolvedValue({status:200,body:{invitation_id:applicationId,activity_id:applicationActivity,title:'source',inviter_display_name:null,inviter_avatar_url:null,starts_at:null,ends_at:null,timezone:'UTC',cancelled:false,source_only:true}});});
 afterEach(async()=>{if(root)await act(async()=>root!.unmount());root=undefined;document.body.innerHTML='';});
 async function render(){if(!root){const host=document.createElement('div');document.body.append(host);root=createRoot(host);}await act(async()=>root!.render(createElement(ActivityDetailScreen)));}
 function button(name:string){const value=Array.from(document.querySelectorAll('button')).find(b=>b.textContent===name)!;expect(value).toBeTruthy();return value;}
@@ -51,9 +51,9 @@ describe('integrated invitation overview and existing activity sections',()=>{
   h.controller.detail.name='真实活动标题'; await render();
   expect(document.querySelector('.iv-title')?.textContent).toBe('真实活动标题');
   expect(document.body.textContent).not.toContain('挑一个动物形象');
-  expect(document.querySelector('.iv-people')?.textContent).not.toContain('原发起人你');
+  expect(document.querySelector('.iv-host-copy')?.textContent).toContain('昵称暂未公开');
   expect(button('申请同伴操作').closest('[hidden]')).not.toBeNull();
-  await act(async()=>button('选择参加环节').click());
+  await act(async()=>button('选择参加环节 →').click());
   expect(button('申请同伴操作').closest('[hidden]')).toBeNull();
   expect(Array.from(document.querySelectorAll('button')).filter(b=>b.textContent==='申请同伴操作')).toHaveLength(1);
  });
@@ -78,4 +78,16 @@ describe('integrated invitation overview and existing activity sections',()=>{
   await render(); expect(button('申请同伴操作').disabled).toBe(true);
   expect(h.controller.applications.nickname).toBe('保留的活动昵称');
  });
+});
+
+it('opens the real requirements route from a suggestion without submitting an application',async()=>{
+ await render(); await act(async()=>button('◷改时间').click());
+ expect(h.navigate).toHaveBeenCalledExactlyOnceWith({url:`/pages/requirements/index?activity_id=${applicationActivity}`});
+ expect(h.controller.applications.submit).not.toHaveBeenCalled();
+});
+it('keeps original creator and current manager separate in the full arrangement disclosure',async()=>{
+ await render(); expect(document.querySelector('.iv-people')).toBeNull();
+ await act(async()=>button('查看完整安排 ＋').click());
+ expect(document.querySelector('.iv-people')?.textContent).toContain('原发起人公开昵称暂未提供');
+ expect(document.querySelector('.iv-people')?.textContent).toContain('你正在负责此活动');
 });

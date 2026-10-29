@@ -35,13 +35,13 @@ try {
   const page = (method, params) => send(method, params, sessionId);
   await page('Page.enable');
   const evidence = [];
-  for (const [mode, width] of [['guest', 375], ['pending', 375], ['participant', 375], ['changed', 375], ['cancelled', 375], ['manager', 430], ['long', 320], ['card', 375]]) {
+  for (const [mode, width] of [['guest', 375], ['pending', 375], ['participant', 375], ['changed', 375], ['cancelled', 375], ['manager', 430], ['long', 320], ['card', 375], ['guest', 1440]]) {
     await page('Emulation.setDeviceMetricsOverride', { width, height: 844, deviceScaleFactor: 1, mobile: true });
     await page('Page.navigate', { url: `${pathToFileURL(path.join(output, 'index.html')).href}?view=${mode}` });
     const readiness = await page('Runtime.evaluate', { expression: `(async()=>{await document.fonts.ready;for(let i=0;i<100;i++){if(document.querySelector('#root')?.children.length&&[...document.images].every(img=>img.complete)&&(${JSON.stringify(mode)}!=='card'||document.querySelector('#root>img'))){await new Promise(r=>setTimeout(r,150));return true}await new Promise(r=>setTimeout(r,50))}return false})()`, awaitPromise: true, returnByValue: true });
     if (!readiness.result.value) throw new Error(`PREVIEW_NOT_READY:${mode}`);
     if (mode === 'guest') {
-      const clicked = await page('Runtime.evaluate', { expression: `(async()=>{[...document.querySelectorAll('button')].find(b=>b.textContent==='登录并选择参加环节')?.click();await new Promise(r=>setTimeout(r,80));const ok=document.body.textContent.includes('先登录，再申请');[...document.querySelectorAll('button')].find(b=>b.textContent==='返回活动')?.click();await new Promise(r=>setTimeout(r,80));return ok&&!!document.querySelector('.iv-title')})()`, awaitPromise:true, returnByValue:true });
+      const clicked = await page('Runtime.evaluate', { expression: `(async()=>{[...document.querySelectorAll('button')].find(b=>b.textContent?.startsWith('登录并选择参加环节'))?.click();await new Promise(r=>setTimeout(r,80));const ok=document.body.textContent.includes('先登录，再申请');[...document.querySelectorAll('button')].find(b=>b.textContent==='返回活动')?.click();await new Promise(r=>setTimeout(r,80));return ok&&!!document.querySelector('.iv-title')})()`, awaitPromise:true, returnByValue:true });
       if (!clicked.result.value) throw new Error('PREVIEW_NAVIGATION_FAILED');
     }
     const metrics = await page('Runtime.evaluate', { expression: `JSON.stringify({viewport:innerWidth,scrollWidth:document.documentElement.scrollWidth,height:document.documentElement.scrollHeight,images:[...document.images].filter(img=>img.naturalWidth>0).length})`, returnByValue: true });

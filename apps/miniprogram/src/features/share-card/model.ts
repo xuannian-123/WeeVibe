@@ -52,13 +52,14 @@ export function cardLayout(card: ActivityCardModel) {
     }
     if (line) { lines.push({ text: line, y, size, color }); y += size + 12; }
   }
-  paragraph('WeeVibe · 一起出发', 26);
+  paragraph('weevibe*', 36);
+  paragraph("YOU’RE INVITED!", 22, '#7f9f63');
   y += 20;
   paragraph(card.name, 36);
   paragraph(card.cancelled ? '活动已取消 · 请勿按旧图报名' : '最新安排以链接为准', 26, card.cancelled ? '#8a263d' : '#222222');
   paragraph(`行程快照 ${card.capturedAt}`, 20, '#625f58');
   paragraph('以下时间均为北京时间 UTC+8', 20, '#625f58');
-  blocks.push({ x: 24, y: 24, width: 702, height: y - 22, radius: 28, color: card.cancelled ? '#FF9DAB' : '#A7F05A' });
+  blocks.push({ x: 24, y: 24, width: 702, height: y - 22, radius: 28, color: '#F8F6F0' });
   card.segments.forEach((segment, index) => {
     const top = y + 14; y = top + 44;
     paragraph(`${index + 1}. ${segment.name}${segment.main ? ' · 主环节' : ''}${segment.cancelled ? ' · 已取消' : ''}`, 28, segment.cancelled ? '#8a263d' : '#222222');
@@ -68,7 +69,7 @@ export function cardLayout(card: ActivityCardModel) {
     paragraph(segment.fee);
     if (segment.feeNote) paragraph(`费用说明 ${segment.feeNote}`, 20, '#625f58');
     paragraph(`${segment.verification} · ${segment.booking}`, 20, '#625f58');
-    blocks.push({ x: 24, y: top, width: 702, height: y - top + 8, radius: 28, color: segment.main ? '#eee8fc' : '#ffffff' });
+    blocks.push({ x: 24, y: top, width: 702, height: y - top + 8, radius: 28, color: segment.cancelled ? '#eceae5' : segment.main ? '#e8f8d4' : '#eee6fb' });
     y += 22;
   });
   y += 32;
