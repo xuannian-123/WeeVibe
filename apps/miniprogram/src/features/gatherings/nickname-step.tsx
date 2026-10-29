@@ -2,15 +2,15 @@ import {useContext,useEffect,useState} from 'react';
 import Taro from '@tarojs/taro';
 import {Button,Input,Text,View} from '@tarojs/components';
 import './nickname-step.css';
-import {GatheringNicknameChrome} from './page-chrome';
+import {GatheringDesignChrome} from './page-chrome';
 
 type Props={value:string;mode:'form'|'interview';busy:boolean;saving:boolean;notice:string;change:(value:string)=>void;switchMode:(mode:'form'|'interview')=>void;adopt:()=>void;next:()=>void;cancel:()=>void};
 
 /** Presentation only: account reads, validation and draft ownership stay in the intake controller. */
 export function GatheringNicknameStep({value,mode,busy,saving,notice,change,switchMode,adopt,next,cancel}:Props){
   const[keyboard,setKeyboard]=useState(0);
-  const chrome=useContext(GatheringNicknameChrome);
-  useEffect(()=>{chrome?.(true);return()=>chrome?.(false);},[chrome]);
+  const chrome=useContext(GatheringDesignChrome);
+  useEffect(()=>{chrome?.('nickname');return()=>chrome?.(null);},[chrome]);
   useEffect(()=>{
     const changed=(event:{height:number})=>setKeyboard(Math.max(0,event.height));
     Taro.onKeyboardHeightChange?.(changed);

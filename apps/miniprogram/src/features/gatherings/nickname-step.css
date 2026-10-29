@@ -1,5 +1,4 @@
 /* Approved C nickname screen. Scoped to this step; no global controls or later steps change. */
-.gg-screen.gg-screen-nickname{background:#f8f6f0;color:#222}.gg-screen-nickname>.gg-back{color:#222;font-weight:700}
 .gg-nickname{background:#f8f6f0;color:#222;min-width:0;padding:22px 0 calc(220px + env(safe-area-inset-bottom));font-size:28px}
 .gg-nickname button{box-sizing:border-box;white-space:normal;line-height:1.5;color:#222;font-size:28px;font-weight:700;margin:0}
 .gg-nickname button::after{border:0}.gg-nickname button[disabled]{opacity:.45}

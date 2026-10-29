@@ -11,10 +11,10 @@ import {GatheringManage} from './manage';
 import {GatheringProfileBoundary} from './profile-boundary';
 import {gatheringMessage,readGathering} from './client';
 import './gatherings.css';
-import {GatheringNicknameChrome} from './page-chrome';
+import {GatheringDesignChrome} from './page-chrome';
 
 export default function GatheringPage(){
-  const[nicknameChrome,setNicknameChrome]=useState(false);
+  const[designChrome,setDesignChrome]=useState<'nickname'|'plan'|null>(null);
   const params=useRouter().params,parsedId=activityIdSchema.safeParse(params.id),id=parsedId.success?parsedId.data:'',kind=params.new==='friend'||params.new==='team'?params.new:undefined,entry=params.entry==='share'?'share':'manage';
   const[identity,setIdentity]=useState<{actor:string;session:string}>(),[stored,setStored]=useState<{actor:string;session:string;data:GatheringSnapshot}>(),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
   const snapshot=identity&&stored?.actor===identity.actor&&stored.session===identity.session&&stored.data.gathering.id===id?stored.data:undefined;
@@ -43,9 +43,9 @@ export default function GatheringPage(){
   const valid=!!identity&&identity.session===getToken();
   useShareAppMessage(()=>identity?.session===getToken()&&snapshot?{title:`${snapshot.gathering.title}｜${snapshot.gathering.kind==='friend'?'朋友出游':'一起团建'}`,path:`/pages/gathering/index?id=${snapshot.gathering.id}&entry=share`,imageUrl:safeShare}:{title:'WeeVibe · 一起出发',path:'/pages/index/index',imageUrl:safeShare});
   const update=(next:GatheringSnapshot)=>{if(valid&&identity&&mounted.current&&visible.current&&next.gathering.id===id)accept(identity,next);};
-  return <GatheringNicknameChrome.Provider value={setNicknameChrome}><View className={`gg-screen${nicknameChrome?' gg-screen-nickname':''}`}>{!nicknameChrome&&<View className="gg-top"><Text className="gg-brand">WeeVibe<Text>•</Text></Text><Text className="gg-muted">好时光，一起。</Text></View>}<Button className="gg-back" onClick={()=>void Taro.navigateBack({fail:()=>void Taro.reLaunch({url:'/pages/index/index'})}).catch(()=>{})}>← 返回</Button>
+  return <GatheringDesignChrome.Provider value={setDesignChrome}><View className={`gg-screen${designChrome?' gg-screen-designed':''}`}>{!designChrome&&<View className="gg-top"><Text className="gg-brand">WeeVibe<Text>•</Text></Text><Text className="gg-muted">好时光，一起。</Text></View>}{designChrome!=='plan'&&<Button className="gg-back" onClick={()=>void Taro.navigateBack({fail:()=>void Taro.reLaunch({url:'/pages/index/index'})}).catch(()=>{})}>← 返回</Button>}
     {notice&&<Text className="gg-notice error">{notice}</Text>}
     {valid&&identity?<GatheringProfileBoundary actor={identity.actor} session={identity.session} cancel={()=>void Taro.reLaunch({url:'/pages/index/index'})}>{id?snapshot?<GatheringManage key={`${identity.actor}:${identity.session}:${id}:${entry}`} entry={entry} snapshot={snapshot} actor={identity.actor} session={identity.session} update={update} refresh={refresh}/>:<View className="gg-empty"><Text>{busy?'正在读取筹备…':'暂时无法确认筹备内容'}</Text><Button className="gg-secondary" disabled={busy} onClick={()=>void refresh()}>重新读取</Button></View>:kind?<GatheringDesigner key={`${identity.actor}:${identity.session}:${kind}`} actor={identity.actor} session={identity.session} kind={kind}/>:null}</GatheringProfileBoundary>:<View className="gg-panel"><Text className="gg-heading">先认识一下，再一起出发</Text><Text className="gg-muted">使用微信身份后继续；当前入口会保留。</Text><Button className="gg-primary" disabled={busy} loading={busy} onClick={()=>void login()}>{busy?'正在确认微信身份…':'微信登录并继续'}</Button></View>}
     <PrivacyConsent/>
-  </View></GatheringNicknameChrome.Provider>;
+  </View></GatheringDesignChrome.Provider>;
 }
