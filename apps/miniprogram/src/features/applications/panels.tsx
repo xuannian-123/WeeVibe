@@ -46,7 +46,7 @@ export function MyParticipationPanel({ detail, state }: { detail: ActivityDetail
         </View>;
       })}
       {detail.viewer.participations.some(p => detail.cancelled_at || detail.segments.find(s => s.segment_id === p.segment_id)?.cancelled_at) && <Notice>已取消部分仅保留原参加与接受记录，不代表当前有效席位或同意继续参加；未自动退出、退订或退款。</Notice>}
-      {detail.viewer.participations.some(p => p.status === 'awaiting_acceptance' && !detail.cancelled_at && !detail.segments.find(s => s.segment_id === p.segment_id)?.cancelled_at) && <Notice>安排有变化，你的席位仍保留。请查看安排版本审阅状态；历史不可核验时不能在线接受，请与发起人确认。当前版本审阅不代表安排修改入口已经开放。</Notice>}
+      {detail.viewer.participations.some(p => p.status === 'awaiting_acceptance' && !detail.cancelled_at && !detail.segments.find(s => s.segment_id === p.segment_id)?.cancelled_at) && <Notice>安排有变化，你的席位仍保留。请查看安排版本审阅状态；历史不可核验时不能在线接受，请与发起人确认。管理者修改后仍需本人查看差异并接受。</Notice>}
       {detail.viewer.applications.map(application => <View className="activity-personal-row" key={application.application_id}>
         <Text>{application.segments.map(s => detail.segments.find(v => v.segment_id === s.segment_id)?.name ?? '历史环节').join(' ＋ ')}</Text>
         <Text className="activity-personal-state">{applicationLabels[application.status]}</Text>

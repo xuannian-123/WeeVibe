@@ -19,8 +19,14 @@ export function changeParticipation(activityId: string, actorId: string, raw: Pa
   return mutation(async tx => {
     // Same parent lock as applications and approvals: seats cannot race approval.
     const activity = await lockActivity(tx, activityId);
-    const result = async () => ({ activity: await activitySnapshot(tx, activityId, actorId), notice: input.action === 'exit' ? exitNotice : lateNotice, fee_recheck_required: input.action === 'exit' });
-    if (await replay(tx, actorId, input.idempotency_key, scope, fingerprint)) return result();
+    const result = async (replayed = false) => ({
+      activity: await activitySnapshot(tx, activityId, actorId),
+      // A user may already have rejoined since an earlier exit succeeded.
+      // A read-only replay must not present that historic exit as a new one.
+      notice: replayed ? '原请求已处理，本次未重复变更。当前席位、晚到及接受状态请以最新参加记录为准。' : input.action === 'exit' ? exitNotice : lateNotice,
+      fee_recheck_required: input.action === 'exit'
+    });
+    if (await replay(tx, actorId, input.idempotency_key, scope, fingerprint)) return result(true);
     checkNotCancelled(activity.cancelledAt);
     checkRevision(activity.revision, input.expected_revision);
     const now = new Date();

@@ -57,3 +57,18 @@ vi.mock('../apps/miniprogram/src/features/deadline/DeadlinePanel', () => ({ Dead
 
 // This existing feature suite isolates the booking sibling; booking-screen-ui and independent complete-Screen probes verify the new declaration/history composition.
 vi.mock('../apps/miniprogram/src/features/booking/BookingPanel', () => ({ BookingPanel: () => null }));
+
+it('shows replacement deficit after exit and waits for manual recovery when a new snapshot reaches minimum', async () => {
+  const value = ready();
+  Object.assign(value.segments[0].counts, { occupied_count: 3, accepted_count: 3, remaining_capacity: 3, meets_minimum: false });
+  value.segments[0].is_join_open = true;
+  h.controller.detail = value;
+  await render();
+  expect(document.body.textContent).toContain('主环节待补位');
+  expect(document.body.textContent).toContain('还差 1 人');
+  h.next = ready(); h.next.revision = 2; h.next.segments[0].verification_status = 'manual_checked';
+  await displayNext();
+  expect(document.body.textContent).toContain('主环节待确认成局');
+  expect(document.body.textContent).toContain('不因补齐人数自动成局');
+  expect(h.transport).not.toHaveBeenCalled();
+});

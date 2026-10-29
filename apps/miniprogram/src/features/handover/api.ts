@@ -94,7 +94,7 @@ export async function submitHandover(id: string, raw: HandoverOperation, actorId
 export function handoverErrorMessage(error: unknown) {
   if (!(error instanceof ApiClientError)) return undefined;
   const messages: Record<string, string> = {
-    HANDOVER_SCOPE_UNAVAILABLE: '本片仅支持仍参加至少一个未取消、尚未开始且已接受当前安排环节的接任人；其它资格范围暂未启用。待接记录不会因此自动删除。',
+    HANDOVER_SCOPE_UNAVAILABLE: '接任人须仍参加至少一个未取消、尚未结束的有效环节。待接记录不会因此自动删除。',
     HANDOVER_ALREADY_PENDING: '已有一份待接交接，请先处理或由当前管理者撤回，不能同时邀请多人竞争接任。',
     HANDOVER_ALREADY_RESOLVED: '这份交接已有处理结果，请刷新核对；不会重复切换管理权。',
     ACTIVITY_CANCELLED: '整场活动已取消，待接交接不能再生效；已生效的管理归属不会因此回到原发起人。'

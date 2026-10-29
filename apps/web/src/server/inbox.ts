@@ -4,6 +4,7 @@ import { inboxSchema, type InboxMessage } from '@weevibe/contracts';
 import { withDb } from './db';
 import { ServiceError } from './http';
 import type { Tx } from './activities/state';
+import { handoverMessage } from './handover-message';
 import { requirementMessageSelect, requirementMessages } from './requirements/messages';
 
 // Source messages are projected for the authenticated actor. Read state never
@@ -15,10 +16,10 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
         _count: { select: { applications: { where: { status: 'pending' } } } },
         applications: { where: { activity: { currentManagerId: actor } }, orderBy: { createdAt: 'desc' }, take: 100, select: { id: true, status: true, createdAt: true } },
         segments: { select: { id: true, planRevision: true, cancelledAt: true, startsAt: true, participations: { where: { userId: actor }, select: { userId: true, joinedAt: true, exitedAt: true, status: true, acceptedPlanRevision: true } } } },
-        events: { where: { type: { in: ['segment_capacity_changed', 'segment_deadline_extended', 'activity_cancelled', 'main_segment_changed', 'formation_confirmed', 'arrangement_changed', 'segment_arrangement_changed'] } }, orderBy: { createdAt: 'desc' }, take: 30, select: { id: true, type: true, createdAt: true, detail: true } },
+        events: { where: { type: { in: ['segment_capacity_changed', 'segment_deadline_extended', 'activity_cancelled', 'main_segment_changed', 'formation_confirmed', 'arrangement_changed', 'segment_arrangement_changed', 'segment_plan_changed', 'activity_arrangement_edited'] } }, orderBy: { createdAt: 'desc' }, take: 30, select: { id: true, type: true, createdAt: true, detail: true } },
       } }),
     tx.activityApplication.findMany({ where: { applicantUserId: actor, status: { in: ['approved', 'rejected'] } }, orderBy: { decidedAt: 'desc' }, take: 100, select: { id: true, activityId: true, status: true, decidedAt: true, activity: { select: { name: true } } } }),
-    tx.managementHandover.findMany({ where: { OR: [{ fromUserId: actor }, { toUserId: actor }] }, orderBy: { createdAt: 'desc' }, take: 100, select: { id: true, activityId: true, fromUserId: true, toUserId: true, status: true, createdAt: true, activity: { select: { name: true, currentManagerId: true, cancelledAt: true } } } }),
+    tx.managementHandover.findMany({ where: { OR: [{ fromUserId: actor }, { toUserId: actor }] }, orderBy: { createdAt: 'desc' }, take: 100, select: { id: true, activityId: true, fromUserId: true, toUserId: true, status: true, createdAt: true, resolvedAt: true, fromManagementRevision: true, activity: { select: { name: true, currentManagerId: true, managementRevision: true, cancelledAt: true } } } }),
     tx.requirementSurvey.findMany({ where: { status: { not: 'draft' }, AND: [{ OR: [{ activityId: null, ownerUserId: actor }, { activity: { currentManagerId: actor } }, { responses: { some: { userId: actor } } }] }, { OR: [{ deadlineAt: { lte: now } }, { closedAt: { not: null } }] }] }, select: requirementMessageSelect, orderBy: { updatedAt: 'desc' }, take: 100 }),
     tx.gatheringNotificationRecipient.findMany({where:{userId:actor},orderBy:[{createdAt:'desc'},{id:'asc'}],take:100,select:{id:true,createdAt:true,event:{select:{action:true,gatheringId:true,gathering:{select:{kind:true}}}}}}),
   ]);
@@ -34,7 +35,7 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
       const detail = event.detail && typeof event.detail === 'object' && !Array.isArray(event.detail) ? event.detail as Record<string, unknown> : {};
       const own = activity.segments.filter(s => (typeof detail.segment_id !== 'string' || s.id === detail.segment_id) && s.participations.some(p => p.joinedAt <= event.createdAt && (!p.exitedAt || p.exitedAt >= event.createdAt)));
       if (!own.length && activity.currentManagerId !== actor) continue;
-      const changed = ['segment_capacity_changed', 'segment_deadline_extended', 'arrangement_changed', 'segment_arrangement_changed'].includes(event.type);
+      const changed = ['segment_capacity_changed', 'segment_deadline_extended', 'arrangement_changed', 'segment_arrangement_changed', 'segment_plan_changed', 'activity_arrangement_edited'].includes(event.type);
       const pending = changed && !activity.cancelledAt && own.some(s => !reviewedSegments.has(s.id) && !s.cancelledAt && s.startsAt > now && s.participations.some(p => p.status === 'joined' && p.acceptedPlanRevision !== s.planRevision));
       if (changed) for (const segment of own) reviewedSegments.add(segment.id);
       const summary = event.type === 'activity_cancelled' ? '活动已取消，请查看最新通知' : event.type === 'formation_confirmed' ? '组织者已确认成局' : event.type === 'main_segment_changed' ? '活动主要环节已调整' : pending ? '活动安排有变化，请查看并确认是否继续参加' : '活动安排已更新，请查看最新详情';
@@ -42,11 +43,7 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
     }
   }
   for (const application of decisions) if (application.decidedAt) messages.push({ id: `application:${application.id}:${application.status}`, activity_id: application.activityId, title: application.activity.name, summary: application.status === 'approved' ? '你的报名已通过，查看参加的环节和安排' : '你的报名未通过，可查看活动最新情况', created_at: application.decidedAt.toISOString(), read: false, pending: false, status: application.status === 'approved' ? '已加入' : '未通过', section: 'activity' });
-  for (const offer of offers) {
-    const pending = offer.status === 'pending' && offer.toUserId === actor && !offer.activity.cancelledAt && offer.activity.currentManagerId === offer.fromUserId;
-    const status = ({ pending: offer.toUserId === actor ? '待接任' : '等待回应', accepted: '已接任', rejected: '已拒绝', withdrawn: '已撤回', invalidated: '已失效' })[offer.status];
-    messages.push({ id: `handover:${offer.id}`, activity_id: offer.activityId, title: offer.activity.name, summary: offer.toUserId === actor ? '你收到一份活动管理交接邀请' : '查看你发起的管理交接进展', created_at: offer.createdAt.toISOString(), read: false, pending, status, section: 'handover' });
-  }
+  for (const offer of offers) messages.push(handoverMessage(offer, actor));
   for (const survey of surveys) for (const source of requirementMessages(survey, new Set(), now)) messages.push({ ...source, title: source.title.slice(0, 200), summary: source.title.slice(0, 300), pending: false, status: '筹备进展', section: 'requirement' });
   for(const notice of gatheringNotices){
     const friend=notice.event.gathering.kind==='friend',updated=notice.event.action==='updated';

@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { arrangementReviewV3Schema, arrangementAgreementV3, reacceptArrangementCommandSchema, type ActivityDetail, type ArrangementReviewV3, type ReacceptArrangementCommand } from '@weevibe/contracts';
+import { arrangementReviewV3Schema, arrangementAgreementV3, reacceptArrangementCommandSchema, type ActivityDetail, type ArrangementReviewV3, type ArrangementReviewV4, type ReacceptArrangementCommand } from '@weevibe/contracts';
 import { ServiceError } from '../http';
 import { withDb } from '../db';
 import { loadActivity, lockActivity, type Tx } from './state';
@@ -8,6 +8,7 @@ import { replay, remember } from './idempotency';
 import { activitySnapshot } from './snapshot';
 import { checkNotCancelled, checkRevision, requestFingerprint } from './rules';
 import { arrangementHistory, arrangementPlan } from './arrangement-history';
+import { reviewGeneralHistory } from './arrangement-history-v4';
 type State = Awaited<ReturnType<typeof loadActivity>>;
 function ownJoined(activity: State, segmentId: string, actorId: string) {
   const segment = activity.segments.find(s => s.id === segmentId);
@@ -16,7 +17,7 @@ function ownJoined(activity: State, segmentId: string, actorId: string) {
   if (!participation) throw new ServiceError('FORBIDDEN', 403, '仅本人仍占位的环节可查看变化或重新接受，管理身份不能代替成员接受');
   return { segment, participation };
 }
-async function review(tx: Tx, activity: State, segmentId: string, actorId: string): Promise<ArrangementReviewV3> {
+async function review(tx: Tx, activity: State, segmentId: string, actorId: string): Promise<ArrangementReviewV3 | ArrangementReviewV4> {
   const { segment, participation } = ownJoined(activity, segmentId, actorId);
   const current = arrangementPlan(segment);
   const base = { schema_version: 3 as const, history_format: 'verified_v3' as const, activity_id: activity.id, segment_id: segment.id, viewer_user_id: actorId, revision: activity.revision,
@@ -24,6 +25,8 @@ async function review(tx: Tx, activity: State, segmentId: string, actorId: strin
     server_time: new Date().toISOString(), current_plan: current };
   if (participation.acceptedPlanRevision === segment.planRevision) return arrangementReviewV3Schema.parse({ ...base,
     state: 'up_to_date', can_reaccept: false, reason: 'UP_TO_DATE', accepted_plan: arrangementAgreementV3(current), history_digest: null, history_anchor: null, changes: [], capacity_changes: [], deadline_changes: [] });
+  const general = await reviewGeneralHistory(tx, activity, segment, actorId, participation.acceptedPlanRevision);
+  if (general) return general;
   const history = await arrangementHistory(tx, activity, segment, actorId, participation.acceptedPlanRevision, current);
   base.server_time = new Date().toISOString();
   if (!history) return arrangementReviewV3Schema.parse({ ...base, state: 'unavailable', can_reaccept: false, reason: 'HISTORY_UNAVAILABLE', accepted_plan: null, history_digest: null, history_anchor: null, changes: [], capacity_changes: [], deadline_changes: [] });
@@ -32,7 +35,7 @@ async function review(tx: Tx, activity: State, segmentId: string, actorId: strin
   const reason = activity.cancelledAt || segment.cancelledAt ? 'CANCELLED' : now >= segment.startsAt ? 'SEGMENT_STARTED' : null;
   return arrangementReviewV3Schema.parse({ ...base, state: 'ready', can_reaccept: reason === null, reason, accepted_plan: history.accepted, history_digest: history.digest, history_anchor: history.anchor, changes: history.changes, capacity_changes: history.capacityChanges, deadline_changes: history.deadlineChanges });
 }
-export function getArrangementReview(activityId: string, segmentId: string, actorId: string): Promise<ArrangementReviewV3> {
+export function getArrangementReview(activityId: string, segmentId: string, actorId: string): Promise<ArrangementReviewV3 | ArrangementReviewV4> {
   return withDb(db => db.$transaction(async tx => {
     const activity = await loadActivity(tx, activityId);
     return review(tx, activity, segmentId, actorId);
