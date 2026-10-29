@@ -13,7 +13,7 @@ vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=> 'session-a',t
 vi.mock('../apps/miniprogram/src/platform/activities',()=>({rememberActivity:h.remember}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{showModal:h.modal,getStorageSync:(key:string)=>h.store.get(key),setStorageSync:(key:string,value:unknown)=>h.store.set(key,value),removeStorageSync:(key:string)=>h.store.delete(key)},useDidHide:()=>{},useDidShow:()=>{},useUnload:()=>{}}));
 // Keep the real sibling MainSegmentPanel mounted; extend only the native primitive fixture.
-vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Radio:()=>null,RadioGroup:(p:any)=>createElement('div',{},p.children),Label:(p:any)=>createElement('label',{},p.children),Button:(p:any)=>createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{},p.children),Text:(p:any)=>createElement('span',{},p.children)}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Radio:()=>null,RadioGroup:(p:any)=>createElement('div',{},p.children),Label:(p:any)=>createElement('label',{},p.children),Button:(p:any)=>createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{hidden:p.hidden,style:p.style},p.children),Text:(p:any)=>createElement('span',{},p.children)}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/use-activity-detail',()=>({useActivityDetail:()=>h.controller}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/itinerary',()=>({Itinerary:()=>null}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/more',()=>({ActivityMore:()=>null}));
@@ -71,4 +71,11 @@ it('shows replacement deficit after exit and waits for manual recovery when a ne
   expect(document.body.textContent).toContain('主环节待确认成局');
   expect(document.body.textContent).toContain('不因补齐人数自动成局');
   expect(h.transport).not.toHaveBeenCalled();
+});
+
+describe('actual activity section visibility and acknowledged applications',()=>{
+  const visible=(label:string)=>Array.from(document.querySelectorAll('button')).find(b=>b.textContent===label&&!b.closest('[hidden]')&&!b.closest('[style*="display: none"]'));
+  it('opens only the selected feature and returns to the itinerary',async()=>{await render();expect(visible('标记已人工核实')).toBeUndefined();expect(button('标记已人工核实').closest('[style*="display: none"]')).toBeTruthy();await click('更多活动操作');await click('核实与确认成局');expect(visible('标记已人工核实')).toBeTruthy();expect(visible('申请同伴操作')).toBeUndefined();await click('返回活动');expect(visible('标记已人工核实')).toBeUndefined();});
+  it('shows my status only after the same actor and activity application is acknowledged',async()=>{await render();await click('选择参加环节');expect(visible('申请同伴操作')).toBeTruthy();h.controller.applications.apply.result=applicationDetail();await render();expect(visible('申请同伴操作')).toBeUndefined();expect(document.body.textContent).toContain('我的参加，我来安排');});
+  it('keeps the form on an uncertain result or a different actor result',async()=>{await render();await click('选择参加环节');h.controller.applications.apply.pending={userId:applicantA};await render();expect(visible('申请同伴操作')).toBeTruthy();h.controller.applications.apply.result={...applicationDetail(),viewer:{...applicationDetail().viewer,user_id:'11111111-1111-4111-8111-111111111111'}};await render();expect(visible('申请同伴操作')).toBeTruthy();});
 });

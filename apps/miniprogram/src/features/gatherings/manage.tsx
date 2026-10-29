@@ -56,7 +56,7 @@ export function GatheringManage({snapshot,actor,session,entry='manage',update,re
     if(!source.valid()||finalized||!snapshot.viewer.can_respond||writing||actionLock.current)return;
     actionLock.current=true;const guard=source.ticket();
     const input={...(snapshot.viewer.is_member?{}:{join_if_needed:true}),expected_version:editVersion.current,expected_revision:editRevision.current,idempotency_key:newKey(),intake};
-    try{const intent=await subscription.requestFromTap();guard();if(intent)await subscription.record(id,intent);guard();await saveWrite.send(input);}
+    try{guard();await saveWrite.send(input);}
     catch(error){if(source.valid())setNotice(gatheringMessage(error));}finally{actionLock.current=false;}
   }
   function saveDetails(details:GatheringDetails){if(!source.valid()||finalized)return;void detailWrite.send({expected_revision:editRevision.current,details:{...details,confirmed_details:(['date','title','start_time','end_date','end_time','place','address','description','approximate_time','minimum','capacity','fee'] as const).filter(key=>key==='fee'?details.fee.amount!==null||!!details.fee.note:details[key]!==''&&details[key]!==null)}});}

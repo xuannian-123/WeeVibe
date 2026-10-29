@@ -34,9 +34,10 @@ export function useGatheringSubscription(actor:string,session:string){
     if(!config?.enabled||!config.template_id||typeof Taro.requestSubscribeMessage!=='function'){
       setNotice('微信提醒暂未开启；成员更新仍会保存在小程序消息中。');return;
     }
-    lock.current=true;setAuthorizing(true);setNotice('');const guard=source.ticket(),template=config.template_id;
+    lock.current=true;setAuthorizing(true);setNotice('');const guard=source.ticket(),template=config.template_id;let timer:ReturnType<typeof setTimeout>|undefined;
     try{
       const result=await new Promise<string>((resolve,reject)=>{
+        timer=setTimeout(()=>reject(Error('SUBSCRIPTION_TIMEOUT')),20000);
         try{const pending=(Taro.requestSubscribeMessage as unknown as WechatSubscribe)({tmplIds:[template],success:value=>resolve(String(value[template]??'')),fail:()=>reject(Error('SUBSCRIPTION_UNAVAILABLE'))});
           if(pending&&typeof pending.catch==='function')void pending.catch(()=>reject(Error('SUBSCRIPTION_UNAVAILABLE')));
         }catch{reject(Error('SUBSCRIPTION_UNAVAILABLE'));}
@@ -46,7 +47,7 @@ export function useGatheringSubscription(actor:string,session:string){
       if(result!=='accept')setNotice('你未开启微信提醒；站内更新仍会保留。');
       return {authorization_key:newKey(),template_id:template,result};
     }catch{if(source.valid())setNotice('微信提醒授权未完成，提交和站内提醒仍可继续。');return;}
-    finally{lock.current=false;if(source.alive())setAuthorizing(false);}
+    finally{if(timer)clearTimeout(timer);lock.current=false;if(source.alive())setAuthorizing(false);}
   }
   async function record(gatheringId:string,intent:Intent){if(source.valid())await write.send({...intent,gathering_id:gatheringId});}
   return {config,authorizing,busy:authorizing||write.busy,pending:write.pending,notice:write.message||notice,requestFromTap,record,retry:()=>write.send(),reload:load};
