@@ -1,13 +1,22 @@
 import {createHash} from 'node:crypto';
 import {gatheringWorkflowCommandSchema,gatheringWorkflowStateSchema,gatheringDetailsSchema,gatheringItinerarySchema,privateGatheringInputText,type GatheringSnapshot,type GatheringWorkflowState} from '@weevibe/contracts';
-import type {Gathering} from '@prisma/client';
+import {Prisma,type Gathering} from '@prisma/client';
 import type {Tx} from '../activities/state';
-import {mutation} from '../activities/mutation';
+import {withDb} from '../db';
 import {ServiceError} from '../http';
 import {consumeRequirementBudget} from '../requirements/service';
 import {lockGathering,readGatheringRows,gatheringSnapshotTx,gatheringJson,assertGatheringOwner,assertGatheringEditable,gatheringConflict} from './service';
 import {gatheringSourceFingerprint,type PublicGatheringRow} from './privacy';
 import {enqueueGatheringLifecycle} from './notifications';
+
+// Every workflow write locks the gathering before reading its state. READ
+// COMMITTED lets the next waiter read the completed command after acquiring
+// that lock, including when two final confirmations arrive together. It avoids
+// committing from an obsolete SERIALIZABLE snapshot; the parent lock, source
+// fingerprint and explicit versions remain the concurrency boundary.
+function workflowMutation<T>(action:(tx:Tx)=>Promise<T>){
+ return withDb(db=>db.$transaction(action,{isolationLevel:Prisma.TransactionIsolationLevel.ReadCommitted,maxWait:5000,timeout:10000}));
+}
 
 export async function beginGatheringWorkflow(tx:Tx,row:Gathering,generationId:string,sourceHash:string){
  const state:GatheringWorkflowState={generation_id:generationId,source_hash:sourceHash,phase:'selecting',proposal_plan_id:null,proposal_version:0,coordination_note:'',selections:{},confirmations:{}};
@@ -33,7 +42,7 @@ export async function commandGatheringWorkflow(id:string,actor:string,raw:unknow
  const input=parsed.data,hash=createHash('sha256').update(JSON.stringify(input)).digest('hex');
  if(privateGatheringInputText.test(input.note))throw new ServiceError('INVALID_INPUT',400,'个人预算和出发地点请保留在私人填写中，协调说明不要包含这些内容');
  await consumeRequirementBudget(actor);
- return mutation(async tx=>{
+ return workflowMutation(async tx=>{
   const row=await lockGathering(tx,id),rows=await readGatheringRows(tx,id),own=rows.find(r=>r.userId===actor),owner=row.ownerUserId===actor;
   if(!owner&&(!own||own.responseVersion===0))throw new ServiceError('FORBIDDEN',403,'请先完成本人的填写');
   const previous=await tx.gatheringWorkflowCommand.findUnique({where:{gatheringId_actorId_key:{gatheringId:id,actorId:actor,key:input.idempotency_key}}});
