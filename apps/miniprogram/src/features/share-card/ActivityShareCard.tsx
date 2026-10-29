@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Taro, { useDidHide, useDidShow, useUnload } from '@tarojs/taro';
 import { Canvas, Image, Text, View } from '@tarojs/components';
 import type { ActivityDetail } from '@weevibe/contracts';
-import { Action, Notice, Panel } from '../../components/ui';
+import { Action, Notice, Panel } from '../activity-entry/ActivityUI';
 import { getToken } from '../../platform/api';
 import { ACTIVITY_SHARE_CANVAS, renderActivityCard } from './canvas';
 import { activityCardModel, cardLayout, QR_UNAVAILABLE } from './model';

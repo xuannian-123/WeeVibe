@@ -2,7 +2,7 @@ import { Checkbox, CheckboxGroup, Label, Text, View } from '@tarojs/components';
 import type { ActivityDetail } from '@weevibe/contracts';
 import type { useLogin } from '../../platform/page-state';
 import { feeText } from '../../platform/activities';
-import { Action, Field, Notice, Panel } from '../../components/ui';
+import { Action, Field, Notice, Panel } from '../activity-entry/ActivityUI';
 import type { ApplicationsState } from './use-applications';
 import { applicationLabels } from './labels';
 import { getToken } from '../../platform/api';

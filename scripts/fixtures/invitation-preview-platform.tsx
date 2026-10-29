@@ -8,6 +8,7 @@ export const useDidHide = () => {};
 export const useDidShow = () => {};
 export const useUnload = () => {};
 export const View = (p: Props) => createElement('view', { className: p.className, id: p.id, style: p.style }, p.children);
+export const ScrollView = View;
 export const Text = (p: Props) => createElement('text', { className: p.className }, p.children);
 export const Button = (p: Props) => createElement('button', { className: p.className, disabled: p.disabled, onClick: p.onClick, 'aria-label': p.ariaLabel }, p.children);
 export const Label = (p: Props) => createElement('label', { className: p.className }, p.children);

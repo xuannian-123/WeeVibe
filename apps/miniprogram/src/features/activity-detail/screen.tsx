@@ -1,8 +1,8 @@
 import Taro from '@tarojs/taro';
 import { useEffect, useRef, useState } from 'react';
 import { Text, View } from '@tarojs/components';
-import { BRAND_NAME } from '../../brand';
-import { Action, Notice, Panel } from '../../components/ui';
+import { ActivitySectionHeading } from '../activity-entry/ActivitySectionHeading';
+import { Action, Notice, Panel } from '../activity-entry/ActivityUI';
 import { ApprovalPanel, MyParticipationPanel, ApplicationForm } from '../applications/panels';
 import { AttributionPanel } from '../application-attribution/AttributionPanel';
 import { InvitationPanel } from '../invitations';
@@ -74,21 +74,8 @@ export default function ActivityDetailScreen() {
     decision: { ...applications.decision, send: async (...args: Parameters<typeof applications.decision.send>) => { if (!otherWriteBusy) await applications.decision.send(...args); } }
   };
   if (!id) return <View id="activity-activity" className="screen activity-page"><Panel title="没有找到这个活动"><Notice>活动入口不完整，请向朋友重新获取邀请。</Notice><Action onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>返回首页</Action></Panel></View>;
-  return <View id="activity-activity" className={`screen activity-page ${section==='overview'?'activity-invitation-page':''}`}>
-    {section!=='overview' && <View className="activity-hero">
-      <Text className="activity-eyebrow">{BRAND_NAME} · 一起出发</Text>
-      <Text className="activity-title">{detail?sectionTitles[section]||detail.name:'正在读取安排'}</Text>
-      {detail && <View className="activity-badges">
-        <Text className={`activity-badge ${detail.cancelled_at ? 'activity-badge-muted' : ''}`}>{formationProgress(detail).label}</Text>
-        <Text className="activity-role">{detail.viewer.is_manager ? '你在管理此活动' : userId ? '我的活动' : '朋友的邀请'} · {detail.segments.length}个环节</Text>
-      </View>}
-      <View className="activity-toolbar">
-        <Action variant="text" disabled={anyBusy || read.loading} onClick={() => { void read.refresh(); }}>{read.loading ? '更新中…' : '刷新安排'}</Action>
-        {!userId && <Action variant="primary" disabled={login.busy || anyBusy} onClick={() => { void login.login(); }}>{login.busy ? '登录中…' : '微信登录'}</Action>}
-      </View>
-    </View>}
-    {detail&&section!=='overview'&&<Text className="caption">{detail.name}</Text>}
-    {detail&&section!=='overview'&&<Action disabled={anyBusy} onClick={()=>setSection('overview')}>返回活动</Action>}
+  return <View id="activity-activity" className={`screen activity-page c-ui ${section==='overview'?'activity-invitation-page':''}`}>
+    {section!=='overview' && <ActivitySectionHeading title={detail?sectionTitles[section]||detail.name:'正在读取安排'} name={detail?.name} status={detail?formationProgress(detail).label:undefined} busy={anyBusy||login.busy||read.loading} back={()=>setSection('overview')} refresh={()=>{void read.refresh();}}/>}
     {detail && section==='overview' && <ActivityOverview key={`overview:${id}:${userId ?? 'guest'}`} suggest={() => { if(!anyBusy) void Taro.navigateTo({url:`/pages/requirements/index?activity_id=${detail.activity_id}`}).catch(() => { void Taro.showToast?.({title:'暂时无法打开，请重试',icon:'none'}); }); }} detail={detail} sourceId={sourceId} source={source.data} sourceLoading={source.loading} sourceError={source.error} busy={anyBusy || login.busy || read.loading || !!read.error} retrySource={source.retry} refresh={() => { void read.refresh(); }} open={next => { if (!anyBusy && !login.busy) setSection(next); }} />}
     {!detail && !read.loading && <Text className="activity-title">活动邀请</Text>}
     {read.loading && !detail && <Notice>正在加载活动安排…</Notice>}
@@ -141,6 +128,6 @@ export default function ActivityDetailScreen() {
     <View hidden={section!=='edit'} style={{display:section==='edit'?'':'none'}}>{detail && <ArrangementEditor key={`edit:${id}:${userId ?? 'guest'}`} detail={detail} session={read.data?.session} fresh={!read.error && !read.loading && !applications.anyBusy && !participationBusy && !invitationBusy && !formationBusy && !arrangementBusy && !withdrawalBusy && !cancellationBusy && !handoverBusy && !rebookBusy && !mainSegmentBusy && !capacityBusy && !deadlineBusy && !bookingBusy && !login.busy} anyBusy={editorPeerBusy || login.busy} refresh={read.refresh} onBusyChange={setEditBusy} />}</View>
 
     <View hidden={section!=='overview'} style={{display:section==='overview'?'':'none'}}>{detail && <ActivityMore detail={detail} showMore={showMore} setShowMore={setShowMore} login={login} anyBusy={anyBusy} />}</View>
-    <Action variant="text" disabled={anyBusy} onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>返回首页</Action>
+    <Action variant="text" disabled={anyBusy} onClick={() => { const pages = Taro.getCurrentPages?.(); if(pages && pages.length>1) void Taro.navigateBack({delta:1}); else void Taro.reLaunch({url:'/pages/index/index'}); }}>返回上一页／首页</Action>
   </View>;
 }

@@ -2,9 +2,11 @@
 import { useEffect, useState } from '../../apps/miniprogram/node_modules/react';
 import { createRoot } from '../../apps/miniprogram/node_modules/react-dom/client';
 import { applicationDetail, applicantB, applicationId, applicationSegment } from '../../tests/application-fixtures';
+import { ActivitySectionHeading } from '../../apps/miniprogram/src/features/activity-entry/ActivitySectionHeading';
+import { formationProgress } from '../../apps/miniprogram/src/features/formation/progress';
 import { ActivityOverview } from '../../apps/miniprogram/src/features/activity-entry/ActivityOverview';
 import { ApplicationForm, MyParticipationPanel, ApprovalPanel } from '../../apps/miniprogram/src/features/applications/panels';
-import { Action, Notice } from '../../apps/miniprogram/src/components/ui';
+import { Action, Notice } from '../../apps/miniprogram/src/features/activity-entry/ActivityUI';
 import { useApplications } from '../../apps/miniprogram/src/features/applications/use-applications';
 import { cardLayout, activityCardModel } from '../../apps/miniprogram/src/features/share-card/model';
 import { renderActivityCard } from '../../apps/miniprogram/src/features/share-card/canvas';
@@ -27,8 +29,8 @@ function Preview() {
   useEffect(()=>{if(new URLSearchParams(location.search).get('expanded')==='1'){setTimeout(()=>{Array.from(document.querySelectorAll('button')).find(b=>b.textContent?.startsWith('查看完整安排'))?.click();},100);}},[]);
   const state = useApplications({ id: detail.activity_id, detail, session: getToken(), fresh: true, refresh: async () => {} });
   const login = {busy:false, login:async()=>{setNotice('离线预览不执行微信登录；实际小程序将调用真实微信登录。');}};
-  return <div className="screen activity-page activity-invitation-page">
-    {section !== 'overview' && <Action onClick={()=>setSection('overview')}>返回活动</Action>}
+  return <div className="screen activity-page c-ui activity-invitation-page">
+    {section !== 'overview' && <ActivitySectionHeading title={({'apply':'选好你能参加的部分','participation':'我的参加，我来安排','approval':'看看谁想一起参加','arrangement':'看清变化，再接受','suggestions':'需求与建议','invitation':'分享给朋友'} as Record<string,string>)[section]} name={detail.name} status={formationProgress(detail).label} busy={false} back={()=>setSection('overview')} refresh={()=>setNotice('离线示例没有调用共享服务。')}/>}
     {notice && <Notice>{notice}</Notice>}
     {section === 'overview' && <><ActivityOverview suggest={()=>setSection('suggestions')} detail={detail} busy={false} open={setSection} retrySource={()=>{}} refresh={()=>setNotice('离线示例没有调用共享服务。')} sourceId={applicationId} source={{invitation_id:applicationId,activity_id:detail.activity_id,title:detail.name,inviter_display_name:'小林（离线示例）',inviter_avatar_url:null,starts_at:null,ends_at:null,timezone:'Asia/Shanghai',cancelled:!!detail.cancelled_at,source_only:true}}/></>}
     {section === 'apply' && <ApplicationForm detail={detail} state={state} login={login}/>}

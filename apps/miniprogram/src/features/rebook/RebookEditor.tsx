@@ -3,7 +3,7 @@ import Taro, { useDidHide, useDidShow, useUnload } from '@tarojs/taro';
 import { Text, View } from '@tarojs/components';
 import { ApiClientError } from '@weevibe/api-client';
 import { activityIdSchema, createActivityInputSchema, type CreateActivityInput } from '@weevibe/contracts';
-import { Action, Notice, Panel } from '../../components/ui';
+import { Action, Notice, Panel } from '../activity-entry/ActivityUI';
 import { getToken } from '../../platform/api';
 import { newKey, useLogin, usePageRead } from '../../platform/page-state';
 import { useStoredWrite } from '../../platform/write-state';

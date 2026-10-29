@@ -3,7 +3,7 @@ import { Button, Text, View } from '@tarojs/components';
 import type { MemberProfile } from '@weevibe/contracts';
 import { readMemberDirectory, readMemberProfile } from '../../platform/navigation-api';
 import { getToken } from '../../platform/api';
-import { Action, Notice } from '../../components/ui';
+import { Action, Notice } from '../activity-entry/ActivityUI';
 import { errorText } from '../../platform/page-state';
 import { ProfileCard } from '../shell/profile-card';
 

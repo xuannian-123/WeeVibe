@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Taro, { useDidHide, useDidShow, useUnload } from '@tarojs/taro';
 import { View, Text } from '@tarojs/components';
 import { activityDetailSchema, editArrangementInputSchema, verifySegmentInputSchema, type ActivityDetail, type ArrangementEditPreview, type EditArrangementInput } from '@weevibe/contracts';
-import { Action, Notice, Panel } from '../../components/ui';
+import { Action, Notice, Panel } from '../activity-entry/ActivityUI';
 import { ActivityEditor } from '../activity-create/activity-editor';
 import { type ActivityForm } from '../activity-create/form';
 import { feeText } from '../../platform/activities';

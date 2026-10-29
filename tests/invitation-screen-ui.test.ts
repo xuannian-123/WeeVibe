@@ -8,9 +8,9 @@ const req=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json'));
 const {createElement,act}=req('react') as typeof import('../apps/miniprogram/node_modules/@types/react');
 const {createRoot}=req('react-dom/client') as {createRoot:(host:Element)=>{render:(element:ReturnType<typeof createElement>)=>void;unmount:()=>void}};
 (globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
-const h=vi.hoisted(()=>({controller:{} as any,modal:vi.fn(),me:vi.fn(),transport:vi.fn(),created:vi.fn(),navigate:vi.fn()}));
+const h=vi.hoisted(()=>({controller:{} as any,modal:vi.fn(),me:vi.fn(),transport:vi.fn(),created:vi.fn(),navigate:vi.fn(),back:vi.fn(),relaunch:vi.fn(),pages:1,section:undefined as string|undefined}));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=> 'session-a',api:{me:h.me},transport:h.transport}));
-vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{showModal:h.modal,navigateTo:h.navigate},useDidHide:()=>{},useDidShow:()=>{},useUnload:()=>{}}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{showModal:h.modal,navigateTo:h.navigate,navigateBack:h.back,reLaunch:h.relaunch,getCurrentPages:()=>Array.from({length:h.pages},()=>({})),getCurrentInstance:()=>({router:{params:{section:h.section}}})},useDidHide:()=>{},useDidShow:()=>{},useUnload:()=>{}}));
 // Keep the real sibling MainSegmentPanel mounted; extend only the native primitive fixture.
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Radio:()=>null,RadioGroup:(p:any)=>createElement('div',{},p.children),Label:(p:any)=>createElement('label',{},p.children),Button:(p:any)=>createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{hidden:p.hidden,style:p.style,id:p.id,className:p.className},p.children),Text:(p:any)=>createElement('span',{className:p.className},p.children)}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/use-activity-detail',()=>({useActivityDetail:()=>h.controller}));
@@ -22,7 +22,7 @@ vi.mock('../apps/miniprogram/src/features/participation/ParticipationActions',()
 vi.mock('../apps/miniprogram/src/features/handover/HandoverPanel',()=>({HandoverPanel:(p:any)=>createElement('button',{disabled:p.anyBusy||!p.fresh},'交接同伴操作')}));
 import ActivityDetailScreen from '../apps/miniprogram/src/features/activity-detail/screen';
 let root:ReturnType<typeof createRoot>|undefined;
-beforeEach(()=>{const detail=applicationDetail();h.controller={id:applicationActivity,detail,userId:applicantA,read:{data:{detail,session:'session-a'},loading:false,error:'',refresh:vi.fn()},login:{busy:false,error:''},applications:{fresh:true,anyBusy:false,apply:{send:vi.fn()},decision:{send:vi.fn()},submit:vi.fn(),decide:vi.fn()},setOutgoingInvitationId:h.created};h.navigate.mockReset().mockResolvedValue({});h.created.mockReset();h.modal.mockReset().mockResolvedValue({confirm:true});h.me.mockReset().mockResolvedValue({user_id:applicantA});h.transport.mockReset().mockResolvedValue({status:200,body:{invitation_id:applicationId,activity_id:applicationActivity,title:'source',inviter_display_name:null,inviter_avatar_url:null,starts_at:null,ends_at:null,timezone:'UTC',cancelled:false,source_only:true}});});
+beforeEach(()=>{h.pages=1;h.section=undefined;h.back.mockReset();h.relaunch.mockReset();const detail=applicationDetail();h.controller={id:applicationActivity,detail,userId:applicantA,read:{data:{detail,session:'session-a'},loading:false,error:'',refresh:vi.fn()},login:{busy:false,error:''},applications:{fresh:true,anyBusy:false,apply:{send:vi.fn()},decision:{send:vi.fn()},submit:vi.fn(),decide:vi.fn()},setOutgoingInvitationId:h.created};h.navigate.mockReset().mockResolvedValue({});h.created.mockReset();h.modal.mockReset().mockResolvedValue({confirm:true});h.me.mockReset().mockResolvedValue({user_id:applicantA});h.transport.mockReset().mockResolvedValue({status:200,body:{invitation_id:applicationId,activity_id:applicationActivity,title:'source',inviter_display_name:null,inviter_avatar_url:null,starts_at:null,ends_at:null,timezone:'UTC',cancelled:false,source_only:true}});});
 afterEach(async()=>{if(root)await act(async()=>root!.unmount());root=undefined;document.body.innerHTML='';});
 async function render(){if(!root){const host=document.createElement('div');document.body.append(host);root=createRoot(host);}await act(async()=>root!.render(createElement(ActivityDetailScreen)));}
 function button(name:string){const value=Array.from(document.querySelectorAll('button')).find(b=>b.textContent===name)!;expect(value).toBeTruthy();return value;}
@@ -108,4 +108,14 @@ it('separates the fee amount from notes and preserves zero-cost and cancelled hi
  expect(document.querySelector('.ia-cost')?.textContent).toBe('¥0.00 / 人');
  expect(document.querySelector('.ia-arrangement')?.textContent).toContain('参考费用，非已付款；现场核对');
  expect(document.querySelector('.ia-arrangement')?.textContent).toContain('原安排记录，未自动退订或退款');
+});
+
+it('returns to the actual source page instead of replacing the source navigation stack',async()=>{
+ h.pages=2;await render();await act(async()=>button('返回上一页／首页').click());
+ expect(h.back).toHaveBeenCalledExactlyOnceWith({delta:1});expect(h.relaunch).not.toHaveBeenCalled();
+});
+it('falls back to home for a standalone invitation and opens message-targeted approvals directly',async()=>{
+ h.section='applications';await render();expect(button('审批同伴操作').closest('[hidden]')).toBeNull();
+ await act(async()=>button('返回活动').click());expect(document.querySelector('.iv-title')).not.toBeNull();
+ await act(async()=>button('返回上一页／首页').click());expect(h.relaunch).toHaveBeenCalledExactlyOnceWith({url:'/pages/index/index'});
 });

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, Text, View } from '@tarojs/components';
 import type { ActivityDetail } from '@weevibe/contracts';
 import type { InvitationSourceView } from '@weevibe/contracts/src/invitations';
-import { Action, Notice } from '../../components/ui';
+import { Action, Notice } from './ActivityUI';
 import { formationProgress } from '../formation/progress';
 import { ActivityArrangement } from './ActivityArrangement';
 import { overviewModel, type DetailSection } from './overview-model';

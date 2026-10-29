@@ -2,7 +2,7 @@ import { Text, View } from '@tarojs/components';
 import type { ActivityDetail } from '@weevibe/contracts';
 import type { useLogin } from '../../platform/page-state';
 import { formatTime } from '../../platform/activities';
-import { Action, Panel } from '../../components/ui';
+import { Action, Panel } from '../activity-entry/ActivityUI';
 import { applicationLabels } from '../applications/labels';
 
 export function ActivityMore({ detail, showMore, setShowMore, login, anyBusy }: {
