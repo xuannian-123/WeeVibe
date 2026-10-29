@@ -1,5 +1,7 @@
 # 12张任务的代码入口与修改边界
 
+> 2026-10-29：WG04–06 已通过 PR45 合入 main；下表已更新三项入口，其余历史能力说明以当前源码和交接顶部为准。实现合入不等于完成手机整卡验收。
+
 2026-10-25。按功能认领，每张任务约定一位牵头人，可找协助；不要求牵头人独立完成全栈，也不固定五人岗位。
 
 第一批前端已提取activity-create、activity-detail、applications、invitations；后端现有创建、申请/审批、活动读取也已按用例拆分，service.ts保留兼容汇总导出。此次只调整代码归属，不增加业务功能，也不代表12张任务已经完成。下表区分现有入口与后续建议，不为未实施功能创建空文件。
@@ -15,9 +17,9 @@
 | WG-01 工程/身份 | platform、app入口、diagnostics | server/auth、db、登录云函数及部署配置 | 公共能力，修改前协调受影响任务 |
 | WG-02 创建/地点 | features/activity-create，pages/editor挂载 | [创建route](../../apps/web/src/app/api/v1/activities/route.ts)、[create.ts](../../apps/web/src/server/activities/create.ts)；地点查询复用providers/amap | 纯创建体验在模块内改；契约/地点待定等规则变化跨端对齐 |
 | WG-03 邀请/报名/审批/名单 | features/applications、features/invitations，详情挂载 | applications/decision routes、[applications.ts](../../apps/web/src/server/activities/applications.ts)；可见数据由[snapshot.ts](../../apps/web/src/server/activities/snapshot.ts)投影 | 复用当前权限/整体事务；名单与邀请归因仍有未实现项 |
-| WG-04 成局/退出/补位 | 后续formation、participation模块 | 后续活动用例，复用共享规则/事务 | 新增前先明确接口与详情挂载点，不复制整页 |
-| WG-05 变更/重接受 | 后续arrangement-change，复用可用表单组件 | 后续活动变更/接受用例、版本和席位记录 | 与创建/参加/成局约定影响范围，共享模型先协调 |
-| WG-06 管理交接 | 后续handover模块，详情挂载 | 后续交接用例和当前管理归属 | 与权限、取消/参加状态协调，原子切换 |
+| WG-04 成局/退出/补位 | features/formation、participation；详情 screen | server/activities/formation、participation；scripts/check-wg04-postgres.ts | 已合入；主环节明确确认，退出与管理权独立，补位不自动恢复成局 |
+| WG-05 变更/重接受 | features/arrangement-change/ArrangementEditor、ArrangementPanel | server/activities/arrangement-edit、arrangement、verification；scripts/check-wg05-postgres.ts | 已合入；预览确认、连续差异链、保位重接受，与核实及预订适用状态联动 |
+| WG-06 管理交接 | features/handover；详情挂载 | server/activities/handover；scripts/check-wg06-postgres.ts | 已合入；有效参加资格、唯一管理权、撤回/取消并发保护；待接不授管理权 |
 | WG-07 AI | activity-create/ai-create、ai-form；后续文案及协调模块待接 | server/ai、providers、contracts/ai与ai-creation | 创建草稿先审阅再填表；后续协调确认应用与活动事务共同设计 |
 | WG-08 分享卡 | 后续share-card，复用行程展示数据 | 仅确需服务端二维码/生成时增加相应接口 | 与邀请路径/权限边界统一 |
 | WG-09 待办 | 后续todos，首页挂载 | 后续有权限的聚合查询 | 与各状态产生方约定契约，不各造业务状态 |
