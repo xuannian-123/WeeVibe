@@ -12,7 +12,7 @@ export function GoHome({ account, empty, friend, team, all, ideas, open, gatheri
   const records = account?.activity_records ?? [];
   const active = records.filter(r => !r.cancelled && !r.participation_cancelled && r.phase !== 'ended' && (r.is_manager || r.joined_segment_count || r.pending_application_count));
   const recent = active.slice(0, 2);
-  return <View className="wv-go-home"><View className="wv-home-intro"><Text className="wv-eyebrow">GOOD TIMES, TOGETHER</Text><Text className="wv-title">Less planning.{String.fromCharCode(10)}More living.</Text><Text className="wv-subtitle">少些筹划，多些生活。</Text><UiIcon className="wv-home-spark" name="spark"/></View>
+  return <View className="wv-go-home"><View className="wv-home-intro"><Text className="wv-title">Less planning.{String.fromCharCode(10)}More <Text className="wv-hero-accent">living.</Text></Text><Text className="wv-subtitle">少些筹划，多些生活。</Text><UiIcon className="wv-home-spark" name="spark"/></View>
     <View className="wv-home-paths"><Button className="wv-home-path wv-photo-path peach" onClick={friend}><View className="wv-scene-photo" style={{backgroundImage:`url(${scenePhotos})`,backgroundPosition:'0 0'}}/><Text className="wv-scene-note">场景示意</Text><Text className="wv-card-title">朋友出游 ↗</Text></Button><Button className="wv-home-path wv-photo-path mint" onClick={team}><View className="wv-scene-photo" style={{backgroundImage:`url(${scenePhotos})`,backgroundPosition:'100% 0'}}/><Text className="wv-scene-note">场景示意</Text><Text className="wv-card-title">一起团建 ↗</Text></Button></View>
     <View className="wv-home-ai-inline"><Text>AI</Text><Text>只有一个想法？AI 可以帮你起草安排。</Text></View>
     {gatherings}
