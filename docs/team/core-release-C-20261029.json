@@ -1,0 +1,228 @@
+{
+  "completed_at": "2026-10-29T05:03:04.974Z",
+  "source_commit": "4644d7e64f2b24c8c62c1dd26fe0de26897e916c",
+  "source_pr": 49,
+  "ci_run": 40818113374,
+  "linux_package": {
+    "passed": true,
+    "source_commit": "4644d7e64f2b24c8c62c1dd26fe0de26897e916c",
+    "workflow_run": 40819941502,
+    "workflow_url": "https://github.com/xuannian-123/WeeVibe/actions/runs/40819941502",
+    "linux_workflow_succeeded": true,
+    "smoke_test_passed": true,
+    "bytes": 18656155,
+    "sha256": "ffa6ffed2df6f7e7094982e5b2fe9a40eddf6d27d4b7bcc594c997665b9cda4e",
+    "entries": 3051,
+    "internal_links": 43,
+    "executable_bootstrap": true,
+    "no_environment_files": true
+  },
+  "database": {
+    "backup": {
+      "passed": true,
+      "created_at": "2026-10-29T04:52:24.468Z",
+      "migrations": 16,
+      "tables": 32,
+      "bytes": 120299,
+      "sha256": "14a020033b00c9e00b04bbc63bf9d31c916d6301d675d18c2204ec9cecf4422e",
+      "consistent_snapshot": true,
+      "tls_verified": true,
+      "private_acl": true,
+      "shared_database_written": false
+    },
+    "restore": {
+      "passed": true,
+      "completed_at": "2026-10-29T04:53:15.426Z",
+      "backup_sha256": "14a020033b00c9e00b04bbc63bf9d31c916d6301d675d18c2204ec9cecf4422e",
+      "isolated_loopback_restore": true,
+      "source_commit": "4644d7e64f2b24c8c62c1dd26fe0de26897e916c",
+      "restored_all_tables": 32,
+      "migrations_before": 16,
+      "migrations_after": 17,
+      "all_original_table_data_preserved": true,
+      "avatar_assignments": {
+        "members": 3,
+        "missing": 0,
+        "invalid": 0,
+        "duplicate_groups": 0,
+        "unique_index_valid": true,
+        "check_constraint_valid": true
+      },
+      "shared_database_written": false
+    },
+    "live": {
+      "passed": true,
+      "completed_at": "2026-10-29T04:57:22.120Z",
+      "source_commit": "4644d7e64f2b24c8c62c1dd26fe0de26897e916c",
+      "migrations": 17,
+      "added_migration": "20261029160000_gathering_avatar_pool",
+      "previous_16_history_unchanged": true,
+      "backup_sha256": "14a020033b00c9e00b04bbc63bf9d31c916d6301d675d18c2204ec9cecf4422e",
+      "restored_rehearsal_passed": true,
+      "tls_owner_and_runtime_verified": true,
+      "runtime_new_column_read_verified": true,
+      "runtime_no_ddl": true,
+      "avatar_assignments": {
+        "members": 3,
+        "missing": 0,
+        "invalid": 0,
+        "duplicate_groups": 0,
+        "unique_index_valid": true,
+        "check_constraint_valid": true
+      },
+      "api_not_changed_by_migration": true
+    }
+  },
+  "api": {
+    "rollback_backup": {
+      "passed": true,
+      "created_at": "2026-10-29T04:52:15.457Z",
+      "function": "weego-api-demo",
+      "status": "Active",
+      "modified_at": "2026-10-28 18:55:36",
+      "bytes": 18641878,
+      "sha256": "3c9d9099f42de55dfffdd371215fcd5aacc754c036e90b951210565f4f650007",
+      "configuration_saved": true,
+      "all_environment_saved": true,
+      "existing_login_and_worker_fingerprinted": true
+    },
+    "update": {
+      "passed": true,
+      "completed_at": "2026-10-29T04:58:04.204Z",
+      "source_commit": "4644d7e64f2b24c8c62c1dd26fe0de26897e916c",
+      "function": "weego-api-demo",
+      "status": "Active",
+      "modified_at": "2026-10-29 12:57:53",
+      "source_package_sha256": "ffa6ffed2df6f7e7094982e5b2fe9a40eddf6d27d4b7bcc594c997665b9cda4e",
+      "environment_preserved": true,
+      "runtime_and_configuration_preserved": true,
+      "login_and_subscription_worker_unchanged": true,
+      "deployed_code_downloaded_for_comparison": true
+    },
+    "deployed_package": {
+      "passed": true,
+      "source_commit": "4644d7e64f2b24c8c62c1dd26fe0de26897e916c",
+      "all_entry_bytes_equal": true,
+      "all_link_modes_equal": true,
+      "entries": 3051,
+      "bootstrap_executable": true,
+      "platform_zip_metadata_may_differ": true
+    },
+    "verification": {
+      "passed": true,
+      "checked_at": "2026-10-29T05:00:19.582Z",
+      "source_commit": "4644d7e64f2b24c8c62c1dd26fe0de26897e916c",
+      "code_package_verified": true,
+      "checks": [
+        {
+          "path": "/api/v1/health",
+          "status": 200,
+          "error_code": null
+        },
+        {
+          "path": "/api/v1/ready",
+          "status": 200,
+          "error_code": null
+        },
+        {
+          "path": "/api/v1/gatherings",
+          "status": 401,
+          "error_code": "UNAUTHENTICATED"
+        },
+        {
+          "path": "/api/v1/gatherings/notifications/subscription",
+          "status": 401,
+          "error_code": "UNAUTHENTICATED"
+        }
+      ],
+      "migrations": 17,
+      "avatar_assignments": {
+        "members": 3,
+        "missing": 0,
+        "invalid": 0,
+        "duplicate_groups": 0,
+        "unique_index_valid": true,
+        "check_constraint_valid": true
+      },
+      "cutover_missing_assignments_filled": 0,
+      "existing_assignments_preserved": true,
+      "no_test_business_records_created": true,
+      "model_not_called": true,
+      "phone_not_tested": true
+    }
+  },
+  "wechat": {
+    "passed": true,
+    "created_at": "2026-10-29T04:59:26.326Z",
+    "source_commit": "4644d7e64f2b24c8c62c1dd26fe0de26897e916c",
+    "appid": "wxaa06e111e33f6ddd",
+    "kind": "temporary_preview",
+    "qr_path": "WeeVibe-C-20261029T045855.png",
+    "info_path": "preview-20261029T045855.json",
+    "package_bytes": 1521831,
+    "compiled_artifact_files": 67,
+    "artifact_inventory_sha256": "4067c58d02f60f5b3ac8632649d3b2ed601e8b24dddc8bdfa08f5dfa0fa61928",
+    "compiled_cloud_guard_passed": true,
+    "compile_cache_only_cleared": true,
+    "login_storage_preserved": true,
+    "experience_version_replaced": false,
+    "submitted_for_review": false,
+    "published": false,
+    "phone_scan_not_verified": true
+  },
+  "native": {
+    "passed": true,
+    "source": "actual_wechat_devtools",
+    "automation_port": 9429,
+    "business_writes": false,
+    "mocked_wx": false,
+    "location_requested": false,
+    "model_called": false,
+    "phone_tested": false,
+    "native_automation_connected": true,
+    "page_path": "pages/index/index",
+    "has_session": true,
+    "has_cloud_http": true,
+    "has_map_picker": true,
+    "has_gathering_route": true,
+    "cloud_http_checks": [
+      {
+        "path": "/api/v1/health",
+        "pending": false,
+        "outer_status": 200,
+        "envelope": false,
+        "business_status": 200
+      },
+      {
+        "path": "/api/v1/ready",
+        "pending": false,
+        "outer_status": 200,
+        "envelope": true,
+        "business_status": 200
+      },
+      {
+        "path": "/api/v1/me",
+        "pending": false,
+        "outer_status": 200,
+        "envelope": true,
+        "business_status": 200
+      },
+      {
+        "path": "/api/v1/gatherings",
+        "pending": false,
+        "outer_status": 200,
+        "envelope": true,
+        "business_status": 200
+      }
+    ],
+    "stored_session_verified_with_server": true,
+    "checked_at": "2026-10-29T05:01:55.537Z"
+  },
+  "scope": {
+    "experience_version_replaced": false,
+    "review_submitted": false,
+    "officially_published": false,
+    "login_and_subscription_worker_unchanged": true,
+    "issues_4_5_6_left_open": true
+  }
+}
