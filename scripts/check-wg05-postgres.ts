@@ -16,6 +16,8 @@ const { editArrangement, previewArrangementEdit } = await import('../apps/web/sr
 const { getArrangementReview, reacceptArrangement } = await import('../apps/web/src/server/activities/arrangement');
 const { changeFormation } = await import('../apps/web/src/server/activities/formation');
 const { verifySegment } = await import('../apps/web/src/server/activities/verification');
+const { createHandover, commandHandover } = await import('../apps/web/src/server/activities/handover');
+const { getInbox } = await import('../apps/web/src/server/inbox');
 const { declareBooking, readBookingHistory } = await import('../apps/web/src/server/activities/booking');
 const db = getDb(), key = () => `wg05-${randomUUID()}`;
 let checks = 0;
@@ -106,6 +108,26 @@ try {
       const after = await getActivity(id, manager.id); assert.equal(after.revision, before.revision); assert.deepEqual(after.segments, before.segments);
       assert.equal(await db.activityMutationKey.count({ where: { actorUserId: manager.id, key: edit.idempotency_key } }), 0);
     } finally { await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${trigger}" ON "ActivityEvent"`); await db.$executeRawUnsafe(`DROP FUNCTION "${fn}"()`); }
+  });
+  await check('handover while awaiting reacceptance transfers editing authority without accepting plans or losing inbox updates', async () => {
+    const before = await getActivity(id, manager.id);
+    const seats = await db.participation.findMany({ where: { activityId: id }, orderBy: [{ segmentId: 'asc' }, { userId: 'asc' }] });
+    const offer = await createHandover(id, manager.id, { target_user_id: member.id, idempotency_key: key(), expected_revision: before.revision, expected_management_revision: 1 });
+    const accepted = await commandHandover(id, offer.offer!.handover_id, member.id, { action: 'accept', idempotency_key: key(), expected_revision: offer.activity.revision, expected_management_revision: offer.management_revision });
+    assert.equal(accepted.activity.viewer.is_manager, true);
+    assert.deepEqual(await db.participation.findMany({ where: { activityId: id }, orderBy: [{ segmentId: 'asc' }, { userId: 'asc' }] }), seats);
+    const edit = command(accepted.activity); edit.segments[1].requirements = 'New manager reviewed requirement';
+    await assert.rejects(() => previewArrangementEdit(id, manager.id, edit), { code: 'FORBIDDEN' });
+    await assert.rejects(() => editArrangement(id, manager.id, edit), { code: 'FORBIDDEN' });
+    await assert.rejects(() => verifySegment(id, manager.id, { action: 'verify-segment', segment_id: dinner, idempotency_key: key(), expected_revision: accepted.activity.revision, expected_plan_revision: accepted.activity.segments[1].plan_revision, verified: true }), { code: 'FORBIDDEN' });
+    d = await editArrangement(id, member.id, edit);
+    assert.equal(d.segments[1].counts.occupied_count, 2);
+    assert.equal(d.segments[1].counts.pending_acceptance_count, 2);
+    const review = await getArrangementReview(id, dinner, member.id);
+    assert.equal(review.state, 'ready'); assert.equal(review.can_reaccept, true);
+    const inbox = await getInbox(manager.id);
+    assert.ok(inbox.messages.some(m => m.activity_id === id && m.section === 'arrangement' && m.pending));
+    assert.ok(inbox.messages.some(m => m.id === `handover:${offer.offer!.handover_id}:accepted` && !m.pending));
   });
   console.log(`WG05 real PostgreSQL fixture groups passed: ${checks}`);
 } finally { await db.$disconnect(); }
