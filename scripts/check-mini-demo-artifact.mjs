@@ -48,6 +48,7 @@ try {
   const locationDescription = app.permission?.['scope.userLocation']?.desc;
   assert(typeof locationDescription === 'string' && locationDescription.trim().length > 0 && Array.from(locationDescription).length <= 30, 'Compiled location permission description must contain 1-30 characters');
   assert(Array.isArray(app.requiredPrivateInfos) && app.requiredPrivateInfos.includes('getLocation'), 'Compiled location interface declaration is missing');
+  assert(app.requiredPrivateInfos.includes('chooseLocation'), 'Compiled map picker declaration is missing');
   assert(!app.requiredPrivateInfos.includes('getFuzzyLocation') && !app.permission?.['scope.userFuzzyLocation'], 'Mutually exclusive fuzzy location must not remain declared');
   const home = read(root, 'apps/miniprogram/dist/pages/index/index.js');
   // Reused native-location modules move from the home bundle into common.js

@@ -17,7 +17,7 @@ export function editInputFromForm(detail: ActivityDetail, form: ActivityForm, ke
     const old = detail.segments.find(o => o.client_ref === s.client_ref);
     const exactTime = (field: 'starts_at' | 'ends_at' | 'deadline_at') => old && parts(old[field]).join('T') === parts(s[field]).join('T') ? old[field] : s[field];
     return { ...s, starts_at: exactTime('starts_at'), ends_at: exactTime('ends_at'), deadline_at: exactTime('deadline_at'), ...(old ? { segment_id: old.segment_id } : {}), cancelled: false,
-      location: old && old.location.name === s.location.name && old.location.address === s.location.address ? old.location : s.location };
+      location: old && !form.segments.find(item => item.ref === s.client_ref)?.venue && old.location.name === s.location.name && old.location.address === s.location.address ? old.location : s.location };
   });
   // Removed published segments become explicit cancellations at their old slots.
   const removed = detail.segments.filter(s => !active.some(next => next.client_ref === s.client_ref));

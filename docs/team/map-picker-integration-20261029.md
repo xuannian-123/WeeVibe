@@ -1,27 +1,39 @@
 # 核心流程地图选点接入
 
-2026-10-29。基于核心流程方案 C 的受测提交 99b90cb，新分支 codex/native-map-picker-20261029；与正在推进的整批前端设计隔离。
+2026-10-29，PR47，分支 codex/native-map-picker-20261029。已同步 PR46 合入后的 main 3b7a1a6，并读取核心整批审核 0da45d2 的新规则。本批只改地点能力及挂载，不改批审结构、头像昵称门槛、问卷必答/折叠或 AI 文案。
 
-## 本批交付
+## 页面结果
 
-`apps/miniprogram/src/platform/map-picker.ts` 导出 `chooseMapPlace({ guard, center? })`。仅在用户主动点击时调用，返回 `MapPickedPlace | null`。成功包含来源 `wechat_choose_location`、名称、地址、GCJ-02 坐标（6 位小数）；取消返回 null，调用方保留旧值。配置、权限、失败使用安全错误码，不显示原始平台响应。不读 GPS、不保存、不提交业务，不自动打开设置；复用既有隐私授权检查。原生接口自行处理地图选点权限，不以系统精确定位可用作为手动地图选点的前置条件。
+- 朋友及团建填写：GatheringOrigin 提供“地图选择出发地”，仍可手动填写、获取定位或高德搜索。不填的含义沿用核心集成新规则，本批不另造同意或参加状态。
+- 新筹备集合点、团建候选地点：GatheringMapPlace 复用既有 gg 样式，回填名称、地址、GCJ-02 坐标与微信来源，仍需保存表单。
+- 正式活动创建、再约、旧 requirements 候选地点和 Issue5 编辑：复用 VenuePicker，地图为首入口，高德搜索备用。Issue5 仍走版本、修改预览、影响确认和重新接受；同名同地址的新坐标也不会被旧来源覆盖。
+- 取消不改旧值，进入不定位或搜索；已选坐标作为重新选点中心。过长地址拒绝回填，保留原值，不静默截断。
 
-模块防止重复原生页面；打开前、授权后和返回后均核验 guard，旧账号或失效页面的结果不能写回。兼容 callback-only 与 Promise 平台实现。没有接入页面、配置、契约或业务后端，现有界面不因本 PR 自动变化。
+## 来源、保存和隐私
 
-## 核心流程集成方接入顺序
+venueSelectionSchema 保留高德查询来源，新增 {provider:'wechat', source_api:'wx.chooseLocation'}，不伪造高德 checked_at/POI ID 或商家核实状态。正式活动沿用 name/address/source_url 网络契约，坐标仍存原有高德地图标记链接；该链接用于打开地图，不代表经高德查询或商家确认。
 
-1. 整批设计中统一安排“地图选择”、已选地址及重新选择、取消、权限失败状态。私人出发地仍可不填，表示愿意配合安排；新活动昵称规则沿用核心集成最新决定，不要求账号头像昵称。
-2. 先接 `features/gatherings/origin-search.tsx` 的私人出发地，朋友与团建复用。将结果转换成现有 private.origin 的 label（最多 300 字符）、latitude、longitude、crs；不要把出发地放进共享地点、通知或 AI 请求。不要在适配层截断并冒充完整地址，展示名称/地址与存储长度策略由调用方明确处理。
-3. `features/activity-create/venue-picker.tsx` 同时服务正式活动和 requirements 候选地点。公共地点接入前，先扩展 VenueSelection 的来源联合并检查契约消费者、后端解析和历史快照；旧高德来源全部兼容。微信选点不带高德 POI ID、checked_at 或 source_api，不能伪造这些字段，不能直接 venueSelectionSchema.parse 原生结果。是否需要迁移以实际保存模型为准，未预先断言。
-4. Issue5 的修改入口继续走原版本、预览、影响确认及重新接受，不通过选点绕开现有事务。
-5. 全局 app.config 的 requiredPrivateInfos 和微信后台实际接口资格、隐私指引须同步核验 chooseLocation。本批不修改共享配置，避免与整批集成冲突；现有 getLocation 已获批不代表 chooseLocation 已获批。
+筹备 JSON 增加可选 place_venue 和 candidate_places[].venue；旧 JSON 不补默认键、不改历史请求。手工编辑清除旧地图记录，契约拒绝名称/地址与记录不一致。团建集合地点和地址未都被明确公开时，参与者不收到 place_venue，避免坐标/地址经来源对象泄漏。AI 输入仍仅用原有公开文本，不增加坐标和地图来源。
 
-## 返回与生命周期重点
+私人出发地仅写现有 private.origin，不放入公共字段、AI 或通知。公共筹备及 requirements 的新地图 JSON 需要配套 API；旧部署不能当作新版已接通。不新增数据库列或迁移。
 
-guard 由调用方提供，必须检查账号、所有者是否仍在、是否只读/定案、请求是否过期。不要简单使用 `() => {}`。当前 useGatheringSource.ticket 会在 useDidHide 递增 epoch；地图原生页在不同平台上的 hide/show 和回调先后仍未实测。接入时须有针对原生页面的受控返回处理，不能全局取消离页失效保护或误把所有返回结果一律丢弃。应单独验证用户改账号、离开原表单和选点回来三种情形。
+## 返回与权限
 
-## 本地验证及剩余项
+chooseMapPlace 兼容 callback-only 和 Promise。useMapPicker 仅为当前原生交互允许一次 hide/show，并在原生成功先于 onShow 时等页面显示后回填。账号、页面栈所有者变化、卸载、禁用/只读或额外离页会丢弃旧结果；普通网络请求和精确定位仍保持原离页作废规则。不清理会话、草稿或滚动状态。
 
-Node24.21.0 / pnpm11.15.1；冻结锁文件离线安装成功，小程序类型检查通过。地图适配与既有定位权限共 30 项离线测试通过，覆盖原生回调/Promise、取消、无配置、拒绝、无效坐标、重复打开和失效调用方。未连接数据库/供应商，没有生成共享活动。
+app.config 保留 getLocation，新增 chooseLocation 声明与产物检查。不改 AppID、云登录/HTTP 目标或域名校验。代码声明不等于后台资格/隐私指引已配置，本批未操作后台；原生地图、键盘、安全区、滚动与真实权限仍待手机验证。
 
-尚未执行：页面接线、原生返回/草稿/滚动恢复、微信后台资格核验、隐私声明及手机选点。没有部署后端、迁移数据库、上传预览、替换体验版或正式发布。
+## 集成与验证
+
+与整批前端的文件分工已留在其工作树 .working/map-picker-coordination-20261029.md。此为本地交接，不代表另一对话已读取或确认。后续页面复用 GatheringOrigin / GatheringMapPlace / VenuePicker，不平行实现另一套地图逻辑。
+
+最终检查见 PR47。没有部署 API、修改共享数据库、上传预览、替换体验版、提审或发布。离线/CI 不等于微信或手机验证。
+
+## 本轮检查结果
+
+- pnpm test：212 文件 / 4068 测试通过，包含既有核心流程及地图回归。
+- pnpm typecheck：全工程、普通测试及集成测试类型通过。
+- pnpm build:mini:demo 与 node scripts/check-mini-demo-artifact.mjs：通过；cloud 登录/HTTP 目标、urlCheck、精确定位及新增选点声明通过。保留已有 CSS 顺序和详情包 297 KiB 建议提示，本批未改全局样式。
+- pnpm build:api：通过，standalone Prisma WASM 产物检查通过；不表示数据库/微信联调成功。
+- 首轮全量检查因新工作树缺少两套云函数依赖，有 3 文件未加载；按锁安装依赖后，最终全量 212 文件全部通过。没有修改锁文件。
+- 未执行：新选点手机验收、微信后台资格与隐私指引核验、新版 JSON 的真实共享 API 联调。本轮无共享部署或迁移。
