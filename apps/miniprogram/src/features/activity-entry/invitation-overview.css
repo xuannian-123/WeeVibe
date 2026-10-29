@@ -1,0 +1,50 @@
+.invitation-v1 { --iv-cream: #F8F6F0; --iv-lime: #A7F05A; --iv-ink: #222222; --iv-lilac: #B7A4F8; --iv-pink: #FF9DAB; box-sizing: border-box; padding: 24px; margin-bottom: 28px; background: var(--iv-cream); border-radius: 36px; color: var(--iv-ink); font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+.invitation-v1 .iv-hero { padding: 16px 8px 28px; }
+.invitation-v1 .iv-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+.invitation-v1 .iv-brand { font-size: 34px; font-weight: 800; }
+.invitation-v1 .iv-pill { background: var(--iv-lilac); padding: 8px 16px; border-radius: 999px; font-size: 23px; color: var(--iv-ink); }
+.invitation-v1 .iv-title { display: block; margin: 28px 0 16px; font-size: 52px; font-weight: 800; line-height: 1.25; overflow-wrap: anywhere; word-break: break-all; }
+.invitation-v1 .iv-muted { display: block; margin: 12px 0; font-size: 25px; line-height: 1.65; color: #5D5B56; overflow-wrap: anywhere; }
+.invitation-v1 .iv-label { display: block; margin: 16px 0 8px; font-size: 27px; font-weight: 700; }
+.invitation-v1 .iv-people { margin-top: 16px; padding: 12px 20px; border: 1px solid #dedcd5; border-radius: 24px; background: #fff; font-size: 25px; line-height: 1.6; }
+.invitation-v1 .iv-section { margin: 12px 0 28px; }
+.invitation-v1 .iv-section-title { display: block; margin: 26px 0 18px; font-size: 36px; font-weight: 800; }
+.invitation-v1 .panel { padding: 24px; background: #fff; border: 1px solid #dedcd5; border-radius: 32px; margin-bottom: 24px; }
+.invitation-v1 .heading { color: var(--iv-ink); font-size: 32px; font-weight: 800; }
+.invitation-v1 .action { min-height: 92px; border-radius: 999px; font-size: 28px; font-weight: 700; line-height: 1.6; padding: 22px 26px; white-space: normal; }
+.invitation-v1 .action-primary { background: var(--iv-lime); color: var(--iv-ink); }
+.invitation-v1 .action-secondary { background: #fff; color: var(--iv-ink); border: 2px solid var(--iv-ink); }
+.invitation-v1 .action-text { color: var(--iv-ink); background: transparent; text-decoration: underline; }
+.invitation-v1 .action[disabled] { background: #e8e6df; color: #66635d; border-color: #dedcd5; }
+.invitation-v1 .activity-itinerary { border: 1px solid #dedcd5; border-radius: 32px; background: #fff; margin: 20px 0; padding: 24px; }
+.invitation-v1 .activity-step { color: var(--iv-ink); background: var(--iv-lilac); border-radius: 999px; }
+.invitation-v1 .activity-step { padding: 8px 12px; }
+.invitation-v1 .activity-itinerary-head { flex-wrap: wrap; gap: 12px; }
+.invitation-v1 .activity-segment-title { min-width: 0; color: var(--iv-ink); font-weight: 800; }
+.invitation-v1 .activity-section-heading { flex-wrap: wrap; color: var(--iv-ink); font-weight: 800; }
+.invitation-v1 .activity-badge { color: var(--iv-ink); background: var(--iv-lime); }
+.invitation-v1 .activity-time, .invitation-v1 .activity-place { color: var(--iv-ink); }
+.invitation-v1 .activity-warning { color: #754029; }
+.invitation-v1 .iv-count { display: block; font-size: 28px; line-height: 1.8; }
+.invitation-v1 .iv-suggestion { margin: 12px 0; padding-bottom: 12px; border-bottom: 1px solid #eceae4; font-size: 26px; line-height: 1.75; }
+.invitation-v1 .iv-private { margin: 20px 0; padding: 20px 24px; border-left: 6px solid var(--iv-pink); background: #fff; border-radius: 24px; }
+.invitation-v1 .notice { color: var(--iv-ink); background: #fff; border: 1px solid #dedcd5; border-left: 6px solid var(--iv-lilac); border-radius: 24px; }
+.invitation-v1 .notice-error { border-left-color: var(--iv-pink); }
+.invitation-v1 .field input { background: var(--iv-cream); color: var(--iv-ink); border-radius: 20px; }
+.invitation-v1 .activity-select-row { padding: 20px; border: 1px solid #dedcd5; border-radius: 24px; }
+.invitation-v1 .caption, .invitation-v1 .activity-muted, .invitation-v1 .activity-address, .invitation-v1 .activity-fact-label, .invitation-v1 .activity-fact-note, .invitation-v1 .activity-segment-footer text { color: #625f58; }
+.invitation-v1 .activity-fact-value, .invitation-v1 .activity-selected-summary, .invitation-v1 .activity-personal-state { color: var(--iv-ink); }
+.invitation-v1 .activity-personal-row { flex-wrap: wrap; gap: 8px 16px; overflow-wrap: anywhere; }
+.invitation-v1 .activity-personal-row > text { min-width: 0; max-width: 100%; }
+.invitation-v1 .iv-summary { display: flex; gap: 16px; margin: 24px 0 16px; padding: 22px 0; border-top: 2px solid var(--iv-ink); border-bottom: 1px solid #dedcd5; }
+.invitation-v1 .iv-summary > view { flex: 1; min-width: 0; }
+.invitation-v1 .iv-summary-number { display: block; font-size: 48px; font-weight: 800; line-height: 1.1; }
+.invitation-v1 .iv-summary-status { display: block; font-size: 30px; font-weight: 800; line-height: 1.8; }
+.invitation-v1 .iv-summary-label { display: block; font-size: 22px; line-height: 1.5; margin-top: 10px; color: #625f58; }
+.invitation-v1 .iv-main-teaser { display: block; font-size: 24px; line-height: 1.65; overflow-wrap: anywhere; }
+.invitation-v1 .iv-suggestions { border-color: var(--iv-lilac); background: #efebfb; }
+.invitation-v1 .iv-suggestion-tags { display: flex; flex-wrap: wrap; gap: 12px; }
+.invitation-v1 .iv-suggestion-tags text { background: #fff; padding: 8px 18px; border-radius: 999px; font-size: 24px; }
+.invitation-v1 .iv-suggestions .action-secondary { background: var(--iv-lilac); border: 0; }
+.invitation-v1 .iv-status-note { display: block; padding: 20px; background: var(--iv-lilac); border-radius: 22px; font-size: 28px; font-weight: 700; }
+.invitation-v1 .iv-saved-name { display: block; padding: 16px 8px; font-size: 26px; overflow-wrap: anywhere; }

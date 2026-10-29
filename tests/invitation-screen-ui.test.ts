@@ -12,11 +12,11 @@ const h=vi.hoisted(()=>({controller:{} as any,modal:vi.fn(),me:vi.fn(),transport
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=> 'session-a',api:{me:h.me},transport:h.transport}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{showModal:h.modal},useDidHide:()=>{},useDidShow:()=>{},useUnload:()=>{}}));
 // Keep the real sibling MainSegmentPanel mounted; extend only the native primitive fixture.
-vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Radio:()=>null,RadioGroup:(p:any)=>createElement('div',{},p.children),Label:(p:any)=>createElement('label',{},p.children),Button:(p:any)=>createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{},p.children),Text:(p:any)=>createElement('span',{},p.children)}));
+vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({Radio:()=>null,RadioGroup:(p:any)=>createElement('div',{},p.children),Label:(p:any)=>createElement('label',{},p.children),Button:(p:any)=>createElement('button',{disabled:p.disabled,onClick:p.onClick},p.children),View:(p:any)=>createElement('div',{hidden:p.hidden,style:p.style,id:p.id,className:p.className},p.children),Text:(p:any)=>createElement('span',{className:p.className},p.children)}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/use-activity-detail',()=>({useActivityDetail:()=>h.controller}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/itinerary',()=>({Itinerary:()=>null}));
 vi.mock('../apps/miniprogram/src/features/activity-detail/more',()=>({ActivityMore:()=>null}));
-vi.mock('../apps/miniprogram/src/features/applications/panels',()=>({ApprovalPanel:({state}:any)=>createElement('button',{disabled:state.anyBusy||!state.fresh},'审批同伴操作'),ApplicationForm:({state}:any)=>createElement('button',{disabled:state.anyBusy||!state.fresh},'申请同伴操作'),MyParticipationPanel:()=>null}));
+vi.mock('../apps/miniprogram/src/features/applications/panels',()=>({ApprovalPanel:({state}:any)=>createElement('button',{disabled:state.anyBusy||!state.fresh},'审批同伴操作'),ApplicationForm:({state}:any)=>createElement('button',{onClick:state.submit,disabled:state.anyBusy||!state.fresh},'申请同伴操作'),MyParticipationPanel:()=>null}));
 vi.mock('../apps/miniprogram/src/features/participation/ParticipationActions',()=>({ParticipationActions:(p:any)=>createElement('button',{disabled:!p.fresh},'退出同伴操作')}));
 // This suite isolates its own writer; the real handover GET/lifecycle is covered in handover-ui and independent Screen tests.
 vi.mock('../apps/miniprogram/src/features/handover/HandoverPanel',()=>({HandoverPanel:(p:any)=>createElement('button',{disabled:p.anyBusy||!p.fresh},'交接同伴操作')}));
@@ -44,3 +44,38 @@ vi.mock('../apps/miniprogram/src/features/deadline/DeadlinePanel', () => ({ Dead
 
 // This existing feature suite isolates the booking sibling; booking-screen-ui and independent complete-Screen probes verify the new declaration/history composition.
 vi.mock('../apps/miniprogram/src/features/booking/BookingPanel', () => ({ BookingPanel: () => null }));
+
+
+describe('integrated invitation overview and existing activity sections',()=>{
+ it('shows the real activity name and keeps one application form in its own section',async()=>{
+  h.controller.detail.name='真实活动标题'; await render();
+  expect(document.querySelector('.iv-title')?.textContent).toBe('真实活动标题');
+  expect(document.body.textContent).not.toContain('挑一个动物形象');
+  expect(document.querySelector('.iv-people')?.textContent).not.toContain('原发起人你');
+  expect(button('申请同伴操作').closest('[hidden]')).not.toBeNull();
+  await act(async()=>button('选择参加环节').click());
+  expect(button('申请同伴操作').closest('[hidden]')).toBeNull();
+  expect(Array.from(document.querySelectorAll('button')).filter(b=>b.textContent==='申请同伴操作')).toHaveLength(1);
+ });
+ it('blocks only new applications when source verification fails, leaving manager approvals usable',async()=>{
+  h.controller.incomingInvitationId=applicationId;
+  h.transport.mockResolvedValue({status:404,body:{error:{code:'NOT_FOUND',message:'missing'}}});
+  await render();
+  expect(button('申请同伴操作').disabled).toBe(true);
+  expect(button('审批同伴操作').disabled).toBe(false);
+  expect(h.controller.applications.submit).not.toHaveBeenCalled();
+ });
+ it('releases an application after the source is verified for this activity',async()=>{
+  h.controller.incomingInvitationId=applicationId; await render();
+  expect(button('申请同伴操作').disabled).toBe(false);
+  await act(async()=>button('申请同伴操作').click());
+  expect(h.controller.applications.submit).toHaveBeenCalledOnce();
+ });
+ it('rejects a source for another activity without changing the original application draft',async()=>{
+  h.controller.incomingInvitationId=applicationId;
+  h.controller.applications.nickname='保留的活动昵称';
+  h.transport.mockResolvedValue({status:200,body:{invitation_id:applicationId,activity_id:applicantA,title:'wrong',inviter_display_name:null,inviter_avatar_url:null,starts_at:null,ends_at:null,timezone:'UTC',cancelled:false,source_only:true}});
+  await render(); expect(button('申请同伴操作').disabled).toBe(true);
+  expect(h.controller.applications.nickname).toBe('保留的活动昵称');
+ });
+});

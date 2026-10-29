@@ -52,4 +52,12 @@ describe('WG08 explicit public projection', () => {
   expect(JSON.stringify(activityCardModel(d))).toBe(before);
   d.segments[0].location.name='新地点';expect(JSON.stringify(activityCardModel(d))).not.toBe(before);
  });
+ it('gives every segment a bounded rounded card and emphasizes the real main segment',()=>{
+  const d=applicationDetail();d.name='长中文标题'.repeat(15);d.segments=Array.from({length:4},(_,index)=>({...d.segments[0],name:`第${index+1}段：长名称与地址`,segment_id:index?applicantB:d.main_segment_id}));
+  const layout=cardLayout(activityCardModel(d));expect(layout.blocks).toHaveLength(5);
+  expect(layout.blocks[0].color).toBe('#A7F05A');expect(layout.blocks[1].color).toBe('#eee8fc');
+  expect(layout.blocks.slice(2).every(block=>block.color==='#ffffff')).toBe(true);
+  expect(layout.blocks.every(block=>block.y+block.height<layout.height&&block.radius>0)).toBe(true);
+  expect(layout.lines.every(line=>line.y<layout.height)).toBe(true);
+ });
 });

@@ -7,10 +7,16 @@ export async function renderActivityCard(card: ActivityCardModel, assertCurrent:
   await new Promise<void>(resolve => Taro.nextTick(resolve));
   assertCurrent();
   const context = Taro.createCanvasContext(canvasId);
-  context.setFillStyle('#fffaf5'); context.fillRect(0, 0, layout.width, layout.height);
-  context.setFillStyle('#e7f2e9'); context.fillRect(24, 20, 702, layout.height - 40);
+  context.setFillStyle('#F8F6F0'); context.fillRect(0, 0, layout.width, layout.height);
+  for (const { x, y, width, height, radius: r, color } of layout.blocks) {
+    context.setFillStyle(color); context.beginPath();
+    context.moveTo(x + r, y); context.lineTo(x + width - r, y); context.arc(x + width - r, y + r, r, -Math.PI / 2, 0);
+    context.lineTo(x + width, y + height - r); context.arc(x + width - r, y + height - r, r, 0, Math.PI / 2);
+    context.lineTo(x + r, y + height); context.arc(x + r, y + height - r, r, Math.PI / 2, Math.PI);
+    context.lineTo(x, y + r); context.arc(x + r, y + r, r, Math.PI, Math.PI * 1.5); context.closePath(); context.fill();
+  }
   for (const line of layout.lines) {
-    context.setFillStyle(line.color); context.setFontSize(line.size); context.fillText(line.text, 48, line.y);
+    context.setFillStyle(line.color); context.setFontSize(line.size); context.fillText(line.text, 72, line.y);
   }
   await new Promise<void>((resolve, reject) => {
     // A platform draw callback that never arrives must not leave the UI permanently busy.

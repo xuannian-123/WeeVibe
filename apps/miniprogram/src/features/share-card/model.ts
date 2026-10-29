@@ -39,11 +39,12 @@ export function activityCardModel(detail: ActivityDetail, invitationId?: string)
 }
 export type ActivityCardModel = ReturnType<typeof activityCardModel>;
 export type CardLine = { text: string; y: number; size: number; color: string };
+export type CardBlock = { x: number; y: number; width: number; height: number; radius: number; color: string };
 /** Conservative Unicode wrapping; no segment is silently omitted to make the card fit. */
 export function cardLayout(card: ActivityCardModel) {
-  const lines: CardLine[] = []; let y = 52;
-  function paragraph(value: string, size = 24, color = '#33473c') {
-    const max = 654 / size; let line = '', units = 0;
+  const lines: CardLine[] = [], blocks: CardBlock[] = []; let y = 68;
+  function paragraph(value: string, size = 24, color = '#222222') {
+    const max = 606 / size; let line = '', units = 0;
     for (const char of Array.from(value)) {
       const width = /[\x20-\x7e]/.test(char) ? 0.65 : 1.1;
       if (units + width > max && line) { lines.push({ text: line, y, size, color }); y += size + 12; line = ''; units = 0; }
@@ -51,28 +52,33 @@ export function cardLayout(card: ActivityCardModel) {
     }
     if (line) { lines.push({ text: line, y, size, color }); y += size + 12; }
   }
-  paragraph('WeeVibe · 活动行程快照', 24, '#66816e');
-  paragraph(card.name, 36, '#182f24');
-  paragraph(card.cancelled ? '活动已取消 · 请勿按旧图报名' : '最新安排以链接为准', 26, card.cancelled ? '#a33535' : '#216d49');
-  paragraph(`版本 ${card.revision} · 快照 ${card.capturedAt}`, 20, '#68776f');
-  paragraph('以下时间均为北京时间 UTC+8', 20, '#68776f');
+  paragraph('WeeVibe · 一起出发', 26);
+  y += 20;
+  paragraph(card.name, 36);
+  paragraph(card.cancelled ? '活动已取消 · 请勿按旧图报名' : '最新安排以链接为准', 26, card.cancelled ? '#8a263d' : '#222222');
+  paragraph(`行程快照 ${card.capturedAt}`, 20, '#625f58');
+  paragraph('以下时间均为北京时间 UTC+8', 20, '#625f58');
+  blocks.push({ x: 24, y: 24, width: 702, height: y - 22, radius: 28, color: card.cancelled ? '#FF9DAB' : '#A7F05A' });
   card.segments.forEach((segment, index) => {
-    y += 20;
-    paragraph(`${index + 1}. ${segment.name}${segment.main ? ' · 主环节' : ''}${segment.cancelled ? ' · 已取消' : ''}`, 28, segment.cancelled ? '#a33535' : '#182f24');
+    const top = y + 14; y = top + 44;
+    paragraph(`${index + 1}. ${segment.name}${segment.main ? ' · 主环节' : ''}${segment.cancelled ? ' · 已取消' : ''}`, 28, segment.cancelled ? '#8a263d' : '#222222');
     paragraph(`${segment.startsAt} 至 ${segment.endsAt}`);
-    paragraph(`报名截止 ${segment.deadlineAt}`, 20, '#68776f');
+    paragraph(`报名截止 ${segment.deadlineAt}`, 20, '#625f58');
     paragraph(`地点 ${segment.location}${segment.address ? ' · ' + segment.address : ''}`);
     paragraph(segment.fee);
-    if (segment.feeNote) paragraph(`费用说明 ${segment.feeNote}`, 20, '#68776f');
-    paragraph(`${segment.verification} · ${segment.booking}`, 20, '#68776f');
+    if (segment.feeNote) paragraph(`费用说明 ${segment.feeNote}`, 20, '#625f58');
+    paragraph(`${segment.verification} · ${segment.booking}`, 20, '#625f58');
+    blocks.push({ x: 24, y: top, width: 702, height: y - top + 8, radius: 28, color: segment.main ? '#eee8fc' : '#ffffff' });
+    y += 22;
   });
-  y += 24;
-  paragraph(QR_UNAVAILABLE, 26, '#a0522d');
-  paragraph('图片不是报名凭证，不代表实时空位、成局或当前报价。', 20, '#68776f');
-  paragraph('取消、变更及是否可加入，以链接内最新状态为准。', 20, '#68776f');
-  paragraph('活动编号 ' + card.activityId, 18, '#68776f');
-  if (card.invitationId) paragraph('公开邀请来源 ' + card.invitationId, 18, '#68776f');
+  y += 32;
+  paragraph(QR_UNAVAILABLE, 26, '#8a3c28');
+  paragraph('图片不是报名凭证，不代表实时空位、成局或当前报价。', 20, '#625f58');
+  paragraph('取消、变更及是否可加入，以链接内最新状态为准。', 20, '#625f58');
+  // Public provenance is retained in small print, never promoted to an identity credential.
+  paragraph('活动编号 ' + card.activityId, 18, '#625f58');
+  if (card.invitationId) paragraph('公开邀请来源 ' + card.invitationId, 18, '#625f58');
   const height = y + 24;
   if (!card.segments.length || height > MAX_CARD_HEIGHT) throw new Error('CARD_TOO_LARGE');
-  return { width: 750, height, lines };
+  return { width: 750, height, lines, blocks };
 }
