@@ -8,6 +8,18 @@ const details=()=>({...emptyGatheringDetails(),date:'2030-02-01',title:'周末�
 function intake(){const value=emptyGatheringIntake();value.public.date='2030-02-01';value.public.keywords.eat=['火锅／串串'];value.public.confirmed_keys=['eat_2'];value.private={budget_min:111,budget_max:987,budget_note:'PRIVATE_BUDGET_SENTINEL',origin:{label:'PRIVATE_HOME_SENTINEL',latitude:30.111,longitude:120.999,crs:'GCJ-02'},confirmed_keys:['budget','origin']};return value;}
 const row=(userId=owner,version=1)=>({userId,publicIntake:intake().public,privateIntake:intake().private,answers:[],responseVersion:version});
 describe('gathering private fields and confirmed blocks',()=>{
+  it('preserves legacy details and native map records, but rejects stale labels and strips unconfirmed map metadata',()=>{
+    const base=details();expect(gatheringDetailsSchema.parse(base)).toEqual(base);
+    const venue={name:'UNCONFIRMED_MAP',address:'UNCONFIRMED_ADDRESS',location:{latitude:31.2,longitude:120.3,crs:'GCJ-02' as const},source:{provider:'wechat' as const,source_api:'wx.chooseLocation' as const}};
+    const value={...base,place:venue.name,address:venue.address,place_venue:venue,candidate_places:[]};
+    expect(gatheringDetailsSchema.parse(value).place_venue).toEqual(venue);
+    expect(gatheringDetailsSchema.safeParse({...value,place:'另一个地点'}).success).toBe(false);
+    expect(gatheringDetailsSchema.safeParse({...base,candidate_places:[{id:'p1',label:'另一个地点',venue}]}).success).toBe(false);
+    const visible=gatheringVisibleDetails(value,'team',false);
+    expect(visible).not.toHaveProperty('place_venue');expect(JSON.stringify(visible)).not.toContain('UNCONFIRMED_');
+    expect(gatheringDetailsSchema.safeParse(visible).success).toBe(true);
+    expect(JSON.stringify(gatheringModelSource(value,[]))).not.toMatch(/latitude|longitude|wx.chooseLocation/);
+  });
   it('preserves private blocks for the owner while shared blocks contain only selected public input',()=>{
     const value=intake(),own=gatheringOwnBlocks(value),shared=gatheringPublicBlocks(value.public);
     expect(own.filter(b=>b.id==='budget'||b.id==='origin')).toHaveLength(2);

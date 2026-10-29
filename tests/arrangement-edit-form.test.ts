@@ -3,6 +3,12 @@ import { applicationDetail } from './application-fixtures';
 import { formFromArrangement, editInputFromForm } from '../apps/miniprogram/src/features/arrangement-change/edit-form';
 import { POST } from '../apps/web/src/app/api/v1/activities/[activityId]/arrangement-edit/route';
 describe('published arrangement editor mapping and HTTP authorization', () => {
+  it('retains a newly selected coordinate even when the displayed name and address are unchanged',()=>{
+    const detail=applicationDetail();detail.timezone='Asia/Shanghai';detail.segments[0].location.source_url='https://example.org/old-point';
+    const form=formFromArrangement(detail),segment=form.segments[0];
+    segment.venue={name:segment.place,address:segment.address||null,location:{latitude:31.2,longitude:120.3,crs:'GCJ-02'},source:{provider:'wechat',source_api:'wx.chooseLocation'}};
+    expect(editInputFromForm(detail,form,'edit-native-map').segments[0].location.source_url).toContain('120.3,31.2');
+  });
   it('preserves exact original seconds and map source when no time/place was edited', () => {
     const detail = applicationDetail(); detail.timezone = 'Asia/Shanghai'; detail.segments[0].starts_at = '2030-01-02T11:00:33.123Z';
     detail.segments[0].location.source_url = 'https://example.org/venue';

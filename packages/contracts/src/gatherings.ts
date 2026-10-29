@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { avatarAssetSchema } from './avatar';
 import { idempotencyKeySchema } from './activities';
+import { venueSelectionSchema } from './venues';
 
 const id = z.uuid();
 const text = (max: number) => z.string().trim().max(max);
@@ -27,11 +28,14 @@ export const gatheringDetailsSchema = z.object({
   place: text(200), address: text(300), description: text(500), approximate_time: text(200),
   minimum: z.number().int().min(1).max(500).nullable(), capacity: z.number().int().min(1).max(500).nullable(),
   fee: z.object({kind:z.enum(['unknown','per_person','total','per_hour']),amount:money.nullable(),note:text(500)}).strict(),
-  candidate_places: z.array(z.object({id:key,label:text(200).min(1)}).strict()).max(20),
+  place_venue: venueSelectionSchema.optional(),
+  candidate_places: z.array(z.object({id:key,label:text(200).min(1),venue:venueSelectionSchema.optional()}).strict()).max(20),
   questions: z.array(gatheringQuestionSchema).max(20), deadline_at: z.iso.datetime({offset:true}).nullable(),
   confirmed_details: z.array(z.enum(gatheringDetailKeys)).max(gatheringDetailKeys.length),
 }).strict().superRefine((d,ctx) => {
   const bad = (message:string) => ctx.addIssue({code:'custom',message});
+  if(d.place_venue&&(d.place!==d.place_venue.name||d.address!==(d.place_venue.address??'')))bad('集合地点与地图记录不一致，请重新选择地点');
+  if(d.candidate_places.some(p=>p.venue&&p.label!==p.venue.name))bad('候选地点与地图记录不一致，请重新选择地点');
   if (d.minimum !== null && d.capacity !== null && d.minimum > d.capacity) bad('最多人数不能少于最低人数');
   if (d.date && d.end_date && d.end_date < d.date) bad('结束日期不能早于活动日期');
   if (d.start_time && d.end_time && (!d.end_date || d.end_date === d.date) && d.end_time <= d.start_time) bad('结束时间应晚于开始时间');
