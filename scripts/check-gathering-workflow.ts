@@ -15,6 +15,14 @@ const {getInbox,readInbox}=load('../apps/web/src/server/inbox.ts') as typeof imp
 const db=getDb(),key=()=>randomUUID(),date='2030-11-10';let passed=0;
 let stage='setup';
 const watchdog=setTimeout(()=>{console.error(JSON.stringify({passed:false,stage,error:'Workflow acceptance did not finish within 60 seconds'}));process.exit(1);},60000);
+// Use a separate connection so a stalled Prisma transaction cannot hide the
+// database lock evidence. This script already requires a disposable loopback DB.
+const diagnostics=setTimeout(async()=>{
+ const {Client}=load('../apps/web/node_modules/pg'),client=new Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:5000,query_timeout:5000});
+ try{await client.connect();const result=await client.query(`SELECT pid,state,wait_event_type,wait_event,pg_blocking_pids(pid) AS blocked_by,left(query,500) AS query FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()`);console.error(JSON.stringify({fixture_diagnostics:true,stage,connections:result.rows}));}
+ catch(error){console.error(JSON.stringify({fixture_diagnostics:true,stage,error_type:error instanceof Error?error.name:typeof error}));}
+ finally{await client.end();}
+},15000);
 const check=(name:string)=>{passed++;console.log('PASS '+name);};
 const intake=(name:string)=>{const v=emptyGatheringIntake();v.public.activity_nickname=name;v.public.date=date;v.public.keywords.eat=['常规中餐'];v.public.keywords.environment=['烟味重'];v.private.budget_min=0;v.private.budget_max=100;v.private.origin={label:'PRIVATE_ORIGIN_SENTINEL'};v.public.confirmed_keys=['date','eat_0','environment_1'];v.private.confirmed_keys=['budget','origin'];return v;};
 const itinerary:GatheringItinerary={plans:[1,2].map(n=>({id:`plan_${n}`,title:`推荐 ${n}`,summary:'用于检验完整协调流程',segments:[{id:'segment_a',title:'一起吃饭',description:'共同安排',date,start_time:'12:00',end_time:'13:00',place:'',address:'',fee_note:'费用待核实',unknowns:['营业待核实']}],notes:['需要实际核实']})),notes:['建议安排']};
@@ -68,4 +76,4 @@ try{
  team=await propose(await read(teamId,teamOwner),teamOwner);assert.equal(team.workflow!.phase,'completed');const memberView=await read(teamId,teamMember);assert.equal(memberView.stats,null);assert.equal(memberView.itinerary,null);assert.equal(memberView.workflow!.final_plan!.id,'plan_1');assert.deepEqual(memberView.workflow!.people,[]);assert.equal(memberView.workflow!.total,0);check('team uses aggregate model input and organizer confirmation; member receives only final arrangement');
  const recipients=await db.gatheringNotificationRecipient.findMany({where:{event:{gatheringId:teamId,action:'completed'}}});assert.ok(recipients.some(r=>r.userId===teamMember));assert.ok(await db.gatheringPushOutbox.count({where:{recipientId:{in:recipients.map(r=>r.id)}}})>0);check('completion writes member notification and durable delivery outbox atomically');
  assert.deepEqual(normalizeGatheringCertainty(intake('验证')).public.confirmed_keys,['date','eat_0']);console.log(`PASS ${passed} workflow PostgreSQL acceptance groups; no shared environment touched`);
-}finally{await db.$disconnect();clearTimeout(watchdog);}
+}finally{await db.$disconnect();clearTimeout(watchdog);clearTimeout(diagnostics);}
