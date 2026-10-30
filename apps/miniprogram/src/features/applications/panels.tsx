@@ -62,7 +62,7 @@ export function ApplicationForm({ detail, state, login }: { detail: ActivityDeta
   const terminal=!!detail.cancelled_at||detail.segments.every(segment=>!!segment.cancelled_at||segment.has_started||!segment.is_join_open);
   // A closed invitation is a read-only history surface and needs neither profile verification nor native session access.
   if(terminal)return <Panel title="我想参加"><Text className="activity-muted">本次不再开放新申请，原申请与参加记录仍可在“我的参加状态”核对。</Text>{detail.segments.map(segment=><View className="activity-select-row" key={segment.segment_id}><View className="activity-select-content"><Text>{segment.name}</Text><Text className="caption">{detail.cancelled_at||segment.cancelled_at?'已取消 · 不开放加入':segment.has_started?'已开始 · 不开放加入':'报名已结束 · 不开放加入'} · {feeText(segment.fee)}</Text></View></View>)}{apply.message&&<Notice>{apply.message}</Notice>}</Panel>;
-  if(!userId)return <Panel title="我想参加"><Text className="activity-muted">使用微信登录后，填写本次活动昵称并选择参加环节。</Text><Action disabled={login.busy||anyBusy} onClick={()=>{void login.login();}}>先登录，再申请</Action></Panel>;
+  if(!userId)return <Panel title="我想参加"><Text className="activity-muted">使用微信登录后，填写本次活动昵称、选择环节并接受安排，再提交申请。</Text><Action disabled={login.busy||anyBusy} onClick={()=>{void login.login();}}>先登录，再申请</Action></Panel>;
   return <GatheringProfileBoundary actor={userId} session={getToken()}><Panel title="我想参加">
       <Text className="activity-muted">选适合你的环节，不必全程参加。</Text>
       {state.incomingInvitationId && <Notice>本次新申请会记录当前公开邀请入口，仅说明入口来源，不证明谁实际邀请你，也不保证身份或授予席位。</Notice>}

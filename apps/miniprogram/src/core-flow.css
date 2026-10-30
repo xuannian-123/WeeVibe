@@ -1,0 +1,21 @@
+/* Dimensions follow the 390px reference phone, expressed in Taro design units. */
+.gg-screen.gg-screen,.screen.screen{padding-left:40px;padding-right:40px;font-size:27px;line-height:1.65}
+.gg-screen .gg-title,.screen .page-title{font-size:58px;line-height:1.3;font-weight:900;letter-spacing:-2px;margin:15px 0 42px;overflow-wrap:anywhere}
+.gg-screen .gg-title::after,.screen .page-title::after{content:'';display:block;background:#a7f05a;height:10px;width:42%;border-radius:18px;margin-top:23px;transform:rotate(-2deg)}
+.gg-screen .gg-panel,.gg-screen .gg-person-card,.screen .panel{background:#ffffff82;border:1px solid #ddd9d1;border-radius:29px;padding:33px 29px;margin:29px 0;box-shadow:none}
+.gg-screen .gg-panel.lilac{background:#ede6fc}.gg-screen .gg-panel.peach{background:#ffe5eb}
+.gg-screen .gg-heading,.screen .heading{font-size:33px;font-weight:800;line-height:1.5;margin:0 0 23px}
+.gg-screen .gg-field,.screen .field{margin:31px 0}.gg-screen .gg-label,.screen .field-label{font-size:25px;line-height:1.65;font-weight:700;margin-bottom:15px;color:#222}
+.gg-screen .gg-input,.gg-screen .gg-textarea,.screen .field input{background:#ffffffbf;border:1px solid #ccc8c0;border-radius:21px;padding:23px 21px;font-size:25px;line-height:1.5;min-height:83px;box-sizing:border-box;color:#222}
+.gg-screen .gg-textarea{min-height:144px;height:160px}.gg-screen .gg-notice,.screen .notice{background:#eee6fa;color:#5d5067;padding:25px;font-size:23px;line-height:1.85;border-radius:19px;margin:31px 0}
+.gg-screen .gg-chips button.selected,.gg-screen .gg-choice.selected,.gg-screen .gg-block.selected{background:#a7f05a;border-color:#a7f05a;font-weight:700;color:#222}
+.gg-screen .gg-chips{gap:15px}.gg-screen .gg-chips button{border-radius:42px;padding:13px 21px;border:1px solid #cfc9be;background:#fff8;font-size:23px;line-height:1.5}
+.gg-screen .gg-primary,.screen .action-primary{background:#a7f05a;border:1px solid #a7f05a;color:#222;border-radius:46px;min-height:83px;padding:19px 25px;font-size:27px;line-height:1.5;font-weight:700}
+.gg-screen .gg-secondary,.screen .action-secondary{background:transparent;border:1px solid #b7b1a7;color:#222;border-radius:21px;min-height:81px;padding:21px;font-size:27px;line-height:1.5}
+.gg-form-footer{padding:23px 40px calc(35px + env(safe-area-inset-bottom));border-top:1px solid #e9e4d9}.gg-form-footer .gg-primary,.gg-form-footer .gg-secondary{border-radius:46px}.gg-form-footer .gg-secondary{margin-top:15px}
+.gg-flow-progress{margin:19px 0 46px;color:#70695e;font-size:23px}.gg-flow-progress>view{display:flex;gap:15px;margin-top:19px}.gg-flow-progress>view>view{height:10px;background:#ddd8ce;border-radius:10px;flex:1}.gg-flow-progress>view>view.on{background:#a7f05a}
+.gg-nickname .gg-nickname-title{font-size:58px;line-height:1.3;letter-spacing:-2px;max-width:100%}.gg-nickname .gg-nickname-title::after{content:'';display:block;width:42%;height:10px;background:#a7f05a;border-radius:18px;margin-top:23px;transform:rotate(-2deg)}
+.gg-nickname .gg-nickname-card{background:transparent;border:0;padding:0}.gg-nickname .gg-nickname-next{border-radius:46px;background:#a7f05a}.gg-nickname .gg-nickname-hint{font-size:23px;color:#777268}
+.core-subpage .action-primary{margin-top:35px}
+
+.gg-nickname .gg-nickname-card::before{display:none}.core-flow-menu{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin:29px 0}.core-flow-menu .action{margin:0;font-size:24px}

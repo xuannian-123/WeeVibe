@@ -2,7 +2,7 @@ import { createHash,randomInt } from 'node:crypto';
 import { Prisma, type Gathering } from '@prisma/client';
 import {
   gatheringCreateSchema, gatheringMemberSaveSchema, gatheringDetailsSchema, gatheringDetailsUpdateSchema, gatheringIntakeSchema,gatheringFinalizeSchema,
-  gatheringItinerarySchema, gatheringPublicBlocks, gatheringOwnBlocks, gatheringVisibleDetails, emptyGatheringIntake,
+  normalizeGatheringCertainty,gatheringQuestions,gatheringItinerarySchema, gatheringPublicBlocks, gatheringOwnBlocks, gatheringVisibleDetails, emptyGatheringIntake,
   gatheringPublicIntakeSchema,gatheringAnimalIdSchema,gatheringAnimalIds,gatheringAvatarKeySchema,
   type GatheringDetails, type GatheringIntake, type GatheringSnapshot, type GatheringSummary,
 } from '@weevibe/contracts';
@@ -13,6 +13,7 @@ import type { Tx } from '../activities/state';
 import { consumeRequirementBudget } from '../requirements/service';
 import { gatheringSourceFingerprint, gatheringTeamStatistics, type PublicGatheringRow } from './privacy';
 import {enqueueGatheringSubmission} from './notifications';
+import {gatheringWorkflowView} from './workflow';
 import {allocateGatheringAvatar} from './avatars';
 
 export const gatheringJson=(value:unknown)=>JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -46,14 +47,14 @@ function normalizeIntake(raw:unknown,details:GatheringDetails,validateRequired:b
   const intake=parsed.data;
   if(!intake.public.activity_nickname)throw invalid('请先填写这次活动使用的昵称');
   try{gatheringOwnBlocks(intake);}catch(e){throw invalid(e instanceof Error?e.message:undefined);}
-  const answers=intake.answers;
-  if(new Set(answers.map(a=>a.question_id)).size!==answers.length||answers.some(a=>!details.questions.some(q=>q.id===a.question_id)))throw invalid('问题已变化，请刷新后重新填写');
-  for(const q of details.questions){
+  const answers=intake.answers,questions=kind==='team'?gatheringQuestions(details):details.questions;
+  if(new Set(answers.map(a=>a.question_id)).size!==answers.length||answers.some(a=>!questions.some(q=>q.id===a.question_id)))throw invalid('问题已变化，请刷新后重新填写');
+  for(const q of questions){
     const a=answers.find(a=>a.question_id===q.id),chosen=a?.option_ids??[];
     if(new Set(chosen).size!==chosen.length||chosen.some(id=>!q.options.some(o=>o.id===id))||q.type==='single'&&chosen.length+Number(!!a?.other)>1||q.type==='text'&&(chosen.length||a?.other)||q.type!=='text'&&a?.text)throw invalid('请检查问题的选项和其他回答');
     if(validateRequired&&q.required&&!(q.type==='text'?a?.text:chosen.length||a?.other))throw invalid(`请填写必答题：${q.title}`);
   }
-  return intake;
+  return normalizeGatheringCertainty(intake);
 }
 function assertDetails(details:GatheringDetails,kind:string,now:Date){
   if(!details.date)throw invalid('请先选择活动日期');
@@ -81,14 +82,15 @@ export async function gatheringSnapshotTx(tx:Tx,id:string,actor:string):Promise<
   const page=row.kind==='friend'&&isMember?rows.slice(0,10):[];
   const person=friendIdentities(rows);
   const ownIntake=own?gatheringIntakeSchema.parse({public:own.publicIntake,private:own.privateIntake,answers:own.answers}):null;
-  const source=gatheringSourceFingerprint(details,rows);
+  const source=gatheringSourceFingerprint(details,rows,row.kind);
   const finalChoice=row.finalGenerationId&&row.finalPlanId&&row.finalizedAt?{generation_id:row.finalGenerationId,plan_id:row.finalPlanId,finalized_at:row.finalizedAt.toISOString()}:null;
   const currentId=row.finalGenerationId||row.currentGenerationId;
-  const current=currentId&&(isMember||finalChoice)?await tx.gatheringGeneration.findFirst({where:{id:currentId,gatheringId:id,status:'ready'},select:{id:true,result:true,createdAt:true,sourceHash:true}}):null;
+  const current=currentId&&(row.kind==='team'?isOwner:isMember||finalChoice)?await tx.gatheringGeneration.findFirst({where:{id:currentId,gatheringId:id,status:'ready'},select:{id:true,result:true,createdAt:true,sourceHash:true}}):null;
   const latest=isOwner?await tx.gatheringGeneration.findFirst({where:{gatheringId:id},orderBy:{createdAt:'desc'},select:{id:true,status:true,error:true,createdAt:true}}):null;
+  const workflow=await gatheringWorkflowView(tx,row,actor,rows,person);
   const expired=latest?.status==='processing'&&Date.now()-latest.createdAt.getTime()>90000;
   return {gathering:{...summary(row,actor,details,rows.length,!!own&&own.responseVersion>0),details:gatheringVisibleDetails(details,row.kind as 'friend'|'team',isOwner),owner:person(row.ownerUserId),revision:row.revision},
-    viewer:{is_owner:isOwner,is_member:isMember,can_respond:mayRespond(row,details,new Date()),can_generate:isOwner&&row.kind==='friend'&&!row.finalizedAt},
+    viewer:{is_owner:isOwner,is_member:isMember,can_respond:mayRespond(row,details,new Date()),can_generate:isOwner&&!row.finalizedAt},
     own:own&&ownIntake?{version:own.responseVersion,intake:ownIntake,blocks:gatheringOwnBlocks(ownIntake)}:null,
     members:row.kind==='friend'&&isMember?page.map(r=>({person:person(r.userId),blocks:r.responseVersion>0?gatheringPublicBlocks(r.publicIntake):[],submitted:r.responseVersion>0})):null,
     next_member_cursor:page.length===10&&rows.length>10?page.at(-1)!.userId:null,
@@ -96,6 +98,7 @@ export async function gatheringSnapshotTx(tx:Tx,id:string,actor:string):Promise<
     stats:row.kind==='team'&&isOwner?gatheringTeamStatistics(details,rows):null,
     source_fingerprint:isOwner?source:null,
     itinerary:current?{...gatheringItinerarySchema.parse(current.result),generation_id:current.id,generated_at:current.createdAt.toISOString(),stale:current.sourceHash!==source}:null,
+    ...(workflow?{workflow}:{}),
     final_choice:finalChoice,
     generation:latest?{id:latest.id,status:expired?'failed':latest.status as 'processing'|'ready'|'failed',error:expired?'生成未完成，可以重新核对后重试':latest.error}:null,server_time:new Date().toISOString()};
 }
@@ -169,7 +172,7 @@ export async function updateGatheringDetails(id:string,actor:string,raw:unknown)
   return mutation(async tx=>{
     const row=await lockGathering(tx,id);assertGatheringOwner(row,actor);assertGatheringEditable(row);if(row.revision!==input.expected_revision)throw gatheringConflict();
     const details=input.details,old=gatheringDetailsSchema.parse(row.details);assertDetails(details,row.kind,new Date());
-    if(JSON.stringify(details.questions)!==JSON.stringify(old.questions)&&await tx.gatheringMember.count({where:{gatheringId:id,responseVersion:{gt:0}}}))throw invalid('已有人填写，题目不能再修改；可以补充其他安排');
+    if(JSON.stringify(row.kind==='team'?gatheringQuestions(details):details.questions)!==JSON.stringify(row.kind==='team'?gatheringQuestions(old):old.questions)&&await tx.gatheringMember.count({where:{gatheringId:id,responseVersion:{gt:0}}}))throw invalid('已有人填写，题目不能再修改；可以补充其他安排');
     await tx.gathering.update({where:{id},data:{details:gatheringJson(details),revision:{increment:1}}});
     return gatheringSnapshotTx(tx,id,actor);
   });
@@ -184,6 +187,7 @@ export async function finalizeGathering(id:string,actor:string,raw:unknown){
       if(row.finalGenerationId===input.generation_id&&row.finalPlanId===input.plan_id)return gatheringSnapshotTx(tx,id,actor);
       throw new ServiceError('INVALID_INPUT',409,'已选定最终方案，不能改选');
     }
+    if(tx.gatheringWorkflow)throw new ServiceError('INVALID_INPUT',409,'请通过方案协调确认完成；旧推荐请重新生成，不能跳过成员确认');
     const generation=await tx.gatheringGeneration.findUnique({where:{id:input.generation_id}});
     if(!generation||generation.gatheringId!==id||generation.status!=='ready')throw new ServiceError('INVALID_INPUT',409,'该方案尚未完成或不属于这次出游');
     const source=gatheringSourceFingerprint(gatheringDetailsSchema.parse(row.details),await readGatheringRows(tx,id));

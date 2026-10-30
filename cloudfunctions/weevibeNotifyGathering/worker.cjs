@@ -28,11 +28,12 @@ function createWorker({env,context,send,fetchImpl=globalThis.fetch,now=()=>Date.
       const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if(!job||!uuid.test(job.outbox_id)||!/^[A-Za-z0-9_-]{43}$/.test(job.lease_token||'')){counts.ack_failed++;return;}
       let outcome='unknown',code=null;
-      if(job.template_id!==config.templateId||!uuid.test(job.gathering_id)||!['submitted','updated'].includes(job.event_kind)||!/^[A-Za-z0-9_-]{1,128}$/.test(job.touser||'')){outcome='failed';code=47003;}
+      if(job.template_id!==config.templateId||!uuid.test(job.gathering_id)||!['submitted','updated','plans_ready','selection_updated','confirmation_requested','confirmation_declined','completed'].includes(job.event_kind)||!/^[A-Za-z0-9_-]{1,128}$/.test(job.touser||'')){outcome='failed';code=47003;}
       else if(!Number.isFinite(Date.parse(job.lease_expires_at))||Date.parse(job.lease_expires_at)<=now()+sendTimeoutMs+5000||!Number.isFinite(Date.parse(job.created_at))){outcome='unknown';}
       else{
         const date=new Date(Date.parse(job.created_at)+8*3600000).toISOString().slice(0,16).replace('T',' ');
-        const values={event:job.event_kind==='submitted'?'有成员已提交填写':'有成员更新了填写',service:'WeeVibe活动筹备',hint:'点击查看最新填写',time:date,actor:'活动成员',status:'填写更新'};
+        const labels={submitted:'有成员已提交填写',updated:'有成员更新了填写',plans_ready:'推荐方案已生成',selection_updated:'方案选择有更新',confirmation_requested:'有安排等待你确认',confirmation_declined:'安排需要继续协调',completed:'活动安排已确认完成'};
+        const values={event:labels[job.event_kind],service:'WeeVibe活动筹备',hint:'点击查看最新填写',time:date,actor:'活动成员',status:'填写更新'};
         const data=Object.fromEntries(Object.entries(config.fields).map(([key,source])=>[key,{value:values[source]}]));
         let timer;
         try{

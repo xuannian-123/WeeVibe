@@ -113,7 +113,7 @@ export function interviewAnswerSummary(index: number, intake: GatheringIntake, a
   if (index === 2) return [intake.private.budget_min === null || !Number.isFinite(intake.private.budget_min) ? '' : `最低${intake.private.budget_min}元`, intake.private.budget_max === null || !Number.isFinite(intake.private.budget_max) ? '' : `最高${intake.private.budget_max}元`, intake.private.budget_note].filter(Boolean).join('，') || (answered ? '愿意配合其他人的安排' : '尚未填写预算');
   if (index !== 3 && index !== 4) return '';
   const sections = gatheringSections.filter(section => index === 3 ? section.id === 'do' : section.id !== 'do');
-  const values = sections.flatMap(section => section.groups.flatMap(group => intake.public.keywords[group.id].map(option => `${section.title}：${option}`)));
+  const values = sections.flatMap(section => section.groups.flatMap(group => intake.public.keywords[group.id].map(option => `${group.title}：${intake.public.keyword_notes?.[group.id as 'eat'|'drink'|'play']?.startsWith(option+'：')?intake.public.keyword_notes[group.id as 'eat'|'drink'|'play']:option}`)));
   return [...values, ...(index === 4 && intake.public.note ? [intake.public.note] : [])].join('；') || '暂无已选偏好，请核对后继续';
 }
 export function interviewAcknowledgement(index: number, intake: GatheringIntake): string {

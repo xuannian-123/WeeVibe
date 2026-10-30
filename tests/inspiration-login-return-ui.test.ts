@@ -16,18 +16,18 @@ vi.mock('../apps/miniprogram/src/features/todos/TodoPanel',()=>({TodoPanel:()=>n
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',async()=>{
   const {createRequire}=await import('node:module');const {resolve}=await import('node:path');const {useRef,useEffect}=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json'))('react');
   const hook=(kind:'show'|'hide'|'unload',cb:()=>void)=>{const ref=useRef(cb);ref.current=cb;useEffect(()=>{const fn=()=>ref.current();h.hooks[kind].add(fn);return()=>{h.hooks[kind].delete(fn);};},[]);};
-  return {default:{getLocation:h.native,openLocation:h.map,showToast:h.toast,getStorageSync:(k:string)=>h.storage.get(k)??'',setStorageSync:(k:string,v:unknown)=>{h.writes(k,v);h.storage.set(k,v);},navigateTo:h.navigate,reLaunch:h.relaunch},usePageScroll:()=>{},useDidShow:(f:()=>void)=>hook('show',f),useDidHide:(f:()=>void)=>hook('hide',f),useUnload:(f:()=>void)=>hook('unload',f)};
+  return {default:{getPrivacySetting:({success}:any)=>success({needAuthorization:false}),getSetting:async()=>({authSetting:{'scope.userLocation':true}}),getLocation:h.native,openLocation:h.map,showToast:h.toast,getStorageSync:(k:string)=>h.storage.get(k)??'',setStorageSync:(k:string,v:unknown)=>{h.writes(k,v);h.storage.set(k,v);},navigateTo:h.navigate,reLaunch:h.relaunch},usePageScroll:()=>{},useDidShow:(f:()=>void)=>hook('show',f),useDidHide:(f:()=>void)=>hook('hide',f),useUnload:(f:()=>void)=>hook('unload',f)};
 });
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({
  Switch:(p:any)=>createElement('input',{type:'checkbox',checked:p.checked,disabled:p.disabled,onChange:(e:any)=>p.onChange?.({detail:{value:e.currentTarget.checked}})}),
- ScrollView:(p:any)=>createElement('div',{className:p.className},p.children),View:(p:any)=>createElement('div',{onClick:p.onClick,className:p.className},p.children),Text:(p:any)=>createElement('span',{onClick:p.onClick},p.children),Button:(p:any)=>createElement('button',{'aria-label':p.ariaLabel,disabled:p.disabled,onClick:p.onClick},p.children),Input:(p:any)=>createElement('input',{value:p.value,placeholder:p.placeholder,onInput:(e:any)=>p.onInput?.({detail:{value:e.currentTarget.value}})}),Image:()=>null,Picker:(p:any)=>createElement('div',{},p.children),Textarea:(p:any)=>createElement('textarea',{value:p.value,onChange:()=>{}})}));
+ ScrollView:(p:any)=>createElement('div',{className:p.className},p.children),View:(p:any)=>createElement('div',{onClick:p.onClick,className:p.className},p.children),Text:(p:any)=>createElement('span',{onClick:p.onClick},p.children),Button:(p:any)=>createElement('button',{className:p.className,'aria-label':p.ariaLabel,disabled:p.disabled,onClick:p.onClick},p.children),Input:(p:any)=>createElement('input',{value:p.value,placeholder:p.placeholder,onInput:(e:any)=>p.onInput?.({detail:{value:e.currentTarget.value}})}),Image:()=>null,Picker:(p:any)=>p.mode==='selector'&&Array.isArray(p.range)?createElement('label',{},p.children,createElement('select',{'aria-label':'范围（km）',value:p.value,onChange:(e:any)=>p.onChange?.({detail:{value:e.currentTarget.value}})},p.range.map((label:string,index:number)=>createElement('option',{key:index,value:index},label)))):createElement('div',{},p.children),Textarea:(p:any)=>createElement('textarea',{value:p.value,onChange:()=>{}})}));
 vi.mock('../apps/miniprogram/src/features/team',()=>({TeamCreate:()=>createElement('div',{},'ACTUAL_TEAM_TARGET')}));
 import Home from '../apps/miniprogram/src/pages/index/index';
 const coords={latitude:30.1234567,longitude:120.2345678};
 const cityResult={city:'杭州市',region:'浙江省',district:'西湖区',source:{provider:'amap',source_api:'https://restapi.amap.com/v3/geocode/regeo',checked_at:'2030-01-01T00:00:00Z'}};
 const venue=(name='AUDIT_PUBLIC_PARK')=>({...accountVenue(),name,address:'PUBLIC_REFERENCE_ADDRESS'});
 const list=(name='AUDIT_PUBLIC_PARK')=>({source:accountVenue().source,venues:[venue(name)],excluded_count:0,pagination:false});
-const good=(r:any)=>Promise.resolve({status:200,body:r.path==='/api/v1/me'?{user_id:accountActor}:r.path==='/api/v1/account'?emptyAccountFixture():r.path.endsWith('/city')?cityResult:list()});
+const good=(r:any)=>Promise.resolve({status:200,body:r.path==='/api/v1/me'?{user_id:accountActor}:r.path==='/api/v1/account'?emptyAccountFixture():r.path.endsWith('/city')?{...cityResult,...(r.body?.include_address?{nearest_address:'翰林邻里中心'}:{})}:list()});
 let root:any;
 beforeEach(()=>{h.token='audit-location-a';h.storage.clear();h.writes.mockClear();Object.values(h.hooks).forEach(s=>s.clear());h.transport.mockReset().mockImplementation(good);h.native.mockReset().mockResolvedValue(coords);h.map.mockReset().mockResolvedValue(undefined);h.toast.mockReset();h.login.mockReset();h.navigate.mockReset().mockResolvedValue({});h.relaunch.mockReset().mockResolvedValue({});h.avatar.mockReset().mockResolvedValue(undefined);});
 afterEach(async()=>{if(root)await act(async()=>root.unmount());root=undefined;document.body.innerHTML='';vi.restoreAllMocks();});
@@ -125,3 +125,33 @@ it('an explicitly retried guest intent bound to A is cleared if fresh login esta
 it('returning as guest starts a fresh automatic identity recovery and releases busy after verification',async()=>{await draftIntent();const wait=deferred();h.transport.mockImplementation(r=>r.path==='/api/v1/me'?wait.promise:good(r));await click('微信登录');await lifecycle('hide');h.token='';await lifecycle('show');expect(h.login).toHaveBeenCalledTimes(2);await act(async()=>wait.resolve({status:200,body:{user_id:accountActor}}));expect(Array.from(document.querySelectorAll('button')).some(b=>b.disabled&&b.textContent==='正在恢复登录…')).toBe(false);expect(keyword()).toBeNull();});
 
 it('friend creation goes straight to preparation without a second path choice after trusted login',async()=>{await draftIntent();await click('＋');await textClick('朋友出游');expect(text()).not.toContain('先筹备');expect(text()).not.toContain('直接创建安排');expect(h.login).not.toHaveBeenCalled();expect(h.navigate).not.toHaveBeenCalled();await click('微信登录');expect(h.navigate).toHaveBeenCalledExactlyOnceWith({url:'/pages/gathering/index?new=friend'});expect(keyword()).toBeNull();expect(writesOrSearches()).toHaveLength(0);expect(h.native).not.toHaveBeenCalled();});
+
+it('explicit nearby action fills the concrete address without opening a native map',async()=>{
+ await mount('nearby');
+ const scope=document.querySelector<HTMLButtonElement>('.c-scope-link');expect(scope).not.toBeNull();
+ await act(async()=>scope!.click());
+ expect(document.querySelector('.c-sheet-overlay .c-input')?.textContent).toBe('');
+ const nearbyButton=Array.from(document.querySelectorAll<HTMLButtonElement>('.c-sheet-overlay button')).find(node=>node.textContent?.startsWith('附近地点'));expect(nearbyButton).toBeTruthy();await act(async()=>nearbyButton!.click());
+ expect(document.querySelector('.c-sheet-overlay .c-input')?.textContent).toBe('翰林邻里中心');
+ expect(h.native).toHaveBeenCalledTimes(1);expect(h.map).not.toHaveBeenCalled();
+ expect(h.transport.mock.calls.find(([r])=>r.path.endsWith('/city'))?.[0].body.include_address).toBe(true);
+});
+
+it('offers exactly the requested radius choices and reuses the selected location when changing to 50km',async()=>{
+ await mount('nearby');
+ await act(async()=>document.querySelector<HTMLButtonElement>('.c-scope-link')!.click());
+ expect(document.querySelector('.c-sheet-overlay .c-input')?.textContent).toBe('');
+ const nearbyButton=Array.from(document.querySelectorAll<HTMLButtonElement>('.c-sheet-overlay button')).find(node=>node.textContent?.startsWith('附近地点'))!;
+ await act(async()=>nearbyButton.click());
+ const picker=document.querySelector<HTMLSelectElement>('select[aria-label="范围（km）"]')!;
+ expect(Array.from(picker.options).map(option=>option.text)).toEqual(['2','5','8','10','15','20','25','30','35','40','50']);
+ h.transport.mockClear();
+ await act(async()=>{picker.value='10';picker.dispatchEvent(new Event('change',{bubbles:true}));});
+ const request=h.transport.mock.calls.find(([r])=>r.path.endsWith('/nearby'))?.[0];
+ expect(request.body.radius_m).toBe(50000);
+ expect(request.body.center).toEqual({latitude:30.123457,longitude:120.234568,crs:'GCJ-02'});
+ expect(h.native).toHaveBeenCalledTimes(1);
+ expect(document.querySelector('.c-sheet-overlay .c-input')?.textContent).toBe('翰林邻里中心');
+ expect(document.querySelector('.c-sheet-overlay')?.textContent).not.toMatch(/选择城市|全部区域|查看这个范围/);
+ expect(document.querySelector('.c-sheet-overlay')?.textContent).toContain('从地图选择');
+});

@@ -35,7 +35,7 @@ describe('AMap provider: offline only', () => {
   });
   it('rejects unbounded radius, page size, extra fields and empty custom keyword before fetch', async () => {
     const { service, fetcher } = provider();
-    for (const input of [{ ...nearby, radius_m: 0 }, { ...nearby, radius_m: 5001 }, { ...nearby, page_size: 11 },
+    for (const input of [{ ...nearby, radius_m: 0 }, { ...nearby, radius_m: 50001 }, { ...nearby, page_size: 11 },
       { ...nearby, page_size: '5' }, { ...nearby, url: 'https://evil.test' }, { ...nearby, category: 'custom' },
       { ...nearby, center: { ...center, latitude: 121 } }]) {
       await expect(service.nearby('verified-user', input)).rejects.toMatchObject({ reason: 'INVALID_INPUT' });
@@ -186,4 +186,11 @@ describe('venue route boundary using shared handle (offline identity fixtures)',
     expect(response.status).toBe(502); expect(body).not.toContain(KEY); expect(body).not.toContain('<html>');
     expect(JSON.parse(body).error.code).toBe('UPSTREAM_UNAVAILABLE');
   });
+});
+
+it('forwards the 50km boundary to the provider and excludes farther results',async()=>{
+  const {service,fetcher}=provider(()=>good({pois:[{...fixturePoi,distance:'49999'},{...fixturePoi,id:'outside',distance:'50001'}]}));
+  const result=await service.nearby('verified-user',{...nearby,category:'sport',radius_m:50000});
+  expect(new URL(String(fetcher.mock.calls[0][0])).searchParams.get('radius')).toBe('50000');
+  expect(result.venues.map(v=>v.provider_id)).toEqual(['fixture-id']);
 });
