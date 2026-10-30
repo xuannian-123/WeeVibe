@@ -134,7 +134,7 @@ function GatheringIntakeEditorInner({memoryBusyChanged,initial,session,date,done
     previous={()=>{if(editable()){setNotice('');setStep(Math.max(0,step-1));}}} next={nextStep} switchMode={()=>{if(editable()){setMode('interview');setStep(0);setNotice('');}}} clear={clearStep} cancel={leave} organize={()=>void organize()} manual={manualOrganization}/>;
 }
 
-export function GatheringIntakeEditor(props:Parameters<typeof GatheringIntakeEditorInner>[0]){
+function GatheringIntakeEditorMemory(props:Parameters<typeof GatheringIntakeEditorInner>[0]){
  const [innerBusy,setInnerBusy]=useState(false);
  const [seed,setSeed]=useState<GatheringIntake>(),[notice,setNotice]=useState(''),[useHistory,setUseHistory]=useState(true),[remove,setRemove]=useState(false),[settings,setSettings]=useState(false);
  const automatic=useRef<Record<string,string[]>>(props.initial.private.preference_memory?.automatic??{});
@@ -153,3 +153,5 @@ export function GatheringIntakeEditor(props:Parameters<typeof GatheringIntakeEdi
  next.private.preference_memory={use_history:useHistory,retain_automatic:!remove,automatic:unchanged};props.done(next);
  }}/></>;
 }
+
+export function GatheringIntakeEditor(props:Parameters<typeof GatheringIntakeEditorInner>[0]){const owner=useRef(props.session);if(owner.current!==props.session)return <Text>登录账号已变化，原填写内容已隐藏，请重新打开。</Text>;return <GatheringIntakeEditorMemory {...props}/>;}
