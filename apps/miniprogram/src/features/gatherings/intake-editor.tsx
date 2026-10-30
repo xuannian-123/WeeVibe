@@ -148,9 +148,10 @@ function GatheringIntakeEditorMemory(props:Parameters<typeof GatheringIntakeEdit
  return <>{!props.readOnly&&<View><Text>{notice}</Text><Button disabled={innerBusy||props.saving} onClick={()=>setSettings(v=>!v)}>自动记住我的组局偏好 / 设置</Button>{settings&&!innerBusy&&!props.saving&&<MemoryPanel session={props.session}/>}
  <Button disabled={innerBusy||props.saving} onClick={()=>setUseHistory(v=>!v)}>{useHistory?'本次不用历史偏好':'本次使用历史偏好'}</Button>{!useHistory&&<Button disabled={innerBusy||props.saving} onClick={()=>setRemove(v=>!v)}>{remove?'已选择移除未修改带入项':'保留已带入内容；点此改为移除未修改项'}</Button>}</View>}
  <GatheringIntakeEditorInner {...props} memoryBusyChanged={setInnerBusy} initial={seed??props.initial} done={value=>{
- const next=JSON.parse(JSON.stringify(value)) as GatheringIntake;const unchanged:Record<string,string[]>={};
- for(const category of memoryCategories)if(automatic.current[category]&&JSON.stringify(next.public.keywords[category])===JSON.stringify(automatic.current[category])){unchanged[category]=automatic.current[category];if(!useHistory&&remove)next.public.keywords[category]=[];}
- next.private.preference_memory={use_history:useHistory,retain_automatic:!remove,automatic:unchanged};props.done(next);
+ const next=JSON.parse(JSON.stringify(value)) as GatheringIntake;const unchanged:Record<string,string[]>={};const suppressed:('play'|'travel'|'pace')[]=[];
+ for(const category of memoryCategories)if(automatic.current[category]&&!next.public.keywords[category].length)suppressed.push(category);
+ for(const category of memoryCategories)if(automatic.current[category]&&JSON.stringify(next.public.keywords[category])===JSON.stringify(automatic.current[category])&&!next.public.selected_places?.some(p=>p.group===category)){unchanged[category]=automatic.current[category];if(!useHistory&&remove)next.public.keywords[category]=[];}
+ next.private.preference_memory={use_history:useHistory,retain_automatic:!remove,suppressed_categories:suppressed,automatic:unchanged};props.done(next);
  }}/></>;
 }
 

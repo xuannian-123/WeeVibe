@@ -36,7 +36,7 @@ export async function enqueueMemory(tx:Tx,actor:string,source:string,version:num
 /** Remove unchanged autofill from the shared projection; retain provenance only in own private intake. */
 export function separateAutomatic(intake:GatheringIntake){
  const automatic=intake.private.preference_memory?.automatic??{};
- for(const category of categories)if(automatic[category]&&JSON.stringify(intake.public.keywords[category])===JSON.stringify(automatic[category]))intake.public.keywords[category]=[];
+ for(const category of categories)if(automatic[category]&&JSON.stringify(intake.public.keywords[category])===JSON.stringify(automatic[category])&&!intake.public.selected_places?.some(p=>p.group===category)){intake.public.keywords[category]=[];intake.public.confirmed_keys=intake.public.confirmed_keys.filter(key=>!key.startsWith(category+'_'));}
  return intake;
 }
 export async function memoryDefaultsTx(tx:Tx,actor:string){const v=await view(tx,actor);return v.recommending?v.profiles:[];}
@@ -76,7 +76,7 @@ export async function resolveMemoryRows(tx:Tx,rows:(import('./privacy').PublicGa
   const v=await view(tx,row.userId);stamps.push([row.userId,v.version,v.profile_version]);
   const input=JSON.parse(JSON.stringify(row.publicIntake)) as GatheringIntake['public'];
   const memoryCategories:string[]=[];
-  if(v.recommending)for(const profile of v.profiles)if(!input.keywords[profile.category].length){input.keywords[profile.category]=profile.values;memoryCategories.push(profile.category);}
+  if(v.recommending)for(const profile of v.profiles)if(!input.keywords[profile.category].length&&!context.suppressed_categories?.includes(profile.category)&&!input.keyword_notes?.[profile.category as 'play']){input.keywords[profile.category]=profile.values;memoryCategories.push(profile.category);}
   resolved.push({...row,publicIntake:input,memoryCategories});
  }
  return {rows:resolved,stamp:JSON.stringify(stamps)};
