@@ -13,7 +13,8 @@ import { StampSlam } from "../Stamp";
 import { toast } from "../toast";
 import { WaitlistCard } from "./Waiting";
 import { CircleCard, ClickCard, SeatCard, SocialCard } from "./Social";
-import { DecisionCard } from "./Decision";
+import { DecisionCard, SegmentsTimeline } from "./Decision";
+import { NegotiationCard } from "./Negotiation";
 
 export function photoSrc(juId: string, p: string): string {
   return /^(https?:|data:|\/)/.test(p) ? p : api.photoUrl(juId, p);
@@ -33,10 +34,18 @@ function Hero({ state, p }: { state: JuState; p: Proposal }) {
       </div>
       <div className="mb-1 text-[14px] font-bold tracking-widest text-cinnabar">局 · 定 · 了</div>
       <div className="font-num pr-28 text-[28px] font-bold leading-tight">{slotText(p.slot)}</div>
-      <h2 className="mt-3 text-[23px] font-black leading-snug break-words">{p.poi.name}</h2>
-      <p className="mt-1 text-[14px] leading-relaxed text-ink-soft">{p.poi.address}</p>
+      {(p.segments?.length ?? 0) >= 2 ? (
+        <div className="mt-3 pr-2">
+          <SegmentsTimeline p={p} />
+        </div>
+      ) : (
+        <>
+          <h2 className="mt-3 text-[23px] font-black leading-snug break-words">{p.poi.name}</h2>
+          <p className="mt-1 text-[14px] leading-relaxed text-ink-soft">{p.poi.address}</p>
+        </>
+      )}
       <div className="font-num mt-2 flex flex-wrap gap-x-3 text-[14px] font-semibold text-ink-soft">
-        {p.poi.costPerPerson != null && <span>¥{p.poi.costPerPerson}/人</span>}
+        {p.poi.costPerPerson != null && (p.segments?.length ?? 0) < 2 && <span>¥{p.poi.costPerPerson}/人</span>}
         <span>{p.labelText}</span>
         {state.ju.reservation?.status === "booked" && <span className="text-jade">✓ 已订位</span>}
       </div>
@@ -422,7 +431,9 @@ export function ConfirmedView({ state, me, actions }: { state: JuState; me: Memb
           {/* v4：排了座就先看座位（当天最要紧）；还没排座时请大家帮局长标一下熟不熟 */}
           {inJu && s && <SeatCard state={state} me={me} actions={actions} />}
           {/* v5：为什么这么定 + 注意事项 + 你跟局长说的每一条 */}
-          <DecisionCard state={state} me={inJu ? me : null} />
+          <DecisionCard state={state} me={inJu ? me : null} actions={actions} />
+          {/* v6：公开的分身谈判记录（紧凑，默认收起） */}
+          <NegotiationCard state={state} me={inJu ? me : null} />
           {inJu && <ItineraryCard state={state} actions={actions} p={p} />}
           {travel}
           {inJu && phase === "day" && <OnTheWay state={state} me={me} actions={actions} p={p} />}
