@@ -56,6 +56,7 @@ export const gatheringPublicIntakeSchema = z.object({
   confirmed_keys: z.array(key).max(100),
 }).strict();
 export const gatheringPrivateIntakeSchema = z.object({
+  preference_memory: z.object({use_history:z.boolean(),retain_automatic:z.boolean().optional(),suppressed_categories:z.array(z.enum(['play','travel','pace'])).max(3).optional(),automatic:z.record(z.string(),z.array(z.string().max(40)).max(20))}).strict().optional(),
   budget_min: money.nullable(), budget_max: money.nullable(), budget_note: text(200),
   origin: z.object({label:text(300),latitude:z.number().min(-90).max(90).optional(),longitude:z.number().min(-180).max(180).optional(),crs:z.literal('GCJ-02').optional()}).strict().refine(origin => {
     const coordinates=origin.latitude!==undefined||origin.longitude!==undefined||origin.crs!==undefined;

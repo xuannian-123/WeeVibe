@@ -1,3 +1,5 @@
+import {requestMemory,memoryCategories} from './memory-client';
+import {MemoryPanel} from './memory-panel';
 import {GatheringFlowHeader} from './flow-header';
 import {CAction} from '../design-c/ui';
 import {useGatheringFormChrome} from './page-chrome';
@@ -21,7 +23,7 @@ function hasInterviewAnswer(value:GatheringIntake,index:number){
   if(index===2)return value.private.budget_min!==null||value.private.budget_max!==null||!!value.private.budget_note.trim();
   return gatheringSections.filter(section=>index===3?section.id==='do':section.id!=='do').some(section=>section.groups.some(group=>value.public.keywords[group.id].length>0))||(index===3&&Object.values(value.public.keyword_notes??{}).some(note=>!!note?.trim()))||(index===4&&!!value.public.note.trim());
 }
-export function GatheringIntakeEditor({initial,session,date,done,cancel,saving=false,readOnly=false,readOnlyNotice,saveFeedback,participationNotice,creating=false,flow=false,activityLabel,submitLabel,draftProgress,onDraftProgress}:{initial:GatheringIntake;session:string;date:string;saving?:boolean;readOnly?:boolean;readOnlyNotice?:string;done:(v:GatheringIntake)=>void;cancel:()=>void;saveFeedback?:{message:string;pending:boolean;busy:boolean;retry:()=>void};participationNotice?:string;creating?:boolean;flow?:boolean;activityLabel?:string;submitLabel?:string;draftProgress?:unknown;onDraftProgress?:(progress:GatheringIntakeProgress)=>void}){
+function GatheringIntakeEditorInner({memoryBusyChanged,initial,session,date,done,cancel,saving=false,readOnly=false,readOnlyNotice,saveFeedback,participationNotice,creating=false,flow=false,activityLabel,submitLabel,draftProgress,onDraftProgress}:{memoryBusyChanged?:(busy:boolean)=>void;initial:GatheringIntake;session:string;date:string;saving?:boolean;readOnly?:boolean;readOnlyNotice?:string;done:(v:GatheringIntake)=>void;cancel:()=>void;saveFeedback?:{message:string;pending:boolean;busy:boolean;retry:()=>void};participationNotice?:string;creating?:boolean;flow?:boolean;activityLabel?:string;submitLabel?:string;draftProgress?:unknown;onDraftProgress?:(progress:GatheringIntakeProgress)=>void}){
   const source=useGatheringSource(session),lock=useRef(false),externalBlocked=useRef(saving||readOnly);externalBlocked.current=saving||readOnly;
   const restored=useRef<{progress?:GatheringIntakeProgress}>();
   if(!restored.current){
@@ -46,6 +48,7 @@ export function GatheringIntakeEditor({initial,session,date,done,cancel,saving=f
   function editable(){return source.valid()&&!lock.current&&!externalBlocked.current;}
   function composeNote(base:string,prose:Record<number,string>){return [base,...Object.keys(prose).map(Number).sort().map(index=>prose[index])].filter(Boolean).join('\n');}
   function invalidate(indices:number[]){setAnswered(current=>current.map((done,i)=>indices.includes(i)?false:done));setAcknowledgements(current=>Object.fromEntries(Object.entries(current).filter(([index])=>!indices.includes(Number(index)))));setOrganizeFailed(false);}
+  useEffect(()=>{memoryBusyChanged?.(busy);},[busy,memoryBusyChanged]);
   const publicField=(patch:Partial<GatheringIntake['public']>)=>{if(!editable())return;
     const affected:number[]=[];if('date' in patch||'availability' in patch)affected.push(0);if('note' in patch)affected.push(4);
     if(patch.keyword_notes)affected.push(3);
@@ -130,3 +133,26 @@ export function GatheringIntakeEditor({initial,session,date,done,cancel,saving=f
     minChange={text=>{if(editable()){setBudgetMinText(text);privateField({budget_min:text.trim()?Number(text):null});}}} maxChange={text=>{if(editable()){setBudgetMaxText(text);privateField({budget_max:text.trim()?Number(text):null});}}}
     previous={()=>{if(editable()){setNotice('');setStep(Math.max(0,step-1));}}} next={nextStep} switchMode={()=>{if(editable()){setMode('interview');setStep(0);setNotice('');}}} clear={clearStep} cancel={leave} organize={()=>void organize()} manual={manualOrganization}/>;
 }
+
+function GatheringIntakeEditorMemory(props:Parameters<typeof GatheringIntakeEditorInner>[0]){
+ const [innerBusy,setInnerBusy]=useState(false);
+ const [seed,setSeed]=useState<GatheringIntake>(),[notice,setNotice]=useState(''),[useHistory,setUseHistory]=useState(true),[remove,setRemove]=useState(false),[settings,setSettings]=useState(false);
+ const automatic=useRef<Record<string,string[]>>(props.initial.private.preference_memory?.automatic??{});
+ useEffect(()=>{if(props.readOnly)return;let active=true;void requestMemory(props.session).then(v=>{
+  if(!active)return;const next=JSON.parse(JSON.stringify(props.initial)) as GatheringIntake;
+  if(v.recommending&&!props.readOnly&&!props.draftProgress)for(const p of v.profiles)if(!next.public.keywords[p.category].length){next.public.keywords[p.category]=p.values;automatic.current[p.category]=p.values;}
+  if(Object.keys(automatic.current).length)setNotice('已参考你之前的活动偏好，可修改');
+  setUseHistory(v.recommending);setSeed(next);
+ }).catch(()=>{if(active){setSeed(props.initial);setUseHistory(false);setNotice('偏好记忆暂不可用，本次继续正常填写。');}});return()=>{active=false;};},[props.session]);
+ if(!seed&&!props.readOnly)return <Text>正在读取偏好设置…</Text>;
+ return <>{!props.readOnly&&<View><Text>{notice}</Text><Button disabled={innerBusy||props.saving} onClick={()=>setSettings(v=>!v)}>自动记住我的组局偏好 / 设置</Button>{settings&&!innerBusy&&!props.saving&&<MemoryPanel session={props.session}/>}
+ <Button disabled={innerBusy||props.saving} onClick={()=>setUseHistory(v=>!v)}>{useHistory?'本次不用历史偏好':'本次使用历史偏好'}</Button>{!useHistory&&<Button disabled={innerBusy||props.saving} onClick={()=>setRemove(v=>!v)}>{remove?'已选择移除未修改带入项':'保留已带入内容；点此改为移除未修改项'}</Button>}</View>}
+ <GatheringIntakeEditorInner {...props} memoryBusyChanged={setInnerBusy} initial={seed??props.initial} done={value=>{
+ const next=JSON.parse(JSON.stringify(value)) as GatheringIntake;const unchanged:Record<string,string[]>={};const suppressed:('play'|'travel'|'pace')[]=[];
+ for(const category of memoryCategories)if(automatic.current[category]&&!next.public.keywords[category].length)suppressed.push(category);
+ for(const category of memoryCategories)if(automatic.current[category]&&JSON.stringify(next.public.keywords[category])===JSON.stringify(automatic.current[category])&&!next.public.selected_places?.some(p=>p.group===category)){unchanged[category]=automatic.current[category];if(!useHistory&&remove)next.public.keywords[category]=[];}
+ next.private.preference_memory={use_history:useHistory,retain_automatic:!remove,suppressed_categories:suppressed,automatic:unchanged};props.done(next);
+ }}/></>;
+}
+
+export function GatheringIntakeEditor(props:Parameters<typeof GatheringIntakeEditorInner>[0]){const owner=useRef(props.session);if(owner.current!==props.session)return <Text>登录账号已变化，原填写内容已隐藏，请重新打开。</Text>;return <GatheringIntakeEditorMemory {...props}/>;}

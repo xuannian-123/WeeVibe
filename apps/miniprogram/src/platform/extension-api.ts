@@ -6,7 +6,7 @@ import { unrecognizedResponseMessage } from './response-error';
 /** Extension routes use the same configured transport and verified session. */
 export async function extensionRequest<T>(path: string, method: 'GET' | 'POST' | 'PUT' | 'PATCH' = 'GET', body?: unknown): Promise<T> {
   const uuid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
-  const allowed = path === '/api/v1/account' || path === '/api/v1/account/avatar' || path === '/api/v1/messages' || path === '/api/v1/venues/city' || new RegExp('^/api/v1/activities/' + uuid + '/member-profiles(?:/' + uuid + ')?$').test(path) || new RegExp('^/api/v1/requirements(?:/' + uuid + ')?(?:\\?activity_id=' + uuid + ')?$').test(path) || new RegExp('^/api/v1/activities/' + uuid + '/participation$').test(path);
+  const allowed = path === '/api/v1/preference-memory' || path === '/api/v1/account' || path === '/api/v1/account/avatar' || path === '/api/v1/messages' || path === '/api/v1/venues/city' || new RegExp('^/api/v1/activities/' + uuid + '/member-profiles(?:/' + uuid + ')?$').test(path) || new RegExp('^/api/v1/requirements(?:/' + uuid + ')?(?:\\?activity_id=' + uuid + ')?$').test(path) || new RegExp('^/api/v1/activities/' + uuid + '/participation$').test(path);
   if (!allowed) throw new ApiClientError('INVALID_INPUT', '不支持的业务接口', 400);
   const token = getToken();
   if (!token) throw new ApiClientError('UNAUTHENTICATED', '请先登录', 401);

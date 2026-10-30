@@ -1,3 +1,4 @@
+import {enqueueMemory,separateAutomatic} from './memory';
 import { createHash,randomInt } from 'node:crypto';
 import { Prisma, type Gathering } from '@prisma/client';
 import {
@@ -44,7 +45,7 @@ export async function readGatheringRows(tx:Tx,id:string):Promise<Array<PublicGat
 }
 function normalizeIntake(raw:unknown,details:GatheringDetails,validateRequired:boolean,kind:string):GatheringIntake{
   const parsed=gatheringIntakeSchema.safeParse(raw);if(!parsed.success)throw invalid('请检查预算、填写内容和确定项');
-  const intake=parsed.data;
+  const intake=separateAutomatic(parsed.data);
   if(!intake.public.activity_nickname)throw invalid('请先填写这次活动使用的昵称');
   try{gatheringOwnBlocks(intake);}catch(e){throw invalid(e instanceof Error?e.message:undefined);}
   const answers=intake.answers,questions=kind==='team'?gatheringQuestions(details):details.questions;
@@ -83,6 +84,7 @@ export async function gatheringSnapshotTx(tx:Tx,id:string,actor:string):Promise<
   const page=row.kind==='friend'&&isMember?rows.slice(0,10):[];
   const person=friendIdentities(rows);
   const ownIntake=own?gatheringIntakeSchema.parse({public:own.publicIntake,private:own.privateIntake,answers:own.answers}):null;
+  if(ownIntake?.private.preference_memory)for(const category of ['play','travel','pace'] as const){const automatic=ownIntake.private.preference_memory.automatic[category];if(automatic&&!ownIntake.public.keywords[category].length)ownIntake.public.keywords[category]=automatic;}
   const source=gatheringSourceFingerprint(details,rows,row.kind);
   const finalChoice=row.finalGenerationId&&row.finalPlanId&&row.finalizedAt?{generation_id:row.finalGenerationId,plan_id:row.finalPlanId,finalized_at:row.finalizedAt.toISOString()}:null;
   const currentId=row.finalGenerationId||row.currentGenerationId;
@@ -120,7 +122,7 @@ export async function createGathering(actor:string,raw:unknown){
     const submitted=input.kind==='friend';
     const row=await tx.gathering.create({data:{ownerUserId:actor,kind:input.kind,details:gatheringJson(input.details),creationKey:input.idempotency_key,creationHash:fingerprint,submissionSequence:submitted?1:0}});
     await tx.gatheringMember.create({data:{gatheringId:row.id,userId:actor,animalId:randomAnimal(),avatarKey:await allocateGatheringAvatar(tx,row.id),publicIntake:gatheringJson(intake.public),privateIntake:gatheringJson(intake.private),answers:gatheringJson(intake.answers),responseVersion:submitted?1:0,firstSubmissionSequence:submitted?1:null}});
-    if(submitted)await enqueueGatheringSubmission(tx,row,actor,1,1);
+    if(submitted){await enqueueGatheringSubmission(tx,row,actor,1,1);await enqueueMemory(tx,actor,row.id,1);}
     return gatheringSnapshotTx(tx,row.id,actor);
   });
 }
@@ -163,6 +165,7 @@ export async function saveGatheringIntake(id:string,actor:string,raw:unknown){
     }
     await tx.gathering.update({where:{id},data:{updatedAt:new Date(),submissionSequence:{increment:1}}});
     await enqueueGatheringSubmission(tx,row,actor,version,sequence);
+    await enqueueMemory(tx,actor,id,version);
     return gatheringSnapshotTx(tx,id,actor);
   });
 }

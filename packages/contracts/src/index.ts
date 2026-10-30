@@ -87,3 +87,5 @@ export * from './inspiration';
 export * from './inspiration-seed';
 
 export * from './gathering-workflow';
+
+export * from './preference-memory';
