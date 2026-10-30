@@ -20,10 +20,6 @@ export const privateGatheringInputText = new RegExp([
   privateResidentialText.source,
   /从[^\n。；]{1,80}出发|出发点|个人出发|私人出发|家庭地址|家庭住址|家住|住在|居住地址/.source,
 ].join('|'), 'i');
-export function privateGatheringQuestion(question: GatheringDetails['questions'][number]) {
-  const sensitive=/预算|budget|出发|住址|居住|住在哪|在哪住|从哪|起点|家庭地址|家庭住址|[¥￥]|\d\s*元/i;
-  return sensitive.test(question.title) || question.options.some(o => sensitive.test(o.label));
-}
 export function emptyGatheringIntake(): GatheringIntake {
   return { public: {activity_nickname:'',date:'',availability:'',note:'',keywords:{eat:[],drink:[],play:[],pace:[],atmosphere:[],experience:[],arrangement:[],venue:[],environment:[],travel:[],exertion:[]},confirmed_keys:[]},
     private:{budget_min:null,budget_max:null,budget_note:'',origin:null,confirmed_keys:[]}, answers:[] };

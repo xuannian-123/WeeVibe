@@ -87,5 +87,5 @@
 .c-activity-filters{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:30px}
 .c-activity-filters button{padding:12px 20px;border:2px solid #d7d1c5;border-radius:24px;font-size:22px;line-height:1.5}
 .c-activity-filters .c-selected{background:#a7f05a;border-color:#a7f05a;font-weight:700}
-@media(min-width:400px){.c-hero-title{font-size:74px}.c-scenes{gap:24px}.c-section-heading>text{font-size:37px}}
-@media(max-width:350px){.c-hero-title{font-size:67px}.c-hero-star{font-size:64px}.c-ai-note{font-size:23px}.c-scene-label{font-size:27px}.c-wordmark{font-size:58px}.c-header .c-city{max-width:235px}}
+@media(min-width:400px){.c-hero-title{font-size:74px}.c-section-heading>text{font-size:37px}}
+@media(max-width:350px){.c-hero-title{font-size:67px}.c-hero-star{font-size:64px}.c-ai-note{font-size:23px}.c-wordmark{font-size:58px}.c-header .c-city{max-width:235px}}

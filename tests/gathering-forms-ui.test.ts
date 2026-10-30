@@ -4,7 +4,7 @@ import {accountVenue} from './account-fixtures';
 import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
-import { emptyGatheringDetails,emptyGatheringIntake,gatheringCreateSchema,gatheringOwnBlocks,gatheringQuestionBank,type GatheringDetails,type GatheringIntake } from '../packages/contracts/src';
+import { emptyGatheringDetails,emptyGatheringIntake,gatheringCreateSchema,gatheringOwnBlocks,type GatheringDetails,type GatheringIntake } from '../packages/contracts/src';
 import { ApiClientError } from '../packages/api-client/src';
 
 const req=createRequire(resolve(process.cwd(),'apps/miniprogram/package.json'));

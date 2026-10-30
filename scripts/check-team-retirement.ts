@@ -35,7 +35,7 @@ try{
   // They must be excluded in SQL before limits and parsing, not renamed as friends in JS.
   const ids:string[]=Array.from({length:101},()=>key());
   await db.gathering.createMany({data:ids.map(id=>({id,kind:'team',ownerUserId:owner,details:{retired:'PRIVATE_SENTINEL'},creationKey:key(),creationHash:'a'.repeat(64)}))});
-  await db.gatheringMember.createMany({data:ids.map(id=>({gatheringId:id,userId:owner,publicIntake:{retired:true},privateIntake:{retired:'PRIVATE_SENTINEL'},answers:[],responseVersion:1}))});
+  await db.gatheringMember.createMany({data:ids.map(id=>({gatheringId:id,userId:owner,publicIntake:{retired:true},privateIntake:{retired:'PRIVATE_SENTINEL'},answers:[],responseVersion:1,firstSubmissionSequence:0}))});
   const collectionIds=Array.from({length:101},()=>key());
   await db.requirementSurvey.createMany({data:collectionIds.map(id=>({id,kind:'team',ownerUserId:owner,draft:{retired:'PRIVATE_SENTINEL'},status:'closed',deadlineAt:new Date('2020-01-01T00:00:00Z'),closedAt:new Date('2020-01-01T00:00:00Z'),creationKey:key(),creationHash:'b'.repeat(64)}))});
   assert.deepEqual((await service.listGatherings(owner)).gatherings.map(row=>row.id),[friend.gathering.id]);

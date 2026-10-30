@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest';
-import {emptyGatheringDetails,emptyGatheringIntake,gatheringDateSchema,gatheringDetailsSchema,gatheringIntakeSchema,gatheringCreateSchema,gatheringGenerateSchema,gatheringFinalizeSchema,gatheringMemberSaveSchema,gatheringSubscriptionConfigSchema,gatheringSubscriptionIntentSchema,gatheringSubscriptionIntentResultSchema,inboxMessageSchema,gatheringOwnBlocks,gatheringPublicBlocks,privateGatheringQuestion} from '../packages/contracts/src';
+import {emptyGatheringDetails,emptyGatheringIntake,gatheringDateSchema,gatheringDetailsSchema,gatheringIntakeSchema,gatheringCreateSchema,gatheringGenerateSchema,gatheringFinalizeSchema,gatheringMemberSaveSchema,gatheringSubscriptionConfigSchema,gatheringSubscriptionIntentSchema,gatheringSubscriptionIntentResultSchema,inboxMessageSchema,gatheringOwnBlocks,gatheringPublicBlocks} from '../packages/contracts/src';
 import {newKey} from '../apps/miniprogram/src/platform/local-id';
 import {gatheringModelSource,gatheringSourceFingerprint} from '../apps/web/src/server/gatherings/privacy';
 
@@ -84,5 +84,4 @@ describe('model input and historical question privacy',()=>{
     expect(gatheringSourceFingerprint({...d,capacity:10},rows)).not.toBe(hash);
     expect(gatheringSourceFingerprint(d,[row(owner,2),row(member)])).not.toBe(hash);
   });
-  it.each(['个人预算是多少？','你从哪里来？','你居住在哪个区域？','出发点在哪里？'])('marks %s as own-only questionnaire data',title=>{expect(privateGatheringQuestion({id:'q',title,type:'text',required:false,options:[]})).toBe(true);});
 });
