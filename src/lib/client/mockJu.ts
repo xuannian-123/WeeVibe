@@ -91,6 +91,20 @@ export function useMockJu(id: string, key: string): JuHook {
       },
       chat: async (body: ChatBody) => {
         await wait(500);
+        if ("preferenceAction" in body && body.preferenceAction) {
+          const next = patchMe((me, p) => {
+            if (body.rsvp) p.rsvp = body.rsvp;
+            if (body.rsvp === "no") me.status = "out";
+            if (body.location) me.location = body.location;
+            if (body.availability) p.availability = body.availability;
+            if (body.budgetMax !== undefined) p.budgetMax = body.budgetMax;
+            if (body.dietTags) p.dietTags = body.dietTags;
+            p.autoFilled = [];
+            if (body.preferenceAction === "finish") me.intake = "done";
+            else if (body.preferenceAction === "swipe") me.intake = "swiping";
+          });
+          return { reply: "偏好已记下，有变化随时告诉局长。", widget: body.preferenceAction === "swipe" ? "swipe" : null, quickReplies: [], done: body.preferenceAction !== "review", me: next.me! };
+        }
         let say = "";
         let reply = "";
         const quorumPending = ref.current.ju.quorum?.state === "pending";
@@ -162,7 +176,7 @@ export function useMockJu(id: string, key: string): JuHook {
           if (w === "swipe") me.intake = "chatting";
         });
         const me = next.me!;
-        const w = me.status === "out" ? null : nextWidget(me, me.private!, quorumPending, askedNote.current);
+        const w = me.status === "out" || body.preferencesChat ? null : nextWidget(me, me.private!, quorumPending, askedNote.current);
         return {
           reply: me.private!.chat.at(-1)!.text,
           widget: w,

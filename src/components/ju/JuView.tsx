@@ -11,7 +11,7 @@ import { GuideButton, JU_TOURS, Tour, useTour, withRoleTabs } from "../Guide";
 import { toast } from "../toast";
 import { JuHeader } from "./JuHeader";
 import { EntryView } from "./Entry";
-import { ChatView } from "./Chat";
+import { PreferencesView } from "./Preferences";
 import { SwipeView } from "./Swipe";
 import { LeaveLink, WaitingView } from "./Waiting";
 import { PlansView } from "./Plans";
@@ -113,7 +113,6 @@ export function JuView({
   const { ju } = state;
   const me = state.me ?? null;
   const isAdmin = !!adminToken && state.isAdmin !== false;
-  const [forceSwipe, setForceSwipe] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
   // 发起人：「我的」= 自己作为成员要做的事；「管理」= 发起人的事。两边分开，投票和拍板不再混在一页
   const [tab, setTab] = useState<"me" | "manage">("me");
@@ -123,7 +122,7 @@ export function JuView({
   if (ju.status === "cancelled") view = "cancelled";
   else if (!me) view = ju.status === "confirmed" ? "confirmed" : "entry";
   else if (me.status === "out") view = "declined";
-  else if (ju.status !== "confirmed" && me.intake === "chatting" && !forceSwipe) view = "chat";
+  else if (ju.status !== "confirmed" && me.intake === "chatting") view = "chat";
   else if (ju.status !== "confirmed" && me.intake !== "done") view = "swipe";
   else if (ju.status === "collecting") view = "waiting";
   else if (ju.status === "voting") view = "plans";
@@ -143,7 +142,7 @@ export function JuView({
       body = <DeclinedView me={me!} actions={actions} />;
       break;
     case "chat":
-      body = <ChatView state={state} me={me!} actions={actions} onSwipe={() => setForceSwipe(true)} />;
+      body = <PreferencesView state={state} me={me!} actions={actions} />;
       break;
     case "swipe":
       body = <SwipeView state={state} me={me!} actions={actions} />;
@@ -162,7 +161,7 @@ export function JuView({
   const panel = isAdmin && adminToken ? <OrganizerPanel state={state} adminToken={adminToken} onState={actions.apply} /> : null;
   const managing = !!panel && tab === "manage";
   // 指引跟着当前看到的那一屏走：成员各阶段一套，发起人「管理」里按局的状态一套
-  const tourId = managing ? `manage-${ju.status}` : view;
+  const tourId = managing ? `manage-${ju.status}` : view === "chat" ? "preferences" : view;
   const baseSteps = JU_TOURS[tourId] ?? [];
   const tourSteps = panel && !managing ? withRoleTabs(baseSteps) : baseSteps;
   const guide = useTour(tourId, tourSteps, baseSteps.length > 0);

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { JuPage } from "@/components/ju/JuPage";
 
 export const metadata: Metadata = {
-  title: "AI 局长 · 私聊局长，10 秒说清你的情况",
+  title: "AI 局长 · 确认偏好，轻松入局",
   description: "预算、门禁、来不来，只有局长知道。群里只看到结论。",
 };
 

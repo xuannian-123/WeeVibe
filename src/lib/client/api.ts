@@ -146,7 +146,7 @@ export type JoinResult = { memberId: string; memberToken: string; status: Member
 
 /** 私聊：一句话，或者内联组件提交 */
 export type ChatBody =
-  | { text: string }
+  | { text: string; preferencesChat?: true }
   | {
       rsvp?: "yes" | "no";
       location?: Place;
@@ -157,6 +157,8 @@ export type ChatBody =
       schedule?: string;
       /** #6 "都行"，让局长按档案预填 */
       autofill?: true;
+      preferenceAction?: "review" | "finish" | "swipe";
+      preferencesChat?: true;
     };
 export type ChatResult = ChatReply & { me: Member };
 

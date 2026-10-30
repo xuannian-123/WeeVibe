@@ -87,7 +87,7 @@ export function ProgressCard({ state, meId }: { state: JuState; meId?: string })
       <SectionTitle hint={ju.quorum?.state === "met" ? <span className="font-bold text-jade">✓ 已成局</span> : undefined}>谁说好了</SectionTitle>
       <div className="mb-1 flex items-baseline gap-1.5">
         <span className="font-num text-[34px] font-bold leading-none">{counts.done}</span>
-        <span className="font-num text-[16px] font-bold text-ink-soft">/ {counts.in} 人和局长聊完了</span>
+        <span className="font-num text-[16px] font-bold text-ink-soft">/ {counts.in} 人已确认偏好</span>
       </div>
       <div className="mb-3 h-2.5 overflow-hidden rounded-full border-2 border-ink bg-paper">
         <div className="h-full bg-mustard transition-all duration-700" style={{ width: `${(counts.done / total) * 100}%` }} />
@@ -210,7 +210,7 @@ export function SharePanel({ state }: { state: JuState }) {
     const t = store.getJson<string>(`jz:tier:${state.ju.id}`);
     setUrl(`${window.location.origin}/j/${state.ju.id}${t ? `?t=${encodeURIComponent(t)}` : ""}`);
   }, [state.ju.id]);
-  const msg = `【${state.ju.title}】点开私聊局长，10 秒说清你的情况。预算、来不来，只有局长知道 🤫 ${url}`;
+  const msg = `【${state.ju.title}】点开确认偏好卡片就能报名，复杂顾虑再悄悄告诉局长。预算、来不来，只有局长知道 🤫 ${url}`;
   return (
     <section className="sticker p-4">
       <SectionTitle hint="帮局长拉人">📣 甩进群</SectionTitle>

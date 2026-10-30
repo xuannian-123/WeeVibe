@@ -3,7 +3,7 @@
 // 地图相关的算法（行程 / ETA / 重规划）和 LLM 用确定性的桩替换，测的是 B3 自己的逻辑。
 import fs from "node:fs";
 import path from "node:path";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const PHOTO_DIR = vi.hoisted(() => {
   process.env.JUZHANG_DB = ":memory:";
@@ -194,6 +194,10 @@ const setOffset = (juId: string, min: number) => {
 beforeEach(() => vi.restoreAllMocks());
 
 describe("tickJu", () => {
+  // 免打扰时段（北京 23–8 点）会拦下催促：固定在北京中午，测试不随跑的时刻变化
+  beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-30T04:00:00Z") }));
+  afterEach(() => vi.useRealTimers());
+
   it("幂等：投票截止前连 tick 3 次，每个没投的人只被催一次", async () => {
     const ju = makeJu({ status: "voting", deadline: new Date(Date.now() + 30 * 60_000).toISOString() });
     const org = makeMember(ju, "小张", { isOrganizer: true });

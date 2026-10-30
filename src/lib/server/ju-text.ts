@@ -13,7 +13,7 @@ function proposalLines(f: PublicFacts): string[] {
 }
 
 export function createdText(f: PublicFacts): string {
-  return `📣${head(f)}${f.organizerName ?? "有人"}在组局！点链接私聊局长报名～预算、时间、来不来，都只告诉局长，群里不会知道是谁说的。`;
+  return `📣${head(f)}${f.organizerName ?? "有人"}在组局！点链接确认偏好卡片就能报名～预算、时间、来不来，都只告诉局长，群里不会知道是谁说的。`;
 }
 
 export function quorumMetText(f: PublicFacts): string {
@@ -53,9 +53,9 @@ export function ruleBroadcast(f: PublicFacts): string {
     case "collecting": {
       if (f.counts.quorumNeed !== undefined && (f.counts.quorumHave ?? 0) < f.counts.quorumNeed) {
         const left = f.counts.quorumNeed - (f.counts.quorumHave ?? 0);
-        return `📣${head(f)}还差 ${left} 位朋友就成局了！点链接私聊局长，来不来都只告诉局长。`;
+        return `📣${head(f)}还差 ${left} 位朋友就成局了！点链接确认偏好，来不来都只告诉局长。`;
       }
-      return `📣${head(f)}已经 ${f.counts.done}/${f.counts.in} 位朋友跟局长聊完了，还没聊的点链接 1 分钟搞定～`;
+      return `📣${head(f)}已经 ${f.counts.done}/${f.counts.in} 位朋友确认偏好了，其他朋友点链接确认卡片就好～`;
     }
     case "voting":
       return planText(f);
@@ -73,7 +73,7 @@ export function ruleGroupMessages(f: PublicFacts): GroupMessages {
       f.status === "collecting" || f.status === "voting"
         ? f.members
             .filter((m) => m.intake !== "done")
-            .map((m) => ({ memberId: m.id, name: m.name, text: `@${m.name} 局长在私聊等你，1 分钟就好～` }))
+            .map((m) => ({ memberId: m.id, name: m.name, text: `@${m.name} 记得确认偏好卡片，局长来替大家安排～` }))
         : [],
   };
   const c = f.confirmed;

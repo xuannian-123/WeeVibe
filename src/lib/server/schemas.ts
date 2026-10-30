@@ -85,6 +85,8 @@ export const chatBody = z
     budgetMax: z.number().positive().max(100000).optional(),
     schedule: imageSchema.optional(),
     autofill: z.literal(true).optional(),
+    preferenceAction: z.enum(["review", "finish", "swipe"]).optional(),
+    preferencesChat: z.literal(true).optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined && x !== ""), { message: "说点什么吧" });
 

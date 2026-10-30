@@ -3,6 +3,7 @@
 // LLM / 课表解析 / 地图都是慢操作：放在锁外跑，锁里只做"读 → 改 → 存"。
 import { nanoid } from "nanoid";
 import { chatTurn, parseSchedule } from "../llm";
+import { ruleChatTurn } from "../llm/chat";
 import { getMapProvider } from "../map";
 import { availabilityFromBusy, buildSwipeDeck, predictSwipes } from "../planner";
 import type {
@@ -204,6 +205,7 @@ export async function join(
       m.seedId = seed.id;
     }
     members.push(m);
+    if (profile) autofillMember(ju, m, profile);
     // #21 同一拨人再约：局长记得上次谁和谁同桌、谁和谁聊得来（各自档案里的记忆，双向预填）
     prefillKnow(members, m);
     if (m.status === "in" && ju.status === "confirmed") ctx.afterConfirm = "有朋友加入了";
@@ -220,7 +222,7 @@ export async function join(
     };
   }
 
-  const r = await chatTurn({
+  const r = ruleChatTurn({
     ju: created.ju,
     me: m,
     ...(profile ? { profile } : {}),
@@ -297,7 +299,54 @@ function resolveConfirm(me: Member, text: string, now: Date): string | undefined
 
 const WIDGET_KEYS = ["rsvp", "location", "availability", "dietTags", "budgetMax", "wantsAutofill"] as const;
 
+/** 卡片确认直接应用结构化值；摘要只写本人记录，不再交给模型二次解释。 */
+async function savePreferences(juId: string, token: string, body: ChatBody): Promise<ChatReply & { me: Member }> {
+  const map = getMapProvider();
+  const snapshot = loadJu(juId);
+  if (!token || !findByToken(loadMembers(juId), token)) throw new HttpError(token ? 403 : 401, "成员身份不对");
+  const city = body.location && snapshot.spec.cityFrom !== "said" && snapshot.spec.cityFrom !== "location" && !snapshot.plan && map.cityAt
+    ? await map.cityAt(body.location).catch(() => undefined) : undefined;
+  return mutateJu(juId, (ctx) => {
+    const me = requireMe(ctx, token);
+    const p = me.private!;
+    const complete = body.preferenceAction !== "review" && body.rsvp !== "no";
+    const availability = body.availability && Object.fromEntries(Object.entries(body.availability).filter(([d]) => ctx.ju.spec.dates.includes(d)));
+    if (complete) {
+      if (p.pendingConfirm) throw new HttpError(409, "先回答局长的确认问题，再确认偏好");
+      if (body.rsvp !== "yes" || !body.location || !availability || !Object.keys(availability).length || body.budgetMax === undefined || body.dietTags === undefined)
+        throw new HttpError(400, "请确认参与意愿、出发地、可用日期、预算和忌口");
+    }
+    if (availability && Object.values(availability).some((a) => a.homeBy && a.homeBy <= a.from))
+      throw new HttpError(400, "到家时间需要晚于出发时间");
+    const patch: ChatPatch = {
+      ...(body.rsvp ? { rsvp: body.rsvp } : {}),
+      ...(body.location ? { location: body.location } : {}),
+      ...(availability ? { availability } : {}),
+      ...(body.dietTags ? { dietTags: body.dietTags } : {}),
+      ...(body.budgetMax !== undefined ? { budgetMax: body.budgetMax } : {}),
+    };
+    applyPatch(ctx, me, patch, profileOf(me));
+    // 卡片中的日期代表完整选择，取消勾选必须删除旧日期。
+    if (availability) {
+      p.availability = availability;
+      p.autoFilled = p.autoFilled.filter((k) => k !== "availability");
+    }
+    if (city && !ctx.ju.plan && ctx.ju.spec.cityFrom !== "said" && ctx.ju.spec.cityFrom !== "location")
+      ctx.ju.spec = { ...ctx.ju.spec, city, cityFrom: "location" };
+    const declined = p.rsvp === "no";
+    if (!declined && body.preferenceAction === "finish") finishIntake(ctx, me);
+    if (!declined && body.preferenceAction === "swipe" && me.intake !== "done") me.intake = "swiping";
+    const reply = declined ? "收到，这次不来只有局长知道，群里不会显示原因。" : body.preferenceAction === "finish"
+      ? "偏好已记下，等大家确认后我来安排。有变化随时可以改。" : body.preferenceAction === "swipe"
+        ? "偏好已记下，可以继续看看想去哪家店。" : "卡片已记下，还有什么想悄悄告诉我？";
+    p.chat.push({ role: "me", text: describeWidget(patch), at: ctx.now.toISOString() }, { role: "juzhang", text: reply, at: ctx.now.toISOString() });
+    if (p.chat.length > 200) p.chat.splice(0, p.chat.length - 200);
+    return { reply, widget: body.preferenceAction === "swipe" && !declined ? "swipe" : null, quickReplies: [], done: body.preferenceAction !== "review", me: selfMember(me) };
+  });
+}
+
 export async function chat(juId: string, token: string, body: ChatBody): Promise<ChatReply & { me: Member }> {
+  if (body.preferenceAction) return savePreferences(juId, token, body);
   // 0) 课表截图 → 忙碌时段 → 每天的可出发时间（#7），锁外做
   let scheduleAvail: Record<string, DayAvailability> | undefined;
   let scheduleBlocks: number | undefined;
@@ -326,6 +375,10 @@ export async function chat(juId: string, token: string, body: ChatBody): Promise
     const me = requireMe(ctx, token);
     const profile = profileOf(me);
     applyPatch(ctx, me, widget, profile);
+    if (body.preferencesChat && scheduleAvail) {
+      me.private!.availability = scheduleAvail;
+      me.private!.autoFilled = me.private!.autoFilled.filter((key) => key !== "availability");
+    }
     const confirmAck = body.text ? resolveConfirm(me, body.text, ctx.now) : undefined;
     if (confirmAck && me.intake === "done" && me.status === "in") markChanged(ctx.ju, ctx.priv, me.id);
     me.private!.chat.push({ role: "me", text: text.slice(0, 500), at: ctx.now.toISOString() });
@@ -337,6 +390,7 @@ export async function chat(juId: string, token: string, body: ChatBody): Promise
   const r0 = await chatTurn({
     ju: s1.ju,
     me: s1.me,
+    supplemental: body.preferencesChat,
     ...(s1.profile ? { profile: s1.profile } : {}),
     userText: s1.confirmAck ? "" : text,
     quorumPending: s1.quorumPending,
@@ -366,11 +420,16 @@ export async function chat(juId: string, token: string, body: ChatBody): Promise
     }
     // 从自然语言里推断出硬约束（门禁 / 清真 / "最多一小时"）：先回问确认，这一轮不往下问。
     // 确认之前按硬约束算——把门禁当软偏好可能把人排到门禁之后，那比多问一句糟得多
-    const hard = body.text && !r.done ? hardToConfirm(me, patch) : undefined;
+    const hard = body.text && (!r.done || body.preferencesChat) ? hardToConfirm(me, patch) : undefined;
     let out = { reply: r.reply, widget: r.widget, quickReplies: r.quickReplies, done: r.done, ask: r.ask };
     if (hard) {
       me.private!.pendingConfirm = { ...hard, at: ctx.now.toISOString() };
       out = { reply: `收到。确认一下：${hard.text}，是硬性的吗？`, widget: null, quickReplies: ["对，必须", "不是，尽量就行"], done: false, ask: undefined };
+    }
+    if (body.preferencesChat) {
+      out = { ...out, widget: null, done: false };
+      // 没有回答确认问题时继续展示，刷新后也不会丢失。
+      if (me.private!.pendingConfirm) out = { ...out, reply: `确认一下：${me.private!.pendingConfirm.text}，是硬性的吗？`, quickReplies: ["对，必须", "不是，尽量就行"] };
     }
     me.private!.chat.push({ role: "juzhang", text: out.reply, at: ctx.now.toISOString(), ...(out.ask ? { ask: out.ask } : {}) });
     if (me.private!.chat.length > 200) me.private!.chat.splice(0, me.private!.chat.length - 200);

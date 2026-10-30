@@ -132,7 +132,7 @@ export function EntryView({
       <div className="flex items-end gap-2">
         <SealLogo size={34} />
         <p className="bubble-jz animate-bubble-in max-w-[82%] px-3.5 py-2.5 text-[15.5px] leading-relaxed">
-          {isAdmin ? "发起人好！你也先和我私聊一遍，我才知道你的情况 😉" : seedId ? `${name}，群里看到你啦 👋 选个头像就开聊。` : "嗨，我是这个局的局长 👋 先告诉我怎么称呼你？"}
+          {isAdmin ? "发起人好！你也确认一下偏好卡片，我好照顾到你 😉" : seedId ? `${name}，群里看到你啦 👋 选个头像，再确认偏好就好。` : "嗨，我是这个局的局长 👋 先告诉我怎么称呼你？"}
         </p>
       </div>
 
@@ -189,7 +189,7 @@ export function EntryView({
       <div className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t-2 border-ink bg-paper/95 px-4 pt-3 backdrop-blur">
         <div className="mx-auto max-w-[480px]">
           <Button size="lg" className="w-full" loading={busy} onClick={join}>
-            去和局长私聊 →
+            确认我的偏好 →
           </Button>
         </div>
       </div>

@@ -17,6 +17,8 @@ export type ChatCtx = {
   profile?: Profile;
   userText: string | null;
   quorumPending: boolean;
+  /** 卡片里的可选补充：只理解和回应，不再按脚本收集或要求刷店。 */
+  supplemental?: boolean;
   now: Date;
   /** 地名 → 坐标（全国，服务端用高德地理编码实现）。不传就只用内置小词典 */
   resolvePlace?: (query: string) => Promise<Place | undefined>;
@@ -616,6 +618,10 @@ function composeRule(ctx: ChatCtx, patch: ChatPatch, h: ReturnType<typeof histor
   if (v.rsvp === "no") {
     return { reply: DECLINE_TEXT, widget: null, quickReplies: patch.rsvp === "no" ? [] : ["其实我能来"], done: true, patch };
   }
+  if (ctx.supplemental) {
+    const ack = ackFor(patch, ctx);
+    return { reply: ack.length ? ack.join("") : "收到，有变化随时告诉我。", widget: null, quickReplies: [], done: false, patch };
+  }
   const intake = ctx.me.intake;
   if (intake !== "chatting") {
     const ack = ackFor(patch, ctx);
@@ -809,12 +815,13 @@ export async function chatTurn(ctx: ChatCtx): Promise<ChatResult> {
 
   try {
     const sh = shanghaiNow(ctx.now);
-    const missing = missingSteps(ctx, viewOf(ctx.me, rulePatch), h.asked);
+    const missing = ctx.supplemental ? [] : missingSteps(ctx, viewOf(ctx.me, rulePatch), h.asked);
     const poor = POOR_RE.test(text) && missing.includes("budget");
     const recent = (ctx.me.private?.chat ?? []).slice(-8).map((t) => `${t.role === "juzhang" ? "局长" : "我"}：${t.text}`);
     const system = [
       "你是「局长」，一个靠谱、温暖、有点幽默的组局朋友，正在和一位成员一对一私聊，帮大家定这次聚会。",
       "你要在自然的聊天里，把【还缺的信息】一项项问清楚。它们是排方案要用的，但你不是在填表：",
+      ...(ctx.supplemental ? ["当前是偏好卡片里的可选补充对话。只回应本轮顾虑或问题并抽取新信息；不要逐项收集信息，不要要求刷卡，不要宣布报名已完成。只有影响安排的歧义才需要澄清。"] : []),
       "1. 先接住对方刚说的话：确认听到的信息；对方问了问题就先正面回答（只能用下面「这次的局」里的信息，不知道的就说人齐了我会出方案、到时候大家投票）；对方话里有暗示（手头紧、在减肥、明天早八、不能太晚）要接住，用一句话表示你懂了。",
       "2. 然后从【还缺的信息】里挑最自然的一项问，一轮只问一件事；通常按清单顺序。对方暗示手头紧时，优先委婉地问预算。",
       "3. 清单里只剩 swipe 时，用一句话收尾并请对方刷几家店（右滑想去、上滑超想去、左滑不想去），不要复述对方说过的内容。",
@@ -850,7 +857,7 @@ export async function chatTurn(ctx: ChatCtx): Promise<ChatResult> {
     }
     const composed = composeRule(ctx, patch, h);
     if (patch.rsvp === "no") return composed;
-    if (ctx.me.intake !== "chatting") return { ...composed, reply: out.reply };
+    if (ctx.supplemental || ctx.me.intake !== "chatting") return { ...composed, reply: out.reply };
 
     // 合并抽取结果后还缺什么：LLM 问的必须是其中一项，界面上的组件 / 快捷回复跟着它走
     const after = missingSteps(ctx, viewOf(ctx.me, patch), h.asked);
