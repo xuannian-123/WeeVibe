@@ -5,7 +5,7 @@ import { getToken } from '../../platform/api';
 import { Button, Text, View } from '@tarojs/components';
 import type { ActivityDetail } from '@weevibe/contracts';
 import type { InvitationSourceView } from '@weevibe/contracts/src/invitations';
-import { Action, Notice, Panel } from '../../components/ui';
+import { Action, Notice, Panel } from '../activity-entry/ActivityUI';
 import { errorText } from '../../platform/page-state';
 import { createInvitationSource, readInvitationSource, saveInvitationSource } from './api';
 

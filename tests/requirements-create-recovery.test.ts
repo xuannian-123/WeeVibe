@@ -25,7 +25,7 @@ async function click(text:string){const button=Array.from(document.querySelector
 describe('uncertain collection creation retry identity audit',()=>{
  it.each([401,403,429,404,405,503])('keeps original creation key after uncertain result then HTTP %s before idempotency lookup',async status=>{
   const host=document.createElement('div');document.body.append(host);root=createRoot(host);
-  await act(async()=>root!.render(createElement(CollectionEditor,{kind:'team',initial:draft,saved:()=>{}})));
+  await act(async()=>root!.render(createElement(CollectionEditor,{kind:'friend',initial:draft,saved:()=>{}})));
   mocks.request.mockRejectedValueOnce(new ApiClientError('NETWORK_ERROR','response lost after commit',0));await click('保存服务器草稿');
   const original=mocks.request.mock.calls[0][2];
   mocks.request.mockRejectedValueOnce(new ApiClientError(status===401?'UNAUTHENTICATED':[404,405].includes(status)?'INVALID_RESPONSE':status===503?'DATABASE_UNAVAILABLE':'FORBIDDEN','retry rejected before idempotency lookup',status));await click('重试原保存请求');
@@ -37,7 +37,7 @@ describe('uncertain collection creation retry identity audit',()=>{
  });
 });
 
-async function renderNew(){const host=document.createElement('div');document.body.append(host);root=createRoot(host);await act(async()=>root!.render(createElement(CollectionEditor,{kind:'team',initial:draft,saved:mocks.saved})));return host;}
+async function renderNew(){const host=document.createElement('div');document.body.append(host);root=createRoot(host);await act(async()=>root!.render(createElement(CollectionEditor,{kind:'friend',initial:draft,saved:mocks.saved})));return host;}
 describe('uncertain create recovery remains bound to its original editor session',()=>{
  it.each(['session-b',''])('never replays A creation under a changed or logged-out session %s',async token=>{
   const host=await renderNew();mocks.request.mockRejectedValueOnce(new ApiClientError('NETWORK_ERROR','response lost',0));await click('保存服务器草稿');
@@ -54,7 +54,7 @@ describe('uncertain create recovery remains bound to its original editor session
  });
  it('keeps an unconfigured request and never auto-retries just because the form rerenders',async()=>{
   const host=await renderNew();mocks.request.mockRejectedValueOnce(new ApiClientError('NOT_CONFIGURED','not configured',503));await click('保存服务器草稿');
-  expect(host.textContent).toContain('draft locked');await act(async()=>root!.render(createElement(CollectionEditor,{kind:'team',initial:draft,saved:mocks.saved})));expect(mocks.request).toHaveBeenCalledTimes(1);expect(mocks.saved).not.toHaveBeenCalled();
+  expect(host.textContent).toContain('draft locked');await act(async()=>root!.render(createElement(CollectionEditor,{kind:'friend',initial:draft,saved:mocks.saved})));expect(mocks.request).toHaveBeenCalledTimes(1);expect(mocks.saved).not.toHaveBeenCalled();
  });
  it('unlocks only after a recognized definitive business rejection, then permits a new request',async()=>{
   const host=await renderNew();mocks.request.mockRejectedValueOnce(new ApiClientError('INVALID_INPUT','invalid input',400));await click('保存服务器草稿');const first=mocks.request.mock.calls[0][2].idempotency_key;
@@ -64,7 +64,7 @@ describe('uncertain create recovery remains bound to its original editor session
  it('uses the same original request after rate limit and only becomes saved on an actual success response',async()=>{
   const host=await renderNew();mocks.request.mockRejectedValueOnce(new ApiClientError('NETWORK_ERROR','response lost',0));await click('保存服务器草稿');const first=mocks.request.mock.calls[0][2];
   mocks.request.mockRejectedValueOnce(new ApiClientError('FORBIDDEN','rate limited',429));await click('重试原保存请求');expect(mocks.saved).not.toHaveBeenCalled();
-  const next=snapshot(1);next.collection.kind='team';next.collection.activity_id=null;next.viewer.can_publish=false;mocks.request.mockResolvedValueOnce(next);await click('重试原保存请求');
+  const next=snapshot(1);next.collection.activity_id=null;next.viewer.can_publish=false;mocks.request.mockResolvedValueOnce(next);await click('重试原保存请求');
   expect(mocks.request.mock.calls[2][2]).toEqual(first);expect(mocks.saved).toHaveBeenCalledExactlyOnceWith(next);expect(host.textContent).toContain('草稿已保存到服务器');expect(host.textContent).not.toContain('创建结果待核对');
  });
 });
@@ -74,7 +74,7 @@ describe('malformed requirement success preserves the original create request',(
   const host=await renderNew();mocks.request.mockResolvedValueOnce({ok:true,private_info:'PRIVATE_SENTINEL'});await click('保存服务器草稿');
   const first=mocks.request.mock.calls[0][2];expect(mocks.saved).not.toHaveBeenCalled();expect(host.textContent).toContain('draft locked');expect(host.textContent).toContain('响应与当前版本不匹配');expect(host.textContent).not.toContain('PRIVATE_SENTINEL');
   mocks.request.mockResolvedValueOnce({collection:{id:'wrong'}});await click('重试原保存请求');expect(mocks.request.mock.calls[1][2]).toEqual(first);expect(mocks.saved).not.toHaveBeenCalled();
-  const next=snapshot(1);next.collection.kind='team';next.collection.activity_id=null;next.viewer.can_publish=false;mocks.request.mockResolvedValueOnce(next);await click('重试原保存请求');
+  const next=snapshot(1);next.collection.activity_id=null;next.viewer.can_publish=false;mocks.request.mockResolvedValueOnce(next);await click('重试原保存请求');
   expect(mocks.request.mock.calls[2][2]).toEqual(first);expect(mocks.saved).toHaveBeenCalledExactlyOnceWith(next);expect(host.textContent).toContain('草稿已保存到服务器');
  });
  it('does not replay an unknown-success draft under a new account',async()=>{
@@ -84,8 +84,8 @@ describe('malformed requirement success preserves the original create request',(
 });
 
 it('keeps an otherwise valid but wrong-kind create result unknown instead of switching into that activity',async()=>{
- const host=await renderNew();mocks.request.mockResolvedValueOnce(snapshot(1));await click('保存服务器草稿');const first=mocks.request.mock.calls[0][2];
+ const host=await renderNew();const wrong={...snapshot(1),collection:{...snapshot(1).collection,kind:'team'}};mocks.request.mockResolvedValueOnce(wrong);await click('保存服务器草稿');const first=mocks.request.mock.calls[0][2];
  expect(mocks.saved).not.toHaveBeenCalled();expect(host.textContent).toContain('draft locked');expect(host.textContent).not.toContain('草稿已保存到服务器');
- const next=snapshot(3);next.collection.kind='team';next.collection.activity_id=null;next.viewer.can_publish=false;mocks.request.mockResolvedValueOnce(next);await click('重试原保存请求');
+ const next=snapshot(3);next.collection.activity_id=null;next.viewer.can_publish=false;mocks.request.mockResolvedValueOnce(next);await click('重试原保存请求');
  expect(mocks.request.mock.calls[1][2]).toEqual(first);expect(mocks.saved).toHaveBeenCalledExactlyOnceWith(next);
 });

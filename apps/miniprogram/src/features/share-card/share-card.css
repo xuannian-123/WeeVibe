@@ -1,0 +1,9 @@
+.wv-share-card { background: #F8F6F0; color: #222222; border: 1px solid #dedcd5; border-radius: 32px; }
+.wv-share-card .heading { font-weight: 800; color: #222222; }
+.wv-share-card .caption { color: #625f58; }
+.wv-share-card .notice { background: #eee8fc; color: #393146; border-radius: 22px; }
+.wv-share-card .action { border-radius: 999px; white-space: normal; line-height: 1.6; padding: 22px 24px; }
+.wv-share-card .action-primary { background: #A7F05A; color: #222222; font-weight: 700; }
+.wv-share-card .action[disabled] { background: #e8e6df; color: #66635d; }
+.wv-share-card .wv-share-preview { padding: 12px; background: #fff; border-radius: 24px; }
+.wv-share-card .wv-share-preview image { border-radius: 18px; }

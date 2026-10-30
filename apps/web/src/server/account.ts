@@ -20,7 +20,7 @@ export function accountSnapshot(userId: string) {
         include: { segments: { where: { participations: { some: { userId, status: 'joined' } } }, orderBy: { position: 'asc' }, include: { participations: { where: { userId, status: 'joined' } } } } } }),
       tx.activityApplication.findMany({ where: { applicantUserId: userId, status: { in: ['approved', 'rejected'] } }, orderBy: { decidedAt: 'desc' }, take: 100, include: { activity: { select: { id: true, name: true } } } }),
       tx.receivedInvitation.findMany({where:{userId},orderBy:{savedAt:'desc'},take:100,include:{invitation:{include:{activity:{include:{segments:{orderBy:{position:'asc'}}}}}}}}),
-      tx.requirementSurvey.findMany({ where: { status: { not: 'draft' }, AND: [ { OR: [{ activityId: null, ownerUserId: userId }, { activity: { currentManagerId: userId } }, { responses: { some: { userId } } }] }, { OR: [{ deadlineAt: { lte: now } }, { closedAt: { not: null } }] } ] }, select: requirementMessageSelect, orderBy: { updatedAt: 'desc' }, take: 100 }),
+      tx.requirementSurvey.findMany({ where: { kind: 'friend', status: { not: 'draft' }, AND: [ { OR: [{ activityId: null, ownerUserId: userId }, { activity: { currentManagerId: userId } }, { responses: { some: { userId } } }] }, { OR: [{ deadlineAt: { lte: now } }, { closedAt: { not: null } }] } ] }, select: requirementMessageSelect, orderBy: { updatedAt: 'desc' }, take: 100 }),
       accountActivityRecords(tx, userId, now)
     ]);
     const readIds = new Set(reads.map(r => r.messageId));
@@ -97,7 +97,7 @@ export async function updateAccount(userId: string, raw: unknown) {
         const message = parseRequirementMessageId(input.message_id);
         await withDb(db => db.$transaction(async tx => {
           // Source access is revalidated now; knowing an ID is not authority to mark another user's message.
-          const source = await tx.requirementSurvey.findFirst({ where: { id: message.collectionId, OR: [{ activityId: null, ownerUserId: userId }, { activity: { currentManagerId: userId } }, { responses: { some: { userId } } }] }, select: requirementMessageSelect });
+          const source = await tx.requirementSurvey.findFirst({ where: { id: message.collectionId, kind: 'friend', OR: [{ activityId: null, ownerUserId: userId }, { activity: { currentManagerId: userId } }, { responses: { some: { userId } } }] }, select: requirementMessageSelect });
           if (!source || !requirementMessages(source, new Set(), new Date()).some(item => item.id === message.id)) throw new ServiceError('NOT_FOUND', 404, '未找到本人的消息');
           await tx.messageRead.upsert({ where: { userId_messageId: { userId, messageId: message.id } }, create: { userId, messageId: message.id }, update: {} });
         }));

@@ -1,0 +1,10 @@
+.gh-hub .gf-title,.ge-state .gf-title,.gh-recovery .gf-title{font-size:49px}.gh-actions{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:20px 0}.gh-actions>.c-action{width:auto}
+.gh-lilac{background:#e9e1fa}
+.gh-tabs{display:flex;gap:16px;margin:28px 0}.gh-tabs>.c-action{flex:1;min-width:0}
+.gh-person-row{display:flex;align-items:center;justify-content:space-between;gap:16px}.gh-member .gg-person-name{font-size:28px;font-weight:700}.gh-status{font-size:22px;color:#706a60;flex:none}
+.gh-blocks{margin-top:20px}.gh-block+.gh-block{margin-top:18px}.gh-block>text{display:block;font-size:26px;line-height:1.8;white-space:pre-wrap}.gh-block>text:first-child{font-size:22px;color:#706a60}
+.gh-notice{padding:22px 24px;margin:22px 0;background:#eee6fb;border-radius:18px;font-size:24px;line-height:1.8;color:#5d5268;white-space:pre-wrap}
+.gh-primary,.ge-action{display:flex!important;width:100%;margin:26px 0!important}
+.gh-hub .gh-plan-card{display:block;width:100%;padding:28px;margin:22px 0;border:1px solid #ded8cc;border-radius:24px;background:#fffdf8;text-align:left}.gh-plan-chain{display:flex;flex-wrap:wrap;gap:14px;margin:20px 0;font-size:26px;line-height:1.8}.gh-plan-chain>view{display:flex;gap:14px}
+
+.gh-notice>text{display:block}.gh-notice>.c-action{display:flex;width:100%;margin-top:18px}

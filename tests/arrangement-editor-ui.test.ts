@@ -12,7 +12,10 @@ vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: { sho
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components', () => ({ View: (p: any) => createElement('div', {}, p.children), Text: (p: any) => createElement('span', {}, p.children), Button: (p: any) => createElement('button', { onClick: p.onClick, disabled: p.disabled }, p.children) }));
 vi.mock('../apps/miniprogram/src/platform/api', () => ({ getToken: () => h.token }));
 vi.mock('../apps/miniprogram/src/features/arrangement-change/edit-api', () => ({ requestArrangementEdit: h.request }));
-vi.mock('../apps/miniprogram/src/features/activity-create/activity-editor', () => ({ ActivityEditor: (p: any) => createElement('button', { disabled: p.disabled, onClick: () => p.onChange({ ...p.value, segments: p.value.segments.map((s: any) => ({ ...s, place: 'New venue' })) }) }, '修改地点') }));
+vi.mock('../apps/miniprogram/src/features/activity-create/activity-editor', () => ({ ActivityEditor: (p: any) => createElement('div', {},
+  createElement('button', { disabled: p.disabled, onClick: () => p.onChange({ ...p.value, segments: p.value.segments.map((s: any) => ({ ...s, place: 'New venue' })) }) }, '修改地点'),
+  createElement('button', { disabled: p.disabled, onClick: () => p.onChange({ ...p.value, segments: p.value.segments.map((s: any) => ({ ...s, minimum: '0' })) }) }, '填写无效人数'),
+  createElement('button', { disabled: p.disabled, onClick: () => p.onChange({ ...p.value, segments: p.value.segments.map((s: any) => ({ ...s, minimum: '1' })) }) }, '修正人数')) }));
 import { ArrangementEditor } from '../apps/miniprogram/src/features/arrangement-change/ArrangementEditor';
 let root: ReturnType<typeof createRoot>;
 const detail = () => applicationDetail();
@@ -34,6 +37,21 @@ describe('published edit preview and explicit confirmation', () => {
     await click('检查修改并预览影响'); expect(h.request).toHaveBeenCalledTimes(1); expect(h.request.mock.calls[0][4]).toBe(true);
     await click('确认应用修改'); expect(h.request).toHaveBeenCalledTimes(2); expect(h.request.mock.calls[1][4]).toBe(false);
     expect(h.request.mock.calls[1][3]).toEqual(h.request.mock.calls[0][3]); expect(h.refresh).toHaveBeenCalledTimes(1);
+  });
+  it('explains local invalid fields without sending or storing a request, then permits correction', async () => {
+    await render(); await click('编辑当前安排'); await click('填写无效人数'); await click('检查修改并预览影响');
+    expect(document.body.textContent).toContain('最低人数与上限必须为正整数');
+    expect(document.body.textContent).not.toContain('请求结果无法确认');
+    expect(h.request).not.toHaveBeenCalled(); expect(h.store.size).toBe(0); expect(h.modal).not.toHaveBeenCalled();
+    await click('修正人数'); await click('修改地点'); await click('检查修改并预览影响');
+    expect(h.request).toHaveBeenCalledTimes(1); expect(document.body.textContent).not.toContain('最低人数与上限必须为正整数');
+    expect(document.body.textContent).toContain('确认应用修改');
+  });
+  it('keeps transport failures on the fixed error mapper instead of displaying raw messages', async () => {
+    h.request.mockRejectedValueOnce(new Error('PRIVATE_TRANSPORT_DETAIL'));
+    await preview();
+    expect(document.body.textContent).not.toContain('PRIVATE_TRANSPORT_DETAIL');
+    expect(document.body.textContent).toContain('请求结果无法确认');
   });
   it('cancelled confirmation keeps the draft and makes no write request', async () => {
     await preview(); h.modal.mockResolvedValueOnce({ confirm: false }); await click('确认应用修改');

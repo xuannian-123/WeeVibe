@@ -13,7 +13,7 @@ const time = z.iso.datetime({ offset: true });
 const count = z.number().int().nonnegative();
 const version = z.number().int().positive().max(2147483647);
 const summary = z.object({
-  id: z.uuid(), kind: z.enum(['friend', 'team']), activity_id: z.uuid().nullable(),
+  id: z.uuid(), kind: z.literal('friend'), activity_id: z.uuid().nullable(),
   title: z.string(), status: z.enum(['draft', 'open', 'closed', 'finalized']),
   deadline_at: time.nullable(), revision: version, is_manager: z.boolean(),
   has_responded: z.boolean(), updated_at: time,
@@ -70,7 +70,9 @@ export async function requestRequirement(path: string, method?: 'GET' | 'POST', 
   return result;
 }
 export async function listRequirements(): Promise<RequirementList> {
-  return parse(listSchema, await extensionRequest<unknown>('/api/v1/requirements'));
+  const raw=await extensionRequest<unknown>('/api/v1/requirements');
+  const value=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw as Record<string,unknown>:null;
+  return parse(listSchema,value&&Array.isArray(value.collections)?{...value,collections:value.collections.filter(row=>!row||typeof row!=='object'||row.kind!=='team')}:raw);
 }
 export async function requirementForActivity(activityId: string): Promise<RequirementSnapshot | { collection: null }> {
   const result = parse(z.union([snapshotSchema, absentSchema]), await extensionRequest<unknown>(`/api/v1/requirements?activity_id=${activityId}`));

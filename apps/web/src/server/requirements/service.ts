@@ -34,11 +34,12 @@ async function activityFor(tx: Tx, survey: Pick<RequirementSurvey, 'activityId'>
 }
 async function lockSurvey(tx: Tx, id: string) {
   // Match the original activity-write lock order: activity parent before survey.
-  const ref = await tx.requirementSurvey.findUnique({ where: { id }, select: { activityId: true } });
-  if (!ref) throw new ServiceError('NOT_FOUND', 404, '未找到需求收集');
+  const ref = await tx.requirementSurvey.findUnique({ where: { id }, select: { activityId: true, kind: true } });
+  if (!ref || ref.kind !== 'friend') throw new ServiceError('NOT_FOUND', 404, '未找到需求收集');
   if (ref.activityId) await tx.$queryRaw`SELECT "id" FROM "Activity" WHERE "id" = ${ref.activityId}::uuid FOR UPDATE`;
   await tx.$queryRaw`SELECT "id" FROM "RequirementSurvey" WHERE "id" = ${id}::uuid FOR UPDATE`;
   const survey = await tx.requirementSurvey.findUniqueOrThrow({ where: { id } });
+  if (survey.kind !== 'friend') throw new ServiceError('NOT_FOUND', 404, '未找到需求收集');
   const activity = await activityFor(tx, survey);
   // Clock sampled only AFTER both locks and state reads. Waiting past cutoff cannot succeed.
   return { survey, activity, now: new Date() };
@@ -50,7 +51,7 @@ function assertReadable(survey: RequirementSurvey, isManager: boolean) {
   if (!isManager && survey.status === 'draft') throw new ServiceError('NOT_FOUND', 404, '未找到可查看的需求收集');
 }
 function summary(survey: RequirementSurvey, actorId: string, isManager: boolean, hasResponded: boolean, now: Date): RequirementSummary {
-  return { id: survey.id, kind: survey.kind as 'friend' | 'team', activity_id: survey.activityId, title: parseDraft(survey.draft).title,
+  return { id: survey.id, kind: 'friend', activity_id: survey.activityId, title: parseDraft(survey.draft).title,
     status: effectiveSurveyStatus(survey, now), deadline_at: survey.deadlineAt?.toISOString() ?? null, revision: survey.revision,
     is_manager: isManager, has_responded: hasResponded, updated_at: survey.updatedAt.toISOString() };
 }
@@ -69,7 +70,7 @@ export function organizerAvatarProjection(row: { bytes: Uint8Array; contentType:
 }
 export async function requirementSnapshotTx(tx: Tx, id: string, actorId: string, now = new Date()): Promise<RequirementSnapshot> {
   const survey = await tx.requirementSurvey.findUnique({ where: { id } });
-  if (!survey) throw new ServiceError('NOT_FOUND', 404, '未找到需求收集');
+  if (!survey || survey.kind !== 'friend') throw new ServiceError('NOT_FOUND', 404, '未找到需求收集');
   const activity = await activityFor(tx, survey);
   const isManager = managerFor(survey, activity, actorId);
   assertReadable(survey, isManager);
@@ -117,7 +118,7 @@ export function getRequirement(id: string, actorId: string) {
 export function getRequirementForActivity(activityId: string, actorId: string) {
   return withDb(db => db.$transaction(async tx => {
     const survey = await tx.requirementSurvey.findUnique({ where: { activityId } });
-    if (!survey) return { collection: null } as const;
+    if (!survey || survey.kind !== 'friend') return { collection: null } as const;
     const activity = await activityFor(tx, survey);
     if (survey.status === 'draft' && !managerFor(survey, activity, actorId)) return { collection: null } as const;
     return requirementSnapshotTx(tx, survey.id, actorId);
@@ -126,7 +127,7 @@ export function getRequirementForActivity(activityId: string, actorId: string) {
 export function listRequirements(actorId: string): Promise<RequirementList> {
   return withDb(db => db.$transaction(async tx => {
     const now = new Date();
-    const rows = await tx.requirementSurvey.findMany({ where: { OR: [ { activityId: null, ownerUserId: actorId }, { activity: { currentManagerId: actorId } }, { status: { not: 'draft' }, responses: { some: { userId: actorId } } } ] },
+    const rows = await tx.requirementSurvey.findMany({ where: { kind: 'friend', OR: [ { activityId: null, ownerUserId: actorId }, { activity: { currentManagerId: actorId } }, { status: { not: 'draft' }, responses: { some: { userId: actorId } } } ] },
       orderBy: { updatedAt: 'desc' }, take: 100, include: { activity: { select: { currentManagerId: true } }, responses: { where: { userId: actorId }, select: { userId: true } } } });
     return { collections: rows.map(s => summary(s, actorId, s.activityId ? s.activity?.currentManagerId === actorId : s.ownerUserId === actorId, s.responses.length > 0, now)), server_time: now.toISOString(), limit: 100 };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }));

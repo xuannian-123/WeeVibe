@@ -58,30 +58,31 @@ try{
     const where={gatheringId_userId:{gatheringId:id,userId:peer.id}};
     await assert.rejects(()=>db.gatheringMember.update({where,data:{animalId:'unapproved-animal'}}));assert.equal((await db.gatheringMember.findUniqueOrThrow({where})).animalId,before.animalId);
   });
-  await check('legacy missing aliases use a placeholder without profile fallback and team also uses its activity alias',async()=>{
+  await check('legacy friend missing aliases use a placeholder without profile fallback',async()=>{
     const member=await db.gatheringMember.findUniqueOrThrow({where:{gatheringId_userId:{gatheringId:id,userId:peer.id}}});
     const legacy={...(member.publicIntake as Record<string,unknown>)};delete legacy.activity_nickname;
     await db.gatheringMember.update({where:{gatheringId_userId:{gatheringId:id,userId:peer.id}},data:{publicIntake:service.gatheringJson(legacy)}});
     const snapshot=valid(await service.getGathering(id,owner.id)),person=snapshot.members!.find(row=>row.person.user_id===peer.id)!.person;
     assert.equal(person.nickname,'还未设置活动昵称');assert.equal(person.animal_id,member.animalId);assert.equal(person.avatar,null);assert.ok(!JSON.stringify(snapshot).includes('PERSONAL_'));
-    const team=valid(await service.createGathering(owner.id,{kind:'team',idempotency_key:randomUUID(),details:{...details,deadline_at:new Date(Date.now()+86400000).toISOString()},intake:intake('团建活动昵称')}));
-    assert.equal(team.gathering.owner.nickname,'团建活动昵称');assert.equal(team.gathering.owner.avatar,null);
   });
-  await check('504-key pool remains unique under concurrent joins at the real 500-member limit',async()=>{
-    const created=valid(await service.createGathering(owner.id,{kind:'friend',idempotency_key:randomUUID(),details,intake:intake('头像容量验收')})),group=created.gathering.id;
+  for(const[kind,limit]of [['friend',50]] as const)await check(`504-key pool stays unique under concurrent ${kind} joins at the ${limit}-member limit`,async()=>{
+    const groupDetails=details;
+    const created=valid(await service.createGathering(owner.id,{kind,idempotency_key:randomUUID(),details:groupDetails,intake:intake('头像容量验收')})),group=created.gathering.id;
     const ownerKey=created.gathering.owner.avatar_key!;assert.ok(gatheringAvatarKeys.includes(ownerKey));
-    const keys=gatheringAvatarKeys.filter(key=>key!==ownerKey),users=Array.from({length:500},()=>({id:randomUUID()}));
+    const keys=gatheringAvatarKeys.filter(key=>key!==ownerKey),users=Array.from({length:limit},()=>({id:randomUUID()}));
     await db.user.createMany({data:users});
     const blank=emptyGatheringIntake();
-    await db.gatheringMember.createMany({data:users.slice(0,497).map((user,index)=>({gatheringId:group,userId:user.id,avatarKey:keys[index],publicIntake:service.gatheringJson(blank.public),privateIntake:service.gatheringJson(blank.private),answers:[]}))});
-    await Promise.all(users.slice(497,499).map(user=>service.joinGathering(group,user.id)));
+    await db.gatheringMember.createMany({data:users.slice(0,limit-3).map((user,index)=>({gatheringId:group,userId:user.id,avatarKey:keys[index],publicIntake:service.gatheringJson(blank.public),privateIntake:service.gatheringJson(blank.private),answers:[]}))});
+    await Promise.all(users.slice(limit-3,limit-1).map(user=>service.joinGathering(group,user.id)));
     const rows=await db.gatheringMember.findMany({where:{gatheringId:group},select:{userId:true,avatarKey:true}});
-    assert.equal(rows.length,500);assert.equal(new Set(rows.map(row=>row.avatarKey)).size,500);assert.ok(rows.every(row=>row.avatarKey&&gatheringAvatarKeys.includes(row.avatarKey)));
-    await assert.rejects(()=>service.joinGathering(group,users[499].id),{code:'CAPACITY_FULL'});
-    const last=users[498].id,key=rows.find(row=>row.userId===last)!.avatarKey;
+    assert.equal(rows.length,limit);assert.equal(new Set(rows.map(row=>row.avatarKey)).size,limit);assert.ok(rows.every(row=>row.avatarKey&&gatheringAvatarKeys.includes(row.avatarKey)));
+    await assert.rejects(()=>service.joinGathering(group,users[limit-1].id),{code:'CAPACITY_FULL'});
+    await assert.rejects(()=>service.saveGatheringIntake(group,users[limit-1].id,{expected_revision:created.gathering.revision,expected_version:0,join_if_needed:true,idempotency_key:randomUUID(),intake:intake('超额填写验收')}),{code:'CAPACITY_FULL'});
+    assert.equal(await db.gatheringMember.count({where:{gatheringId:group}}),limit);
+    const last=users[limit-2].id,key=rows.find(row=>row.userId===last)!.avatarKey;
     await service.joinGathering(group,last);assert.equal((await db.gatheringMember.findUniqueOrThrow({where:{gatheringId_userId:{gatheringId:group,userId:last}}})).avatarKey,key);
     await assert.rejects(()=>db.gatheringMember.update({where:{gatheringId_userId:{gatheringId:group,userId:last}},data:{avatarKey:ownerKey}}),{code:'P2002'});
     await assert.rejects(()=>db.gatheringMember.update({where:{gatheringId_userId:{gatheringId:group,userId:last}},data:{avatarKey:'art-cat-24'}}));
   });
-  await writeFile(resolve(output,'presentation-result.json'),JSON.stringify({passed:true,fixture_groups:checks.length,checks,migrations_applied:17,source:'real_disposable_postgresql_activity_alias_animal_projection',external_fetch_disabled:true,wechat_exchange:false,shared_environment_touched:false},null,2));console.log(`Presentation PostgreSQL groups passed: ${checks.length}`);
+  await writeFile(resolve(output,'presentation-result.json'),JSON.stringify({passed:true,fixture_groups:checks.length,checks,migrations_applied:18,source:'real_disposable_postgresql_activity_alias_animal_projection',external_fetch_disabled:true,wechat_exchange:false,shared_environment_touched:false},null,2));console.log(`Presentation PostgreSQL groups passed: ${checks.length}`);
 }catch(error){const safe={passed:false,current_check:current,error_type:error instanceof Error?error.name:typeof error,code:error&&typeof error==='object'&&'code'in error?String(error.code):null,raw_response_withheld:true};await mkdir(output,{recursive:true});await writeFile(resolve(output,'presentation-result.json'),JSON.stringify(safe,null,2));await writeFile(resolve(output,'presentation-error.private.log'),error instanceof Error?error.stack||error.message:String(error));console.error(JSON.stringify(safe));process.exitCode=1;}finally{await db.$disconnect();}

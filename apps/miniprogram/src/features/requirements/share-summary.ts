@@ -4,7 +4,7 @@ import { beijingLabel } from './answer-state';
 export function requirementShareSummary(snapshot: RequirementSnapshot) {
   return {
     title: snapshot.collection.draft.title.slice(0, 100),
-    kind: snapshot.collection.kind === 'friend' ? '朋友聚会' : '大型团建',
+    kind: '朋友聚会',
     description: snapshot.collection.draft.description.slice(0, 120),
     date: beijingLabel(snapshot.collection.draft.starts_at),
     deadline: beijingLabel(snapshot.collection.draft.deadline_at),

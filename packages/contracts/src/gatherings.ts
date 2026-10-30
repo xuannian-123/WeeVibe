@@ -13,7 +13,10 @@ export const gatheringDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refin
 const optionalDate = z.union([z.literal(''), gatheringDateSchema]);
 const clock = z.union([z.literal(''), z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/)]);
 const money = z.number().min(0).max(1_000_000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 0.000001);
-export const gatheringKindSchema = z.enum(['friend', 'team']);
+// Friends share one complete recommendation round; collection must fit the generator.
+export const gatheringFriendMemberLimit=50;
+// Public API accepts friends only; historical database rows are not converted or deleted.
+export const gatheringKindSchema = z.literal('friend');
 export const gatheringAnimalIds=['cat','dog','fox','rabbit','bear','panda','koala','tiger','lion','penguin','owl','capybara'] as const;
 export const gatheringAnimalIdSchema=z.enum(gatheringAnimalIds);
 export type GatheringAnimalId=typeof gatheringAnimalIds[number];
@@ -41,12 +44,15 @@ export const gatheringDetailsSchema = z.object({
   if (d.date && d.end_date && d.end_date < d.date) bad('结束日期不能早于活动日期');
   if (d.start_time && d.end_time && (!d.end_date || d.end_date === d.date) && d.end_time <= d.start_time) bad('结束时间应晚于开始时间');
   if (new Set(d.questions.map(q=>q.id)).size !== d.questions.length || new Set(d.candidate_places.map(p=>p.id)).size !== d.candidate_places.length) bad('问题或地点编号重复');
+  if(d.questions.some(q=>q.id==='candidate_place_choice'))bad('候选地点题由系统根据候选地点生成，请勿重复添加');
 });
 export type GatheringDetails = z.infer<typeof gatheringDetailsSchema>;
 export const gatheringKeywordGroups = ['eat','drink','play','pace','atmosphere','experience','arrangement','venue','environment','travel','exertion'] as const;
 export const gatheringPublicIntakeSchema = z.object({
   activity_nickname:text(32).default(''),
   date: optionalDate, availability: text(200), note: text(1000),
+  keyword_notes:z.object({eat:text(500).optional(),drink:text(500).optional(),play:text(500).optional()}).strict().optional(),
+  selected_places:z.array(z.object({group:z.enum(['eat','drink','play']),option:text(40).min(1),venue:venueSelectionSchema}).strict()).max(10).optional(),
   keywords: z.record(z.enum(gatheringKeywordGroups), z.array(text(40).min(1)).max(20)),
   confirmed_keys: z.array(key).max(100),
 }).strict();
@@ -60,7 +66,7 @@ export const gatheringPrivateIntakeSchema = z.object({
 }).strict().refine(v => v.budget_min === null || v.budget_max === null || v.budget_min <= v.budget_max, '预算最高不能低于最低').refine(v=>new Set(v.confirmed_keys).size===v.confirmed_keys.length,'私人确定项不能重复');
 export const gatheringAnswersSchema = z.array(z.object({
   question_id:key, option_ids:z.array(key).max(20), other:text(500), text:text(1000),
-}).strict()).max(20);
+}).strict()).max(21);
 export const gatheringIntakeSchema = z.object({public:gatheringPublicIntakeSchema,private:gatheringPrivateIntakeSchema,answers:gatheringAnswersSchema}).strict();
 export type GatheringIntake = z.infer<typeof gatheringIntakeSchema>;
 export const gatheringBlockSchema = z.object({id:key,label:text(80).min(1),value:text(1000).min(1),confirmed:z.boolean()}).strict();
@@ -87,10 +93,6 @@ export const gatheringGenerateSchema = z.object({expected_source:z.string().rege
 export const gatheringFinalizeSchema = z.object({expected_source:z.string().regex(/^[a-f0-9]{64}$/),generation_id:id,plan_id:key}).strict();
 export const gatheringPersonSchema = z.object({user_id:id,nickname:text(32),avatar:avatarAssetSchema.nullable(),animal_id:gatheringAnimalIdSchema.optional(),avatar_key:gatheringAvatarKeySchema.optional()}).strict();
 export const gatheringMemberPublicSchema = z.object({person:gatheringPersonSchema,blocks:z.array(gatheringBlockSchema).max(100),submitted:z.boolean()}).strict();
-export const gatheringStatsSchema = z.object({
-  respondent_count:z.number().int().nonnegative(),
-  questions:z.array(z.object({id:key,title:text(200),type:z.enum(['single','multiple','text']),response_count:z.number().int().nonnegative(),private:z.boolean(),options:z.array(z.object({id:key,label:text(100),count:z.number().int().nonnegative()}).strict()),other_count:z.number().int().nonnegative()}).strict()),
-}).strict();
 export const gatheringSummarySchema = z.object({id,kind:gatheringKindSchema,title:text(100),date:optionalDate,stage:z.enum(['collecting','arranged']),is_owner:z.boolean(),has_responded:z.boolean(),member_count:z.number().int().positive(),updated_at:z.iso.datetime()}).strict();
 export type GatheringSummary = z.infer<typeof gatheringSummarySchema>;
 export const gatheringSnapshotSchema = z.object({
@@ -98,10 +100,11 @@ export const gatheringSnapshotSchema = z.object({
   viewer:z.object({is_owner:z.boolean(),is_member:z.boolean(),can_respond:z.boolean(),can_generate:z.boolean()}).strict(),
   own:z.object({version:z.number().int().nonnegative(),intake:gatheringIntakeSchema,blocks:z.array(gatheringBlockSchema).max(100)}).strict().nullable(),
   members:z.array(gatheringMemberPublicSchema).max(10).nullable(),next_member_cursor:id.nullable(),
-  stats:gatheringStatsSchema.nullable(),source_fingerprint:z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  stats:z.null(),source_fingerprint:z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   itinerary:gatheringItinerarySchema.extend({generation_id:id,generated_at:z.iso.datetime(),stale:z.boolean()}).nullable(),
   final_choice:z.object({generation_id:id,plan_id:key,finalized_at:z.iso.datetime()}).strict().nullable(),
   generation:z.object({id,status:z.enum(['processing','ready','failed']),error:text(100).nullable()}).strict().nullable(),
+  workflow:z.object({version:z.number().int().positive(),generation_id:id,phase:z.enum(['selecting','confirming','adjusting','completed']),stale:z.boolean(),proposal_plan_id:key.nullable(),proposal_version:z.number().int().nonnegative(),coordination_note:text(300),total:z.number().int().nonnegative(),selected_count:z.number().int().nonnegative(),accepted_count:z.number().int().nonnegative(),rejected_count:z.number().int().nonnegative(),own_selection:z.object({version:z.number().int().nonnegative(),plan_ids:z.array(key),note:text(300)}).nullable(),own_confirmation:z.object({version:z.number().int().nonnegative(),proposal_version:z.number().int().nonnegative(),decision:z.enum(['accept','reject']),note:text(300)}).nullable(),people:z.array(z.object({person:gatheringPersonSchema,plan_ids:z.array(key),note:text(300),decision:z.enum(['accept','reject']).nullable()})),final_plan:gatheringItinerarySchema.shape.plans.element.nullable()}).optional(),
   server_time:z.iso.datetime(),
 }).strict().superRefine((value,ctx)=>{
   if(value.gathering.kind==='friend'&&[value.gathering.owner,...(value.members?.map(member=>member.person)??[])].some(person=>!person.animal_id||person.avatar!==null))ctx.addIssue({code:'custom',message:'朋友出游只展示活动昵称与动物头像'});

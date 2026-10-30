@@ -36,6 +36,7 @@ model User {
   gatheringSubmissionEvents GatheringSubmissionEvent[]
   gatheringNotifications GatheringNotificationRecipient[]
   gatheringSubscriptionGrants GatheringSubscriptionGrant[]
+  gatheringWorkflowCommands GatheringWorkflowCommand[]
 }
 
 model WechatIdentity {
@@ -366,6 +367,8 @@ enum ManagementHandoverStatus {
 // by migration SQL; Prisma 6 does not express a predicate-bearing unique index.
 // HTML-based friend / team preparation. Legacy activities remain intact.
 model Gathering {
+  workflow GatheringWorkflow?
+  workflowCommands GatheringWorkflowCommand[]
   id String @id @default(uuid()) @db.Uuid
   ownerUserId String @db.Uuid
   owner User @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
@@ -439,7 +442,7 @@ model GatheringSubmissionEvent {
   action String
   createdAt DateTime @default(now())
   recipients GatheringNotificationRecipient[]
-  @@unique([gatheringId, actorUserId, actorVersion])
+  @@index([gatheringId, actorUserId, actorVersion])
   @@unique([gatheringId, sequence])
 }
 
@@ -519,4 +522,22 @@ model ManagementHandover {
   @@unique([fromUserId, creationKey])
   @@index([activityId, createdAt])
   @@index([toUserId, status])
+}
+
+model GatheringWorkflow {
+  gatheringId String @id @db.Uuid
+  gathering Gathering @relation(fields: [gatheringId], references: [id], onDelete: Cascade)
+  version Int @default(1)
+  state Json
+  updatedAt DateTime @default(now()) @updatedAt
+}
+model GatheringWorkflowCommand {
+  gatheringId String @db.Uuid
+  gathering Gathering @relation(fields: [gatheringId], references: [id], onDelete: Cascade)
+  actorId String @db.Uuid
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  key String
+  hash String
+  createdAt DateTime @default(now())
+  @@id([gatheringId, actorId, key])
 }

@@ -100,3 +100,5 @@ describe('real gathering subscription hook and transport through native callback
     expect(requests('GET')).toHaveLength(2);expect(h.subscribe).not.toHaveBeenCalled();expect(requests('POST')).toHaveLength(0);
   });
 });
+
+it('releases an unanswered native authorization after timeout and ignores a late acceptance',async()=>{vi.useFakeTimers();try{await render();await click('开启微信提醒');expect(button('开启微信提醒').disabled).toBe(true);await act(async()=>{await vi.advanceTimersByTimeAsync(20000);});expect(button('开启微信提醒').disabled).toBe(false);expect(host.textContent).toContain('授权未完成');expect(requests('POST')).toHaveLength(0);await complete('accept');expect(requests('POST')).toHaveLength(0);}finally{vi.useRealTimers();}});

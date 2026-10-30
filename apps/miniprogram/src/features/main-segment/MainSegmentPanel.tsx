@@ -3,7 +3,7 @@ import Taro, { useDidHide, useDidShow, useUnload } from '@tarojs/taro';
 import { Label, Radio, RadioGroup, Text, View } from '@tarojs/components';
 import { ApiClientError } from '@weevibe/api-client';
 import { changeMainSegmentInputSchema, type ActivityDetail, type ChangeMainSegmentInput } from '@weevibe/contracts';
-import { Action, Notice, Panel } from '../../components/ui';
+import { Action, Notice, Panel } from '../activity-entry/ActivityUI';
 import { getToken } from '../../platform/api';
 import { rememberActivity } from '../../platform/activities';
 import { newKey } from '../../platform/local-id';

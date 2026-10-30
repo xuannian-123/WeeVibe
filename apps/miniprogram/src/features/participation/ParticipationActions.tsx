@@ -4,7 +4,7 @@ import { ApiClientError } from '@weevibe/api-client';
 import { Checkbox, CheckboxGroup, Label, Picker, Text, View } from '@tarojs/components';
 import type { ActivityDetail } from '@weevibe/contracts';
 import { participationActionSchema } from '@weevibe/contracts/src/participation-actions';
-import { Action, Notice, Panel } from '../../components/ui';
+import { Action, Notice, Panel } from '../activity-entry/ActivityUI';
 import { newKey } from '../../platform/page-state';
 import { formatTime, rememberActivity } from '../../platform/activities';
 import { useStoredWrite } from '../../platform/write-state';
