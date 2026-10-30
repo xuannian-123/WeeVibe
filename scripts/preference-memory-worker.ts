@@ -1,5 +1,7 @@
-import {getDb} from '../apps/web/src/server/db';
-import {processMemoryJob} from '../apps/web/src/server/gatherings/memory';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
+const {getDb}=require('../apps/web/src/server/db') as typeof import('../apps/web/src/server/db');
+const {processMemoryJob}=require('../apps/web/src/server/gatherings/memory') as typeof import('../apps/web/src/server/gatherings/memory');
 const db=getDb();let stopped=false;process.on('SIGTERM',()=>{stopped=true;});process.on('SIGINT',()=>{stopped=true;});
 if(process.argv.includes('--retry-failed'))await db.$executeRaw`UPDATE "PreferenceLearningJob" SET status='pending',attempts=0,"availableAt"=now() WHERE status='failed'`;
 do{

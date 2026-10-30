@@ -1,9 +1,11 @@
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url);
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {getDb} from '../apps/web/src/server/db';
-import {changeMemory,readMemory,processMemoryJob} from '../apps/web/src/server/gatherings/memory';
-import {createGathering,saveGatheringIntake} from '../apps/web/src/server/gatherings/service';
-import {generateGatheringItinerary} from '../apps/web/src/server/gatherings/generation';
+const {getDb}=require('../apps/web/src/server/db') as typeof import('../apps/web/src/server/db');
+const {changeMemory,readMemory,processMemoryJob}=require('../apps/web/src/server/gatherings/memory') as typeof import('../apps/web/src/server/gatherings/memory');
+const {createGathering,saveGatheringIntake}=require('../apps/web/src/server/gatherings/service') as typeof import('../apps/web/src/server/gatherings/service');
+const {generateGatheringItinerary}=require('../apps/web/src/server/gatherings/generation') as typeof import('../apps/web/src/server/gatherings/generation');
 import {emptyGatheringDetails,emptyGatheringIntake} from '../packages/contracts/src';
 const target=new URL(process.env.DATABASE_URL??'http://invalid');
 assert(['localhost','127.0.0.1'].includes(target.hostname)&&/^weevibe_acceptance_[a-z0-9_]+$/.test(target.pathname.slice(1)),'Explicit local acceptance database only; never shared');
