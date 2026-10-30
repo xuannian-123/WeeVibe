@@ -22,7 +22,7 @@ import {GatheringEntryState} from './entry-state';
 
 export default function GatheringPage(){
   const[designChrome,setDesignChrome]=useState<'nickname'|'plan'|'result'|'interview'|'form'|null>(null);
-  const params=useRouter().params,parsedId=activityIdSchema.safeParse(params.id),id=parsedId.success?parsedId.data:'',kind=params.new==='friend'||params.new==='team'?params.new:undefined,entry=params.entry==='share'?'share':'manage';
+  const params=useRouter().params,parsedId=activityIdSchema.safeParse(params.id),id=parsedId.success?parsedId.data:'',kind=params.new==='friend'?params.new:undefined,entry=params.entry==='share'?'share':'manage';
   const[createdShare,setCreatedShare]=useState<{actor:string;session:string;data:GatheringSnapshot}>();
   const routeInvalid=params.id!==undefined&&(!parsedId.success||params.new!==undefined)||params.new!==undefined&&!kind||!id&&!kind;
   const[identity,setIdentity]=useState<{actor:string;session:string}>(),[stored,setStored]=useState<{actor:string;session:string;data:GatheringSnapshot}>(),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[readFailed,setReadFailed]=useState(false);
@@ -53,15 +53,13 @@ export default function GatheringPage(){
   const valid=!!identity&&identity.session===getToken();
   const newFriend=!id&&kind==='friend';
   const shared=snapshot??(valid&&!id&&createdShare?.actor===identity?.actor&&createdShare?.session===identity?.session&&createdShare?.data.gathering.kind===kind?createdShare.data:undefined);
-  useShareAppMessage(()=>!routeInvalid&&identity?.session===getToken()&&shared?{title:`${shared.gathering.title}｜${shared.gathering.kind==='friend'?'朋友出游':'一起团建'}${shared.final_choice?' · 安排已定案':''}`,path:`/pages/gathering/index?id=${shared.gathering.id}&entry=share`,imageUrl:safeShare}:{title:'WeeVibe · 一起出发',path:'/pages/index/index',imageUrl:safeShare});
+  useShareAppMessage(()=>!routeInvalid&&identity?.session===getToken()&&shared?{title:`${shared.gathering.title}｜朋友出游${shared.final_choice?' · 安排已定案':''}`,path:`/pages/gathering/index?id=${shared.gathering.id}&entry=share`,imageUrl:safeShare}:{title:'WeeVibe · 一起出发',path:'/pages/index/index',imageUrl:safeShare});
   const created=(next:GatheringSnapshot)=>{if(!id&&identity&&getToken()===identity.session&&mounted.current&&visible.current&&next.gathering.kind===kind&&next.viewer.is_owner&&next.gathering.owner.user_id.toLowerCase()===identity.actor.toLowerCase()&&activityIdSchema.safeParse(next.gathering.id).success)setCreatedShare({...identity,data:next});};
   const home=()=>void Taro.reLaunch({url:'/pages/index/index'});
 
   const update=(next:GatheringSnapshot)=>{if(valid&&identity&&mounted.current&&visible.current&&next.gathering.id===id){accept(identity,next);setReadFailed(false);setNotice('');}};
-  const teamChrome=kind==='team'||snapshot?.gathering.kind==='team';
   return <GatheringDesignChrome.Provider value={setDesignChrome}><View className={`gg-screen gg-screen-designed`}>
     {routeInvalid?<GatheringEntryState mode="invalid" message="入口不完整或有冲突，请重新打开朋友分享的活动。" busy={false} home={home} retry={()=>{}}/>:valid&&identity?<>
-      {teamChrome&&!params.inspiration&&!designChrome&&<View className="gg-top"><Text className="gg-brand">WeeVibe<Text>•</Text></Text><Text className="gg-muted">好时光，一起。</Text></View>}
       {snapshot&&readFailed&&<View className="gh-notice" role="alert"><Text>{snapshot.final_choice?'最新内容暂未读到，以下为上次读取的定案记录。':'最新内容暂未读到，修改已暂停，当前输入会保留。'}</Text><Text>{notice||'正在重新读取最新内容…'}</Text><CAction disabled={busy} onClick={()=>void refresh()}>{snapshot.final_choice?'重新读取定案记录':'重新读取最新内容'}</CAction></View>}
       <GatheringProfileBoundary actor={identity.actor} session={identity.session} cancel={home}>{id?snapshot?<GatheringManage key={`${identity.actor}:${identity.session}:${id}:${entry}`} entry={entry} readVerified={!readFailed} snapshot={snapshot} actor={identity.actor} session={identity.session} update={update} refresh={refresh}/>:<GatheringEntryState mode={busy?'loading':'error'} message={notice} busy={busy} home={home} retry={()=>void refresh()}/>:kind==='friend'&&params.inspiration?<GatheringInspirationEntry key={`${identity.actor}:${identity.session}:${params.inspiration}`} actor={identity.actor} session={identity.session} sourceId={params.inspiration} onCreated={created}/>:kind?<GatheringDesigner key={`${identity.actor}:${identity.session}:${kind}`} actor={identity.actor} session={identity.session} kind={kind} onCreated={created}/>:null}</GatheringProfileBoundary>
     </>:<GatheringEntryState mode={busy?'loading':'login'} message={notice} busy={busy} home={home} retry={()=>void login()}/>}

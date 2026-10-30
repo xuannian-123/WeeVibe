@@ -66,7 +66,7 @@ export async function commandGatheringWorkflow(id:string,actor:string,raw:unknow
    if(!plans.some(p=>p.id===input.plan_id))throw new ServiceError('INVALID_INPUT',400,'未找到本轮方案');
    if(row.kind==='friend'&&(!eligible.length||rows.some(r=>r.responseVersion===0)||eligible.some(r=>!state.selections[r.userId])))throw new ServiceError('INVALID_INPUT',409,'请先收齐每位成员的方案选择，再协调确认');
    state.proposal_plan_id=input.plan_id;state.proposal_version++;state.confirmations={};state.coordination_note=input.note;
-   state.phase=row.kind==='team'?'completed':'confirming';action=row.kind==='team'?'completed':'confirmation_requested';
+   state.phase='confirming';action='confirmation_requested';
   }else{
    if(row.kind!=='friend'||!own||own.responseVersion===0)throw new ServiceError('FORBIDDEN',403,'仅本次朋友出游成员可以确认');
    if(state.phase!=='confirming'||!state.proposal_plan_id||input.proposal_version!==state.proposal_version)throw gatheringConflict();

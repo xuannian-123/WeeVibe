@@ -17,14 +17,22 @@
 .c-hero-green{color:#87d43e}
 .c-hero-star{position:absolute;right:6px;bottom:2px;font-family:Arial,sans-serif;font-size:78px;font-weight:500;color:#a7f05a;line-height:1;transform:rotate(-12deg)}
 .c-hero-translation{display:block;margin:28px 0 40px;font-size:28px;line-height:1.65;letter-spacing:.6px;color:#6f6c64}
-.c-scenes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin:12px 0 56px}
-.c-home .c-scene{position:relative;height:304px;min-width:0;border:6px solid #fff;border-radius:14px;background:#fff;box-shadow:0 4px 10px #2221;overflow:visible}
-.c-scene-clip{position:absolute;inset:0;overflow:hidden;border-radius:6px;background:#e8e4d9}
-.c-scene-image{position:absolute;top:0;width:912px;height:608px;max-width:none}
-.c-scene-image-picnic{left:calc(50% - 228px)}
-.c-scene-image-dinner{left:calc(50% - 684px)}
-.c-scene-label{position:absolute;left:-8px;bottom:-26px;display:block;max-width:115%;padding:12px 18px;border-radius:6px;background:#ff9dab;color:#222;font-size:28px;font-weight:800;line-height:1.65;white-space:nowrap;transform:rotate(-5deg)}
-.c-scene-dinner .c-scene-label{left:auto;right:-8px;background:#b7a4f8}
+.c-home .c-friend-feature{display:block;width:100%;box-sizing:border-box;margin:16px 0 30px;padding:0;background:#edf2df;color:#222;border:1px solid #dce3cd;border-radius:24px;text-align:left;white-space:normal;line-height:1.5;overflow:hidden;box-shadow:none}
+.c-friend-feature-main{position:relative;display:flex;align-items:stretch;min-height:284px}
+.c-friend-feature-copy{position:relative;z-index:1;box-sizing:border-box;flex:1;min-width:0;padding:30px 0 28px 28px}
+.c-friend-feature-kicker{display:block;color:#64724d;font-size:19px;font-weight:500;letter-spacing:1px}
+.c-friend-feature-title{position:relative;display:block;margin:19px 0 17px;font-size:48px;line-height:1.25;font-weight:800;letter-spacing:-2px;white-space:nowrap}
+.c-friend-feature-star{display:inline-block;margin-left:6px;color:#7ecb39;font-size:35px;vertical-align:top;transform:rotate(12deg)}
+.c-friend-feature-description{display:block;color:#67715d;font-size:20px;line-height:1.85;white-space:pre-line}
+.c-friend-feature-photo{position:relative;flex:none;width:270px;margin:18px 18px 18px 12px;overflow:hidden;border-radius:14px;background:#d8e3c7;transform:rotate(2deg)}
+.c-friend-feature-image{position:absolute;top:0;left:-45px;width:800px;height:534px;max-width:none}
+.c-friend-feature-sticker{position:absolute;left:12px;bottom:28px;display:block;padding:6px 13px;background:#ffa8b7;color:#222;font-size:23px;font-weight:750;transform:rotate(-8deg)}
+.c-friend-feature-sample{position:absolute;right:8px;bottom:5px;color:white;text-shadow:0 1px 4px #0008;font-size:13px}
+.c-friend-feature-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 26px;background:#e0edc9;border-top:1px solid #d2dfbc}
+.c-friend-feature-steps{color:#64724d;font-size:18px;line-height:1.6;white-space:normal}
+.c-friend-feature-action{display:flex;align-items:center;gap:12px;flex:none;font-size:22px;font-weight:700}
+.c-friend-feature-arrow{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:#222;color:#c8f78a;font-size:29px;line-height:1}
+.c-friend-feature:active{opacity:.85}
 .c-sample-note{position:absolute;top:8px;right:8px;padding:1px 7px;border-radius:4px;background:#2229;color:#fff;font-size:16px;font-weight:400;line-height:1.6}
 .c-ai-note{display:flex;align-items:center;gap:18px;margin:0 0 60px;font-size:24px;line-height:1.65;color:#222}
 .c-ai-pencil{position:relative;display:flex;flex-shrink:0}

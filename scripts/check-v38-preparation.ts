@@ -31,7 +31,7 @@ try {
   const owner = await db.user.create({ data: {} }), member = await db.user.create({ data: {} }), outsider = await db.user.create({ data: {} });
   const deadline = new Date(Date.now() + 2 * 86400000).toISOString();
   const draft: TeamDraft = { title: 'V38 CI synthetic preparation', description: 'Disposable fixture only', starts_at: '', deadline_at: deadline, timezone: 'Asia/Shanghai', locations: [], questions: [] };
-  for (const kind of ['friend', 'team'] as const) {
+  for (const kind of ['friend'] as const) {
     const request = { action: 'create' as const, kind, idempotency_key: key(), draft };
     const created = await createRequirement(owner.id, request);
     assert.equal(created.collection.activity_id, null);

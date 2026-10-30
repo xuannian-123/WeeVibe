@@ -12,7 +12,6 @@ const h = vi.hoisted(() => ({ token: 'session-a' as string | undefined, actor: '
 vi.mock('../apps/miniprogram/src/platform/api', async () => { const { createApiClient } = await import('../packages/api-client/src'); return { getToken: () => h.token, api: createApiClient(h.transport, () => h.token), transport: h.transport, establishSession: vi.fn(), forgetSession: () => { h.forget(); h.token = undefined; } }; });
 vi.mock('../apps/miniprogram/src/platform/extension-api', () => ({ extensionRequest: (path:string,...args:unknown[])=>path==='/api/v1/messages'?Promise.resolve({messages:[],unread_count:0,pending_count:0,server_time:'2030-01-01T00:00:00Z',limit:100}):h.account(path,...args) }));
 vi.mock('../apps/miniprogram/src/platform/avatar', () => ({ loadAvatar: async () => undefined }));
-vi.mock('../apps/miniprogram/src/features/team', () => ({ TeamCreate: () => null }));
 vi.mock('../apps/miniprogram/src/features/shell/inspiration', () => ({ Inspiration: () => null }));
 vi.mock('../apps/miniprogram/src/features/shell/profile', () => ({ ProfileForm: () => null }));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro', () => ({ default: { getStorageSync: () => '', setStorageSync: vi.fn(), navigateTo: h.navigate, reLaunch: h.relaunch }, usePageScroll:()=>{},useDidShow: (fn: () => void) => h.show.push(fn), useDidHide: (fn: () => void) => h.hide.push(fn), useUnload: (fn: () => void) => h.unload.push(fn) }));

@@ -93,7 +93,7 @@ describe('simplified friend creation retains existing backend boundaries',()=>{
     await expect(commandGatheringWorkflow(id,owner,{action:'select',expected_version:0,plan_ids:['plan1'],note:'',generation_id:generated.itinerary!.generation_id,idempotency_key:randomUUID()})).rejects.toMatchObject({code:'VERSION_CONFLICT'});
     await expect(generateGatheringItinerary(id,owner,generationInput(created.source_fingerprint!),provider)).rejects.toMatchObject({code:'VERSION_CONFLICT'});expect(provider.generate).toHaveBeenCalledTimes(1);
   });
-  it('does not apply the simplified friend defaults to team creation requirements',async()=>{
+  it('rejects retired team creation without creating any row',async()=>{
     await expect(createGathering(owner,{...inputFor(),kind:'team'})).rejects.toMatchObject({code:'INVALID_INPUT'});
     expect(f.raw.gathering.create).not.toHaveBeenCalled();expect(f.raw.gatheringMember.create).not.toHaveBeenCalled();
   });

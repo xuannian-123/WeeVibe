@@ -14,7 +14,6 @@ vi.mock('../apps/miniprogram/src/features/todos/TodoPanel', () => ({ TodoPanel: 
 vi.mock('../apps/miniprogram/src/platform/api', () => ({ getToken: () => mocks.token, api: { me: mocks.me }, establishSession: vi.fn(), forgetSession: () => { mocks.token = undefined; } }));
 vi.mock('../apps/miniprogram/src/platform/avatar', () => ({ loadAvatar: vi.fn(async () => undefined) }));
 vi.mock('../apps/miniprogram/src/platform/extension-api', () => ({ extensionRequest: mocks.request }));
-vi.mock('../apps/miniprogram/src/features/team', () => ({ TeamCreate: () => null }));
 vi.mock('../apps/miniprogram/src/features/shell/inspiration', () => ({ Inspiration: () => null }));
 vi.mock('../apps/miniprogram/src/features/shell/profile', () => ({ ProfileForm: () => null }));
 // Native location lifecycle behavior is exercised with all registered handlers in native-location-ui.test.ts.

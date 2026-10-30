@@ -73,19 +73,3 @@ export function normalizeGatheringCertainty(value: GatheringIntake): GatheringIn
   const allowed=new Set(gatheringCertaintyBlocks(value).map(block=>block.id));
   return {...value,public:{...value.public,confirmed_keys:value.public.confirmed_keys.filter(id=>allowed.has(id))},private:{...value.private,confirmed_keys:[]}};
 }
-/** Team participants receive only the organizer's explicitly published information. */
-export function gatheringVisibleDetails(details: GatheringDetails, kind:'friend'|'team', owner:boolean): GatheringDetails {
-  if(kind==='friend'||owner)return details;
-  const visible={...details};
-  for(const field of ['date','title','start_time','end_date','end_time','place','address','description','approximate_time'] as const)if(!details.confirmed_details.includes(field))visible[field]='';
-  // Coordinates and the source's address must follow the same disclosure boundary.
-  if(!details.confirmed_details.includes('place')||!details.confirmed_details.includes('address'))delete visible.place_venue;
-  if(!details.confirmed_details.includes('minimum'))visible.minimum=null;
-  if(!details.confirmed_details.includes('capacity'))visible.capacity=null;
-  if(!details.confirmed_details.includes('fee'))visible.fee={kind:'unknown',amount:null,note:''};
-  // A clock without its unpublished day can turn an overnight plan into a
-  // contradictory same-day interval. Withhold dependent clocks, never the day.
-  if(!visible.date){visible.start_time='';visible.end_date='';visible.end_time='';}
-  else if(details.end_date&&details.end_date!==details.date&&!visible.end_date)visible.end_time='';
-  return visible;
-}

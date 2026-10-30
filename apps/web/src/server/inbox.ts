@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { inboxSchema,gatheringDetailsSchema,gatheringVisibleDetails, gatheringWorkflowStateSchema,type InboxMessage } from '@weevibe/contracts';
+import { inboxSchema,gatheringDetailsSchema, gatheringWorkflowStateSchema,type InboxMessage } from '@weevibe/contracts';
 import { withDb } from './db';
 import { ServiceError } from './http';
 import type { Tx } from './activities/state';
@@ -21,8 +21,8 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
       } }),
     tx.activityApplication.findMany({ where: { applicantUserId: actor, status: { in: ['approved', 'rejected'] } }, orderBy: { decidedAt: 'desc' }, take: 100, select: { id: true, activityId: true, status: true, decidedAt: true, activity: { select: { name: true } } } }),
     tx.managementHandover.findMany({ where: { OR: [{ fromUserId: actor }, { toUserId: actor }] }, orderBy: { createdAt: 'desc' }, take: 100, select: { id: true, activityId: true, fromUserId: true, toUserId: true, status: true, createdAt: true, resolvedAt: true, fromManagementRevision: true, activity: { select: { name: true, currentManagerId: true, managementRevision: true, cancelledAt: true } } } }),
-    tx.requirementSurvey.findMany({ where: { status: { not: 'draft' }, AND: [{ OR: [{ activityId: null, ownerUserId: actor }, { activity: { currentManagerId: actor } }, { responses: { some: { userId: actor } } }] }, { OR: [{ deadlineAt: { lte: now } }, { closedAt: { not: null } }] }] }, select: requirementMessageSelect, orderBy: { updatedAt: 'desc' }, take: 100 }),
-    tx.gatheringNotificationRecipient.findMany({where:{userId:actor},orderBy:[{createdAt:'desc'},{id:'asc'}],take:100,select:{id:true,createdAt:true,event:{select:{action:true,gatheringId:true,gathering:{select:{kind:true,details:true,ownerUserId:true,workflow:{select:{state:true}}}}}}}}),
+    tx.requirementSurvey.findMany({ where: { kind: 'friend', status: { not: 'draft' }, AND: [{ OR: [{ activityId: null, ownerUserId: actor }, { activity: { currentManagerId: actor } }, { responses: { some: { userId: actor } } }] }, { OR: [{ deadlineAt: { lte: now } }, { closedAt: { not: null } }] }] }, select: requirementMessageSelect, orderBy: { updatedAt: 'desc' }, take: 100 }),
+    tx.gatheringNotificationRecipient.findMany({where:{userId:actor,event:{gathering:{kind:'friend'}}},orderBy:[{createdAt:'desc'},{id:'asc'}],take:100,select:{id:true,createdAt:true,event:{select:{action:true,gatheringId:true,gathering:{select:{kind:true,details:true,ownerUserId:true,workflow:{select:{state:true}}}}}}}}),
   ]);
   const messages: InboxMessage[] = [];
   for (const activity of activities) {
@@ -48,15 +48,16 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
   for(const survey of surveys){const title=parseDraft(survey.draft).title;for(const source of requirementMessages(survey,new Set(),now))messages.push({...source,title:title.slice(0,200),summary:source.title.slice(title.length+1, title.length+301),pending:false,status:survey.status==='finalized'?'已定案':'已截止',section:'requirement'});}
   const taskShown=new Set<string>();
   for(const notice of gatheringNotices){
-    const friend=notice.event.gathering.kind==='friend',updated=notice.event.action==='updated';
-    if(!['friend','team'].includes(notice.event.gathering.kind)||!['submitted','updated','plans_ready','selection_updated','confirmation_requested','confirmation_declined','completed'].includes(notice.event.action))throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'筹备消息暂时无法核对');
-    const details=gatheringDetailsSchema.safeParse(notice.event.gathering.details);if(!details.success)throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'筹备消息标题暂时无法核对');const visible=gatheringVisibleDetails(details.data,friend?'friend':'team',notice.event.gathering.ownerUserId===actor);
+    if(notice.event.gathering.kind!=='friend')continue;
+    const updated=notice.event.action==='updated';
+    if(!['submitted','updated','plans_ready','selection_updated','confirmation_requested','confirmation_declined','completed'].includes(notice.event.action))throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'筹备消息暂时无法核对');
+    const details=gatheringDetailsSchema.safeParse(notice.event.gathering.details);if(!details.success)throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'筹备消息标题暂时无法核对');const visible=details.data;
     const workflow=gatheringWorkflowStateSchema.safeParse(notice.event.gathering.workflow?.state);
     const state=workflow.success?workflow.data:undefined;
     const actionable=!taskShown.has(notice.event.gatheringId);taskShown.add(notice.event.gatheringId);
-    const pending=!!state&&actionable&&(friend?(state.phase==='selecting'&&(!state.selections[actor]||notice.event.gathering.ownerUserId===actor)||state.phase==='confirming'&&state.confirmations[actor]?.proposal_version!==state.proposal_version||state.phase==='adjusting'&&notice.event.gathering.ownerUserId===actor):state.phase==='selecting'&&notice.event.gathering.ownerUserId===actor);
+    const pending=!!state&&actionable&&(state.phase==='selecting'&&(!state.selections[actor]||notice.event.gathering.ownerUserId===actor)||state.phase==='confirming'&&state.confirmations[actor]?.proposal_version!==state.proposal_version||state.phase==='adjusting'&&notice.event.gathering.ownerUserId===actor);
     const lifecycle:Record<string,string>={plans_ready:'推荐方案已生成，请查看安排。',selection_updated:'有成员更新了方案选择，请查看协调进度。',confirmation_requested:'有一份协调后的安排等待确认，请查看当前版本。',confirmation_declined:'有成员希望调整安排，请查看反馈后重新协调。',completed:'本次安排已确认完成，点击查看最终方案。'};
-    messages.push({id:`gathering-notice:${notice.id}`,activity_id:null,gathering_id:notice.event.gatheringId,title:visible.title||(friend?'朋友出游':'一起团建'),summary:lifecycle[notice.event.action]||(updated?'有成员更新了填写，点击查看本次筹备。':'有成员提交了填写，点击查看本次筹备。'),created_at:notice.createdAt.toISOString(),read:false,pending,status:pending?'待你处理':notice.event.action==='completed'?'安排已完成':lifecycle[notice.event.action]?'方案有更新':updated?'填写已更新':'收到新填写',section:'gathering'});
+    messages.push({id:`gathering-notice:${notice.id}`,activity_id:null,gathering_id:notice.event.gatheringId,title:visible.title||'朋友出游',summary:lifecycle[notice.event.action]||(updated?'有成员更新了填写，点击查看本次筹备。':'有成员提交了填写，点击查看本次筹备。'),created_at:notice.createdAt.toISOString(),read:false,pending,status:pending?'待你处理':notice.event.action==='completed'?'安排已完成':lifecycle[notice.event.action]?'方案有更新':updated?'填写已更新':'收到新填写',section:'gathering'});
   }
   const visible = [...new Map(messages.map(m => [m.id, m])).values()].sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id)).slice(0, 100);
   const reads = await tx.messageRead.findMany({ where: { userId: actor, messageId: { in: visible.map(m => m.id) } }, select: { messageId: true } });

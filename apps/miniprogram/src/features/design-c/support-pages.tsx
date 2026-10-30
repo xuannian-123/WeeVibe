@@ -58,7 +58,7 @@ export function CSupportPages({ page, signedIn, busy = false, onBack, onOpen, on
     </View>}
     {page === 'about' && <View className="cs-body cs-prose cs-about">
       <View className="cs-wordmark"><Text>wee<Text className="cs-wordmark-vibe">vibe</Text><Text className="cs-wordmark-star">✳</Text></Text></View>
-      <Text className="cs-paragraph cs-about-intro">和朋友、熟人一起，把出游和团建安排起来。</Text>
+      <Text className="cs-paragraph cs-about-intro">和朋友、熟人一起，把出游安排起来。</Text>
       {about.map(section)}<Text className="cs-paragraph cs-about-closing">活动由你们决定。</Text>
     </View>}
   </View>;

@@ -39,7 +39,7 @@ export function CActivityCard({ item, openActivity, openPreparation }: { item: C
   const status = item.kind === 'preparation' ? item.record.stage === 'arranged' ? '已有方案' : '筹备中' : cActivityPhase(item.record);
   return <Button className="c-activity-card activity-card" onClick={() => item.kind === 'preparation' ? openPreparation(item.record.id) : openActivity(item.record.activity_id)}>
     <View className="c-activity-heading"><Text className="c-activity-title">{record.title}</Text><Text className={`c-pill ${preparation ? 'c-pill-lilac' : ''}`}>{status}</Text></View>
-    {item.kind === 'activity' ? <ActivityTime record={item.record} /> : <View className="c-meta"><CIcon name="calendar" /><Text>{item.record.date || '日期待确认'} · {item.record.kind === 'friend' ? '朋友出游' : '一起团建'}</Text></View>}
+    {item.kind === 'activity' ? <ActivityTime record={item.record} /> : <View className="c-meta"><CIcon name="calendar" /><Text>{item.record.date || '日期待确认'} · 朋友出游</Text></View>}
     {item.kind === 'activity' && <View className="c-meta"><CIcon name="pin" /><Text>{item.record.location || '地点待定'}</Text></View>}
     {item.kind === 'activity' && item.record.pending_application_count > 0 && item.record.joined_segment_count > 0 && <Text className="c-data-warning">其他环节申请待审批 · 尚不占席位</Text>}
     {item.kind === 'activity' && item.record.exited_segment_count > 0 && <Text className="c-data-warning">{item.record.joined_segment_count > 0 ? '部分环节已退出' : '已退出'}</Text>}
@@ -64,7 +64,6 @@ type Props = {
   login: () => void;
   refresh: () => void;
   friend: () => void;
-  team: () => void;
   all: () => void;
   ideas: () => void;
   openActivity: (id: string) => void;
@@ -77,15 +76,19 @@ type Props = {
   retryPreparations: () => void;
 };
 
-export function CGoHome({ account, signedIn, busy, login, refresh, friend, team, all, ideas, openActivity, openPreparation, venuePreviews, preview, preparations = [], preparationsBusy, preparationsError, retryPreparations }: Props) {
+export function CGoHome({ account, signedIn, busy, login, refresh, friend, all, ideas, openActivity, openPreparation, venuePreviews, preview, preparations = [], preparationsBusy, preparationsError, retryPreparations }: Props) {
   const recent = cRecentItems(account, preparations);
   const venues = (venuePreviews ?? account?.favorites ?? []).slice(0, 2);
   return <View className="c-home">
     <View className="c-hero"><Text className="c-hero-title">Less planning.{String.fromCharCode(10)}More <Text className="c-hero-green">living.</Text></Text><Text className="c-hero-star">✳</Text></View>
     <Text className="c-hero-translation">少些筹划，多些生活。</Text>
-    <View className="c-scenes">{[{ label: '朋友出游', click: friend, position: 'picnic' }, { label: '一起团建', click: team, position: 'dinner' }].map(scene => <Button key={scene.position} className={`c-scene c-scene-${scene.position}`} onClick={scene.click}>
-      <View className="c-scene-clip"><Image className={`c-scene-image c-scene-image-${scene.position}`} src={scenePhotos} mode="scaleToFill" /></View><Text className="c-sample-note">场景示意</Text><Text className="c-scene-label">{scene.label} ↗</Text>
-    </Button>)}</View>
+    <Button className="c-friend-feature" onClick={friend} ariaLabel="朋友出游，开始整理想法">
+      <View className="c-friend-feature-main">
+        <View className="c-friend-feature-copy"><Text className="c-friend-feature-kicker">下一次相聚，从这里开始</Text><Text className="c-friend-feature-title">朋友出游<Text className="c-friend-feature-star">✳</Text></Text><Text className="c-friend-feature-description">有个想法，就先记下来。{String.fromCharCode(10)}和朋友一起，把安排定下来。</Text></View>
+        <View className="c-friend-feature-photo"><Image className="c-friend-feature-image" src={scenePhotos} mode="scaleToFill" /><Text className="c-friend-feature-sticker">一起去玩！</Text><Text className="c-friend-feature-sample">场景示意</Text></View>
+      </View>
+      <View className="c-friend-feature-footer"><Text className="c-friend-feature-steps">整理想法 · 邀请朋友 · 共同确认</Text><View className="c-friend-feature-action"><Text>开始计划</Text><Text className="c-friend-feature-arrow">↗</Text></View></View>
+    </Button>
     <View className="c-ai-note"><View className="c-ai-pencil"><CIcon name="pencil" /><Text>✦</Text></View><Text>AI 起草安排，<Text className="c-ai-confirm">你来确认。</Text></Text></View>
     <View className="c-section-heading"><Text>近期活动</Text><Button className="c-link" onClick={all}>全部 →</Button></View>
     {!signedIn ? <View className="c-empty-inline"><Text>登录后查看近期活动</Text><Button className="c-link c-login-link" disabled={busy} onClick={login}><Text>{busy ? '正在恢复登录…' : '微信登录'}</Text><CIcon name="right" /></Button></View> : !account ? <View className="c-inline-status"><Text>{busy ? '正在读取活动…' : '活动暂时无法读取'}</Text>{!busy && <Button className="c-link" onClick={refresh}>刷新账户数据</Button>}</View> : <View>

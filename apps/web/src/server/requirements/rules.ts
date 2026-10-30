@@ -32,7 +32,7 @@ export function assertSegmentOwnership(draft: TeamDraft, segments: SurveySegment
 }
 export function assertPublishable(survey: SurveyState, draft: TeamDraft, segments: SurveySegment[], now: Date) {
   if (survey.status !== 'draft') throw new ServiceError('VERSION_CONFLICT', 409, '已发布的收集不能重新发布或改写题目');
-  const preparation = survey.activityId === null || survey.kind === 'team';
+  const preparation = survey.activityId === null;
   try { validateTeamDraft(draft, now.getTime(), preparation); }
   catch (error) { if (error instanceof RequirementError) throw inputError(error.message); throw inputError(); }
   assertSegmentOwnership(draft, segments, survey.kind);

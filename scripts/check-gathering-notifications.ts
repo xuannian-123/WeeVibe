@@ -119,14 +119,23 @@ try{
     const result=await worker({Type:'Timer',TriggerName:TRIGGER});assert.equal(result.sent,1);assert.equal(sends,1);
     assert.equal(await db.gatheringPushOutbox.count({where:{recipient:{event:{gatheringId:id}},status:'sent'}}),2);
   });
-  await check('team notifications and inbox are organizer-only while friend inbox keeps immutable per-version messages without original answers',async()=>{
-    const teamDetails={...details,deadline_at:new Date(Date.now()+86400000).toISOString(),questions:[{id:'q1',title:'需要什么',type:'text' as const,required:true,options:[]}]};
-    const team=await service.createGathering(owner.id,{kind:'team',idempotency_key:randomUUID(),details:teamDetails,intake:intake('团建局头')});
-    for(const member of [a,b]){const value=intake('PRIVATE_SENTINEL');value.answers=[{question_id:'q1',option_ids:[],other:'',text:'RAW_ANSWER'}];await service.saveGatheringIntake(team.gathering.id,member.id,{expected_revision:team.gathering.revision,expected_version:0,join_if_needed:true,idempotency_key:randomUUID(),intake:value});}
-    const recipients=await db.gatheringNotificationRecipient.findMany({where:{event:{gatheringId:team.gathering.id}}});assert.equal(recipients.length,2);assert.ok(recipients.every(row=>row.userId===owner.id));
+  await check('retired teams are absent from inbox and cannot consume credits or delivery leases',async()=>{
+    const old=await service.createGathering(owner.id,{kind:'friend',idempotency_key:randomUUID(),details,intake:intake('old fixture')});
+    const retired=old.gathering.id,authorizationKey=`mini-fixture-${randomUUID()}`;
+    await credit(owner,retired,authorizationKey);await save(retired,a,'old queued submission');
+    // Represent historical data without running a retired public creation endpoint.
+    await db.gathering.update({where:{id:retired},data:{kind:'team'}});
+    const queued=await db.gatheringPushOutbox.findMany({where:{recipient:{event:{gatheringId:retired}}}});assert.ok(queued.length>0);
+    const grants=await db.gatheringSubscriptionGrant.findMany({where:{gatheringId:retired}});
+    for(const key of [authorizationKey,`mini-fixture-${randomUUID()}`]){
+      await json(await subscription.POST(new Request('http://localhost/api/v1/gatherings/notifications/subscription',{method:'POST',headers:{Authorization:`Bearer ${owner.token}`,'Content-Type':'application/json'},body:JSON.stringify({gathering_id:retired,authorization_key:key,template_id:process.env.GATHERING_NOTIFY_TEMPLATE_ID,result:'accept'})})),404);
+    }
+    assert.ok((await claim()).every(job=>job.gathering_id!==retired));
+    assert.deepEqual(await db.gatheringSubscriptionGrant.findMany({where:{gatheringId:retired}}),grants);
+    assert.deepEqual(await db.gatheringPushOutbox.findMany({where:{recipient:{event:{gatheringId:retired}}}}),queued);
     for(const member of [owner,a,b,idle]){
       const body=await json(await messages.GET(new Request('http://localhost/api/v1/messages',{headers:{Authorization:`Bearer ${member.token}`}})));excludes(body);
-      const inbox=inboxSchema.parse(body);const notices=inbox.messages.filter(item=>item.gathering_id===team.gathering.id);assert.equal(notices.length,member.id===owner.id?2:0);
+      assert.ok(inboxSchema.parse(body).messages.every(item=>item.gathering_id!==retired));
     }
   });
   await writeFile(resolve(output,'notification-result.json'),JSON.stringify({passed:true,fixture_groups:checks.length,checks,source:'real_postgresql_http_auth_queue_and_deployable_worker',migrations_applied:15,wechat_exchange:false,wechat_send:'explicit_injected_offline_fixture',external_fetch_disabled:true,shared_environment_touched:false},null,2));console.log(`Notification PostgreSQL/HTTP/worker groups passed: ${checks.length}`);

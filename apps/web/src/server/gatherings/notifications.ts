@@ -5,6 +5,7 @@ import {ServiceError} from '../http';
 
 /** Call under the gathering row lock, in the same transaction as the answer write. */
 export async function enqueueGatheringSubmission(tx:Tx,row:Pick<Gathering,'id'|'kind'|'ownerUserId'>,actor:string,version:number,sequence:number){
+ if(row.kind!=='friend')return;
   const event=await tx.gatheringSubmissionEvent.create({data:{gatheringId:row.id,actorUserId:actor,actorVersion:version,sequence,action:version===1?'submitted':'updated'},select:{id:true}});
   const recipients=new Set<string>([row.ownerUserId]);
   if(row.kind==='friend'){
@@ -23,12 +24,12 @@ export async function enqueueGatheringSubmission(tx:Tx,row:Pick<Gathering,'id'|'
 
 /** Lifecycle events share the durable per-recipient outbox; no direct provider send in a mutation. */
 export async function enqueueGatheringLifecycle(tx:Tx,row:Pick<Gathering,'id'|'kind'|'ownerUserId'>,actor:string,action:'plans_ready'|'selection_updated'|'confirmation_requested'|'confirmation_declined'|'completed'){
+ if(row.kind!=='friend')return;
  const next=await tx.gathering.update({where:{id:row.id},data:{submissionSequence:{increment:1}}});
  const event=await tx.gatheringSubmissionEvent.create({data:{gatheringId:row.id,actorUserId:actor,actorVersion:Math.max(1,next.revision),sequence:next.submissionSequence,action},select:{id:true}});
  const members=await tx.gatheringMember.findMany({where:{gatheringId:row.id},select:{userId:true},take:501});
  if(members.length>500)throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'成员范围暂时无法核对');
- const all=row.kind==='friend'||action==='completed';
- const people=all?members.map(m=>m.userId):[row.ownerUserId];
+ const people=members.map(m=>m.userId);
  const recipients=[...new Set(people)].filter(userId=>userId!==actor).map(userId=>({id:randomUUID(),eventId:event.id,userId}));
  if(recipients.length){await tx.gatheringNotificationRecipient.createMany({data:recipients});await tx.gatheringPushOutbox.createMany({data:recipients.map(r=>({recipientId:r.id}))});}
 }

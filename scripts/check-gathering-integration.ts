@@ -210,61 +210,10 @@ try {
     const all = [...first.members!, ...next.members]; assert.equal(all.length, 12); assert.equal(new Set(all.map(row => row.person.user_id)).size, 12);
     assert.equal(next.next_cursor, null); excludes(all, 'OWNER_PRIVATE', 'PRIVATE_PROFILE_SENTINEL');
   });
-  const teamDetails = publicDetails('team');
-  teamDetails.address = 'UNCONFIRMED_ADDRESS_SENTINEL'; teamDetails.description = 'UNCONFIRMED_DESCRIPTION_SENTINEL';
-  teamDetails.questions = [
-    { id: 'q_activity', title: '想做什么？', type: 'single', required: true, options: [{ id: 'o_food', label: '聚餐' }, { id: 'o_song', label: '唱歌' }] },
-    { id: 'q_budget', title: '我的预算', type: 'text', required: false, options: [] },
-    { id: 'q_origin', title: '个人出发地点', type: 'text', required: false, options: [] },
-    { id: 'q_text', title: '其他建议', type: 'text', required: false, options: [] },
-  ];
-  let team = valid(await service.createGathering(owner.id, { kind: 'team', idempotency_key: key(), details: teamDetails, intake:{...emptyGatheringIntake(),public:{...emptyGatheringIntake().public,activity_nickname:'团建局头'}} }));
-  const teamId = team.gathering.id;
-  await service.joinGathering(teamId, member.id);
-  const teamIntake = intake('Team own public draft', 'TEAM_PRIVATE');
-  teamIntake.answers = [
-    { question_id: 'q_activity', option_ids: ['o_food'], other: '', text: '' },
-    { question_id: 'q_budget', option_ids: [], other: '', text: 'QUESTION_PRIVATE_BUDGET_SENTINEL' },
-    { question_id: 'q_origin', option_ids: [], other: '', text: 'QUESTION_PRIVATE_ORIGIN_SENTINEL' },
-    { question_id: 'q_text', option_ids: [], other: '', text: 'RAW_FREE_TEXT_SENTINEL' },
-  ];
-  await save(teamId, member.id, teamIntake);
-  await check('team statistics stay owner-only and exclude private budget/origin questions and raw prose', async () => {
-    team = valid(await service.getGathering(teamId, owner.id));
-    assert.equal(team.stats?.respondent_count, 1);
-    assert.equal(team.stats?.questions.find(q => q.id === 'q_activity')?.options.find(o => o.id === 'o_food')?.count, 1);
-    for (const id of ['q_budget', 'q_origin']) {
-      const item: NonNullable<GatheringSnapshot['stats']>['questions'][number] | undefined = team.stats?.questions.find(q => q.id === id); assert.equal(item?.private, true); assert.equal(item?.response_count, 0); assert.deepEqual(item?.options, []);
-    }
-    assert.equal(team.stats?.questions.find(q => q.id === 'q_text')?.response_count, 1);
-    excludes(team, 'TEAM_PRIVATE', 'QUESTION_PRIVATE', 'RAW_FREE_TEXT_SENTINEL');
-    for (const actor of [member.id, outsider.id]) {
-      const view = valid(await service.getGathering(teamId, actor)); assert.equal(view.stats, null); assert.equal(view.members, null); assert.equal(view.generation, null);
-      excludes(view.gathering.details, 'UNCONFIRMED_ADDRESS_SENTINEL', 'UNCONFIRMED_DESCRIPTION_SENTINEL');
-      assert.equal(view.gathering.details.place, 'Synthetic common venue');
-      if (actor === outsider.id) excludes(view, 'TEAM_PRIVATE', 'QUESTION_PRIVATE', 'RAW_FREE_TEXT_SENTINEL');
-    }
-    const own = valid(await service.getGathering(teamId, member.id)); assert.equal(own.own!.intake.private.origin?.label, 'TEAM_PRIVATE_ORIGIN');
-    assert.ok(JSON.stringify(own.own).includes('QUESTION_PRIVATE_BUDGET_SENTINEL'));
-    await assert.rejects(() => service.getGatheringMembers(teamId, owner.id, undefined), { code: 'FORBIDDEN' });
-  });
-  await check('owner-only detail CAS and questionnaire revision prevent stale first answers', async () => {
-    await assert.rejects(() => service.updateGatheringDetails(teamId, member.id, { expected_revision: team.gathering.revision, details: teamDetails }), { code: 'FORBIDDEN' });
-    await assert.rejects(() => service.updateGatheringDetails(teamId, owner.id, { expected_revision: team.gathering.revision + 1, details: teamDetails }), { code: 'VERSION_CONFLICT' });
-    await assert.rejects(() => service.updateGatheringDetails(teamId, owner.id, { expected_revision: team.gathering.revision, details: { ...teamDetails, questions: [] } }));
-    const fresh = valid(await service.createGathering(owner.id, { kind: 'team', idempotency_key: key(), details: teamDetails, intake:{...emptyGatheringIntake(),public:{...emptyGatheringIntake().public,activity_nickname:'团建局头'}} }));
-    await service.joinGathering(fresh.gathering.id, outsider.id);
-    const changed = valid(await service.updateGatheringDetails(fresh.gathering.id, owner.id, { expected_revision: fresh.gathering.revision, details: { ...teamDetails, title: 'Changed questionnaire source' } }));
-    assert.equal(changed.gathering.revision, fresh.gathering.revision + 1);
-    await assert.rejects(() => service.saveGatheringIntake(fresh.gathering.id, outsider.id, { expected_revision: fresh.gathering.revision, expected_version: 0, idempotency_key: key(), intake: teamIntake }), { code: 'VERSION_CONFLICT' });
-    assert.equal((await service.getGathering(fresh.gathering.id, outsider.id)).own?.version, 0);
-  });
-  await check('server deadline rejects a response after cutoff without overwriting the previous answer', async () => {
-    const before = valid(await service.getGathering(teamId, member.id));
-    await db.gathering.update({ where: { id: teamId }, data: { details: { ...teamDetails, deadline_at: new Date(Date.now() - 10000).toISOString() } } });
-    const closed = valid(await service.getGathering(teamId, member.id)); assert.equal(closed.viewer.can_respond, false);
-    await assert.rejects(() => service.saveGatheringIntake(teamId, member.id, { expected_revision: closed.gathering.revision, expected_version: before.own!.version, idempotency_key: key(), intake: { ...teamIntake, public: { ...teamIntake.public, note: 'Late input must not replace saved answer' } } }));
-    assert.equal((await service.getGathering(teamId, member.id)).own!.version, before.own!.version);
+  await check('retired team creation cannot create any gathering or membership', async () => {
+    const before=await db.gathering.count();
+    await assert.rejects(()=>service.createGathering(owner.id,{kind:'team',idempotency_key:key(),details:publicDetails('friend'),intake:intake('Retired','RETIRED')}),{code:'INVALID_INPUT'});
+    assert.equal(await db.gathering.count(),before);
   });
   await check('database CHECK constraints reject impossible kind and answer versions', async () => {
     await assert.rejects(() => db.gathering.create({ data: { ownerUserId: owner.id, kind: 'other', details: {}, creationKey: key(), creationHash: createHash('sha256').update('fixture').digest('hex') } }));

@@ -21,7 +21,7 @@ export function GatheringFinalPlan({snapshot,busy,back,viewOwn,refresh,openSegme
   const plan=gatheringFinalPlan(snapshot),hasOwn=snapshot.viewer.is_member&&(snapshot.own?.version??0)>0;
   return <View className="c-ui gf-start gw-flow gf-final-detail">
     <GatheringFlowHeader back={back} disabled={busy} label={backLabel}/>
-    <View className="gf-heading"><Text className="gf-eyebrow">{snapshot.gathering.kind==='friend'?'朋友出游':'一起团建'} / 已定案</Text><Text className="gf-title">完整安排</Text><View className="gf-marker"/></View>
+    <View className="gf-heading"><Text className="gf-eyebrow">{'朋友出游'} / 已定案</Text><Text className="gf-title">完整安排</Text><View className="gf-marker"/></View>
     <FinalContext snapshot={snapshot}/>
     <GatheringPublicDetails details={snapshot.gathering.details}/>
     <View className="gf-final-readonly"><Text>安排已定案，内容只读。</Text><Text>地点、营业和费用仍按各环节的待核实项查看。</Text></View>
@@ -40,8 +40,8 @@ export function GatheringFinalResult({snapshot,busy,pending=false,retryBlocked=f
   const plan=gatheringFinalPlan(snapshot),unanimous=gatheringUnanimous(snapshot);
   const hasOwn=snapshot.viewer.is_member&&(snapshot.own?.version??0)>0;
   return <View className="c-ui gf-start gw-flow gw-final">
-    <GatheringFlowHeader back={back} disabled={busy} label={snapshot.gathering.kind==='friend'?'返回出游内容':'返回团建内容'}/>
-    <View className="gf-heading"><Text className="gf-eyebrow">{snapshot.gathering.kind==='friend'?'朋友出游':'一起团建'} / 定案结果</Text><View className="gw-success-symbol">✓</View><Text className="gf-title">好，就这么安排。</Text><View className="gf-marker"/></View>
+    <GatheringFlowHeader back={back} disabled={busy} label={'返回出游内容'}/>
+    <View className="gf-heading"><Text className="gf-eyebrow">{'朋友出游'} / 定案结果</Text><View className="gw-success-symbol">✓</View><Text className="gf-title">好，就这么安排。</Text><View className="gf-marker"/></View>
     <Text className="gp-section-title">{unanimous?'全员已确认，安排已确定':'筹备方案已定案'}</Text>
     <Text className="gp-caption">{unanimous?'每个人都明确确认了本轮安排。':'已读取保存的定案记录。'}大家的填写已锁定，原内容仍可查看。</Text>
     <FinalContext snapshot={snapshot}/>

@@ -3,8 +3,8 @@ import { CIcon } from './chrome';
 import { CAction, CNotice, CSheet } from './ui';
 import { cCities } from './city-catalog';
 
-export function CCreateSheet({ close, create }: { close: () => void; create: (kind: 'friend' | 'team' | 'direct') => void }) {
-  return <CSheet title="发起一次相聚" close={close}>{([{ label: '朋友出游', text: '和朋友约一次出游', icon: 'group', choose: () => create('friend') }, { label: '一起团建', text: '为团队安排一次相聚', icon: 'calendar', choose: () => create('team') }] as const).map((option, i) => <Button className={`c-scene-option c-scene-option-${i}`} key={option.label} onClick={option.choose}><View className="c-scene-option-icon"><CIcon name={option.icon} /></View><View><Text>{option.label}</Text><Text className="c-hint">{option.text}</Text></View><Text>↗</Text></Button>)}</CSheet>;
+export function CCreateSheet({ close, create }: { close: () => void; create: (kind: 'friend' | 'direct') => void }) {
+  return <CSheet title="发起一次相聚" close={close}>{([{ label: '朋友出游', text: '和朋友约一次出游', icon: 'group', choose: () => create('friend') }] as const).map((option, i) => <Button className={`c-scene-option c-scene-option-${i}`} key={option.label} onClick={option.choose}><View className="c-scene-option-icon"><CIcon name={option.icon} /></View><View><Text>{option.label}</Text><Text className="c-hint">{option.text}</Text></View><Text>↗</Text></Button>)}</CSheet>;
 }
 
 export function CCitySheet({ city, query, change, choose, locate, locating, note, permission, close }: { city: string; query: string; change: (value: string) => void; choose: (name: string) => void; locate: () => void; locating: boolean; note: string; permission?: import('react').ReactNode; close: () => void }) {

@@ -19,6 +19,7 @@ vi.mock('../apps/miniprogram/src/features/gatherings/manage',()=>({GatheringMana
 vi.mock('../apps/miniprogram/src/features/gatherings/designer',()=>({GatheringDesigner:(p:{actor:string;session:string;kind:string})=>{h.designer(p);return createElement('div',{className:'test-designer'},p.kind);}}));
 vi.mock('../apps/miniprogram/src/features/gatherings/profile-boundary',()=>({GatheringProfileBoundary:({children}:any)=>children}));
 import GatheringPage from '../apps/miniprogram/src/features/gatherings';
+import {parseGatheringList} from '../apps/miniprogram/src/features/gatherings/client';
 
 let root:ReturnType<typeof createRoot>,host:HTMLDivElement;
 beforeEach(()=>{h.token='session-a';h.params={id:gatheringId};h.showHistory=[];h.show=undefined;h.hide=undefined;h.unload=undefined;h.share=undefined;h.automatic.mockReset().mockResolvedValue({session:'session-a',user:{user_id:gatheringOwner}});h.establish.mockReset();h.transport.mockReset();h.manage.mockReset();h.designer.mockReset();host=document.createElement('div');document.body.append(host);root=createRoot(host);});
@@ -29,6 +30,12 @@ const text=()=>host.textContent||'';
 async function mount(){await act(async()=>root.render(createElement(GatheringPage)));await act(async()=>h.show?.());}
 async function switchAccount(){await act(async()=>h.hide?.());h.token='session-b';h.automatic.mockResolvedValue({session:'session-b',user:{user_id:gatheringPeer}});await act(async()=>h.show?.());}
 function namedFixture(title:string,owner=true){const value=gatheringUiFixture('friend',owner);value.gathering.title=title;value.own!.intake.private.budget_note=`${title}_PRIVATE_BUDGET`;return value;}
+
+it('filters legacy team summaries without mislabeling them or weakening other response validation',()=>{
+  const {details:_,owner:__,revision:___,...summary}=gatheringUiFixture().gathering,value={gatherings:[{...summary,id:gatheringPeer,kind:'team'},summary]};
+  expect(parseGatheringList(value).gatherings.map(row=>row.id)).toEqual([gatheringId]);
+  expect(()=>parseGatheringList({...value,gatherings:[{...summary,kind:'unknown'}]})).toThrow();
+});
 
 it('hides a loaded account snapshot while a different account is being confirmed and read',async()=>{
   const wait=deferred<ReturnType<typeof response>>();h.transport.mockResolvedValueOnce(response(namedFixture('OLD_ACCOUNT'))).mockReturnValueOnce(wait.promise);
@@ -46,7 +53,7 @@ it('ignores an old account delayed response after the new account read has finis
   expect(text()).toContain('CURRENT_ACCOUNT');expect(text()).not.toContain('LATE_OLD_ACCOUNT');expect(host.querySelector('.test-manage')?.getAttribute('data-actor')).toBe(gatheringPeer);
 });
 
-it.each(['friend','team'] as const)('passes a %s share visitor to its share landing without implicitly joining',async kind=>{
+it.each(['friend'] as const)('passes a %s share visitor to its share landing without implicitly joining',async kind=>{
   h.params={id:gatheringId,entry:'share'};
   const invitation=gatheringUiFixture(kind,false);invitation.viewer={is_owner:false,is_member:false,can_respond:true,can_generate:false};invitation.gathering.has_responded=false;invitation.own=null;invitation.members=null;invitation.source_fingerprint=null;
   h.transport.mockResolvedValue(response(invitation));await mount();
@@ -73,7 +80,7 @@ it('retains a submitted member snapshot when an earlier invitation read arrives 
   expect(text()).toContain('SUBMITTED_CURRENT_PRIVATE_BUDGET');expect(text()).not.toContain('LATE_INVITATION');expect(host.querySelector('.test-manage')?.getAttribute('data-member')).toBe('true');expect(h.manage.mock.calls.at(-1)?.[0].snapshot.own.version).toBe(1);
 });
 
-it.each(['friend','team'] as const)('opens a new %s designer only after identity confirmation without skipping its start screen or creating a gathering',async kind=>{
+it.each(['friend'] as const)('opens a new %s designer only after identity confirmation without skipping its start screen or creating a gathering',async kind=>{
   h.params={new:kind};const identity=deferred<{session:string;user:{user_id:string}}>();h.automatic.mockReturnValue(identity.promise);
   await mount();expect(host.querySelector('.test-designer')).toBeNull();expect(h.transport).not.toHaveBeenCalled();
   if(kind==='friend'){expect(host.querySelector('.gg-top')).toBeNull();expect(text()).not.toContain('← 返回');}
@@ -87,13 +94,19 @@ it('binds sharing to the newly created gathering while the page still has a new-
   expect(h.share?.().path).toBe(`/pages/gathering/index?id=${gatheringId}&entry=share`);expect(h.share?.().title).toContain(value.gathering.title);expect(JSON.stringify(h.share?.())).not.toContain('PRIVATE_ONLY');expect(h.transport).not.toHaveBeenCalled();
   await switchAccount();expect(h.share?.().path).toBe('/pages/index/index');await act(async()=>created(value));expect(h.share?.().path).toBe('/pages/index/index');
 });
-it.each([{id:'../../invalid'},{id:gatheringId,new:'friend'},{new:'unsupported'},{}])('rejects an invalid or conflicting entry before reading identity or creating anything: %j',async params=>{
+it.each([{id:'../../invalid'},{id:gatheringId,new:'friend'},{new:'unsupported'},{new:'team'},{}])('rejects an invalid or conflicting entry before reading identity or creating anything: %j',async params=>{
   h.params=Object.fromEntries(Object.entries(params).filter(([,value])=>typeof value==='string'));await mount();expect(h.automatic).not.toHaveBeenCalled();expect(h.transport).not.toHaveBeenCalled();expect(h.designer).not.toHaveBeenCalled();expect(h.manage).not.toHaveBeenCalled();expect(text()).toContain('入口不完整');expect(h.share?.().path).toBe('/pages/index/index');
 });
 it('continues the same invitation after explicit login with only a read',async()=>{
   h.token='';h.params={id:gatheringId,entry:'share'};h.automatic.mockRejectedValueOnce(Error('需要微信身份')).mockResolvedValue({session:'session-a',user:{user_id:gatheringPeer}});h.establish.mockImplementation(async()=>{h.token='session-a';});
   const visitor=gatheringUiFixture('friend',false);visitor.viewer.is_member=false;visitor.own=null;visitor.members=null;visitor.gathering.has_responded=false;visitor.source_fingerprint=null;h.transport.mockResolvedValue(response(visitor));await mount();
   expect(h.transport).not.toHaveBeenCalled();const login=Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='微信登录并继续')!;await act(async()=>login.click());expect(h.establish).toHaveBeenCalledOnce();expect(h.transport).toHaveBeenCalledOnce();expect(h.transport.mock.calls[0][0]).toMatchObject({method:'GET',path:`/api/v1/gatherings/${gatheringId}`});expect(h.manage.mock.calls.at(-1)?.[0]).toMatchObject({entry:'share',actor:gatheringPeer});expect(h.params).toEqual({id:gatheringId,entry:'share'});
+});
+
+it('rejects a legacy team share response instead of mounting or relabeling it as friend',async()=>{
+  const legacy={...gatheringUiFixture(),gathering:{...gatheringUiFixture().gathering,kind:'team',title:'RETIRED_TEAM'},stats:null};
+  h.params={id:gatheringId,entry:'share'};h.transport.mockResolvedValue({status:200,body:legacy});await mount();
+  expect(h.manage).not.toHaveBeenCalled();expect(h.designer).not.toHaveBeenCalled();expect(text()).not.toMatch(/RETIRED_TEAM|PRIVATE_ONLY/);expect(h.share?.().path).toBe('/pages/index/index');expect(h.transport.mock.calls.every(([r])=>r.method==='GET')).toBe(true);
 });
 it('keeps the unknown shared activity loading screen free of the legacy header',async()=>{
   h.params={id:gatheringId,entry:'share'};const pending=deferred<ReturnType<typeof response>>();h.transport.mockReturnValueOnce(pending.promise);await mount();expect(host.querySelector('.gg-top')).toBeNull();expect(text()).not.toContain('WeeVibe•');expect(text()).toContain('正在打开这次相聚');expect(h.manage).not.toHaveBeenCalled();await act(async()=>pending.resolve(response(gatheringUiFixture('friend',false))));expect(h.manage).toHaveBeenCalled();

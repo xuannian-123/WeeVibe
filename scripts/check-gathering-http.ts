@@ -138,26 +138,10 @@ try {
     assert.equal(response.itinerary?.plans[0].segments[0].title, '聚餐');
     assert.equal(await db.gatheringGeneration.count({ where: { gatheringId: friendId } }), before);
   });
-  const teamDetails = { ...emptyGatheringDetails(), date, title: 'HTTP synthetic team fixture', description: 'UNCONFIRMED_TEAM_DESCRIPTION_SENTINEL', place: 'Synthetic common venue',
-    confirmed_details: ['date', 'title', 'place'], deadline_at: new Date(Date.now() + 86400000).toISOString(),
-    questions: [
-      { id: 'q_public', title: '想做什么', type: 'single', required: true, options: [{ id: 'o1', label: '聚餐' }] },
-      { id: 'q_budget', title: '我的预算', type: 'text', required: false, options: [] },
-    ] };
-  const team = snapshot(await call(collectionRoute.POST, '/api/v1/gatherings', { method: 'POST', token: owner.token, body: { kind: 'team', idempotency_key: key(), details: teamDetails, intake: ownIntake('TEAM_OWNER') } }));
-  const teamId = team.gathering.id, teamPath = `/api/v1/gatherings/${teamId}`;
-  const teamMember = snapshot(await call(joinRoute.POST, `${teamPath}/join`, { method: 'POST', token: member.token, id: teamId }));
-  const teamIntake = ownIntake('TEAM_MEMBER'); teamIntake.answers = [{ question_id: 'q_public', option_ids: ['o1'], other: '', text: '' }, { question_id: 'q_budget', option_ids: [], other: '', text: 'TEAM_QUESTION_PRIVATE_SENTINEL' }];
-  snapshot(await call(intakeRoute.POST, `${teamPath}/intake`, { method: 'POST', token: member.token, id: teamId, body: { expected_revision: team.gathering.revision, expected_version: teamMember.own!.version, idempotency_key: key(), intake: teamIntake } }));
-  await check('team HTTP responses separate organizer statistics from participant information and own private answers', async () => {
-    const manager = snapshot(await call(itemRoute.GET, teamPath, { token: owner.token, id: teamId })); assert.equal(manager.stats?.respondent_count, 1); assert.equal(manager.stats?.questions.find(q => q.id === 'q_public')?.options[0].count, 1);
-    excludes(manager, 'TEAM_MEMBER_PRIVATE', 'TEAM_QUESTION_PRIVATE_SENTINEL');
-    for (const actor of [member, outsider]) {
-      const view = snapshot(await call(itemRoute.GET, teamPath, { token: actor.token, id: teamId })); assert.equal(view.stats, null); assert.equal(view.members, null);
-      excludes(view, 'TEAM_OWNER_PRIVATE', 'UNCONFIRMED_TEAM_DESCRIPTION_SENTINEL');
-      if (actor.id === outsider.id) excludes(view, 'TEAM_MEMBER_PRIVATE', 'TEAM_QUESTION_PRIVATE_SENTINEL');
-      else assert.ok(JSON.stringify(view.own).includes('TEAM_QUESTION_PRIVATE_SENTINEL'));
-    }
+  await check('HTTP rejects retired team creation before any writes',async()=>{
+    const before=await db.gathering.count();
+    rejected(await call(collectionRoute.POST,'/api/v1/gatherings',{method:'POST',token:owner.token,body:{...friendBody,kind:'team',idempotency_key:key()}}),400,'INVALID_INPUT');
+    assert.equal(await db.gathering.count(),before);
   });
   await check('a friend share visitor joins only when submitting and replays the atomic intake without duplicate membership or versions', async () => {
     const invitation = snapshot(await call(itemRoute.GET, itemPath, { token: outsider.token, id: friendId }));
@@ -178,21 +162,6 @@ try {
     const manager = snapshot(await call(itemRoute.GET, itemPath, { token: owner.token, id: friendId }));
     excludes(manager, 'SHARE_VISITOR_PRIVATE');
   });
-  await check('a team share submission rolls back invalid required answers and atomically joins only after a valid save', async () => {
-    const invitation = snapshot(await call(itemRoute.GET, teamPath, { token: outsider.token, id: teamId }));
-    const memberWhere = { gatheringId: teamId, userId: outsider.id };
-    assert.equal(invitation.viewer.is_member, false); assert.equal(await db.gatheringMember.count({ where: memberWhere }), 0);
-    const submission = { expected_revision: invitation.gathering.revision, expected_version: 0, idempotency_key: key(), join_if_needed: true, intake: ownIntake('TEAM_SHARE_VISITOR') };
-    rejected(await call(intakeRoute.POST, `${teamPath}/intake`, { method: 'POST', token: outsider.token, id: teamId, body: submission }), 400, 'INVALID_INPUT');
-    assert.equal(await db.gatheringMember.count({ where: memberWhere }), 0);
-    const completed = { ...submission, intake: { ...submission.intake, answers: [{ question_id: 'q_public', option_ids: ['o1'], other: '', text: '' }] } };
-    const saved = snapshot(await call(intakeRoute.POST, `${teamPath}/intake`, { method: 'POST', token: outsider.token, id: teamId, body: completed }));
-    assert.equal(saved.viewer.is_member, true); assert.equal(saved.own?.version, 1); assert.equal(saved.stats, null); assert.equal(saved.members, null);
-    assert.equal(snapshot(await call(intakeRoute.POST, `${teamPath}/intake`, { method: 'POST', token: outsider.token, id: teamId, body: completed })).own?.version, 1);
-    assert.equal(await db.gatheringMember.count({ where: memberWhere }), 1);
-    const manager = snapshot(await call(itemRoute.GET, teamPath, { token: owner.token, id: teamId }));
-    assert.equal(manager.stats?.respondent_count, 2); excludes(manager, 'TEAM_SHARE_VISITOR_PRIVATE');
-  });
   const finalOwner = await actor(), finalMember = await actor(), finalVisitor = await actor();
   let final = snapshot(await call(collectionRoute.POST, '/api/v1/gatherings', { method: 'POST', token: finalOwner.token,
     body: { ...friendBody, idempotency_key: key(), intake: ownIntake('FINAL_OWNER') } }));
@@ -211,7 +180,6 @@ try {
     const foreign = await db.gatheringGeneration.findFirstOrThrow({ where: { gatheringId: friendId, status: 'ready' } });
     rejected(await call(finalizeRoute.POST, `${finalPath}/finalize`, { method: 'POST', token: finalOwner.token, id: finalId, body: { ...oldChoice, generation_id: foreign.id } }), 409, 'INVALID_INPUT');
     rejected(await call(finalizeRoute.POST, `${finalPath}/finalize`, { method: 'POST', token: finalOwner.token, id: finalId, body: { ...oldChoice, plan_id: 'missing_plan' } }), 409, 'INVALID_INPUT');
-    rejected(await call(finalizeRoute.POST, `${teamPath}/finalize`, { method: 'POST', token: owner.token, id: teamId, body: oldChoice }), 409, 'INVALID_INPUT');
     snapshot(await call(intakeRoute.POST, `${finalPath}/intake`, { method: 'POST', token: finalMember.token, id: finalId, body: changedSubmission }));
     final = snapshot(await call(itemRoute.GET, finalPath, { token: finalOwner.token, id: finalId }));
     assert.notEqual(final.source_fingerprint, oldChoice.expected_source); assert.equal(final.itinerary?.stale, true);
