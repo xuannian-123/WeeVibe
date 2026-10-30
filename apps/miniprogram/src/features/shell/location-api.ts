@@ -1,6 +1,6 @@
 import Taro from '@tarojs/taro';
 import { ApiClientError, createApiClient, type Transport } from '@weevibe/api-client';
-import { activityIdSchema, apiErrorSchema, cityLookupInputSchema, cityLookupResultSchema, gcj02Schema, type VenueCategory, type VenueSearchInput } from '@weevibe/contracts';
+import { activityIdSchema, apiErrorSchema, cityLookupInputSchema, cityLookupResultSchema, gcj02Schema, type Gcj02, type VenueCategory, type VenueSearchInput } from '@weevibe/contracts';
 import { getToken, transport } from '../../platform/api';
 import { errorText } from '../../platform/page-state';
 import { unrecognizedResponseMessage } from '../../platform/response-error';
@@ -41,21 +41,27 @@ async function locate(session: string | undefined, assertCurrent: () => void) {
   const location = gcj02Schema.parse({ latitude: Number(raw.latitude.toFixed(6)), longitude: Number(raw.longitude.toFixed(6)), crs: 'GCJ-02' });
   return { ...api, actor, location };
 }
-export async function locateCityForSession(session: string | undefined, assertCurrent: () => void) {
+export async function locateBrowseCenterForSession(session: string | undefined, assertCurrent: () => void, includeAddress = false) {
   try {
     const source = await locate(session, assertCurrent); source.guard();
-    const response = await source.bound({ method: 'POST', path: '/api/v1/venues/city', headers: { 'Content-Type': 'application/json' }, body: cityLookupInputSchema.parse({ location: source.location }) });
+    const response = await source.bound({ method: 'POST', path: '/api/v1/venues/city', headers: { 'Content-Type': 'application/json' }, body: cityLookupInputSchema.parse({ location: source.location, ...(includeAddress ? { include_address: true } : {}) }) });
     if (response.status < 200 || response.status >= 300) {
       const error = apiErrorSchema.safeParse(response.body);
       throw new ApiClientError(error.success ? error.data.error.code : 'INVALID_RESPONSE', unrecognizedResponseMessage(response.status), response.status);
     }
-    const result = cityLookupResultSchema.parse(response.body); source.guard(); return result;
+    const result = cityLookupResultSchema.parse(response.body); source.guard();
+    if (includeAddress && !result.nearest_address) throw new ApiClientError('INVALID_RESPONSE', '未能获取附近的具体地址，请重试或从地图选择位置。', 502);
+    return { ...result, location: source.location };
   } catch (error) { return safeFailure(error); }
 }
-export async function nearbyForSession(session: string | undefined, keyword: string, assertCurrent: () => void,category:VenueCategory='custom') {
+export async function locateCityForSession(session: string | undefined, assertCurrent: () => void) {
+  const { location, ...city } = await locateBrowseCenterForSession(session, assertCurrent);
+  return city;
+}
+export async function nearbyForSession(session: string | undefined, keyword: string, assertCurrent: () => void,category:VenueCategory='custom', radius_m=3000, center?:Gcj02) {
   try {
-    const source = await locate(session, assertCurrent); source.guard();
-    const result = await source.client.nearbyVenues({ center: source.location, category, keyword: keyword.trim() || '休闲', radius_m: 3000, page_size: 10 });
+    const source = center ? { ...boundLocationClient(session, assertCurrent), location: gcj02Schema.parse(center) } : await locate(session, assertCurrent); source.guard();
+    const result = await source.client.nearbyVenues({ center: source.location, category, keyword: keyword.trim() || '休闲', radius_m, page_size: 10 });
     source.guard(); return result;
   } catch (error) { return safeFailure(error); }
 }

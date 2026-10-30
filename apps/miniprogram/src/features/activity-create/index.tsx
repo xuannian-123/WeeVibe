@@ -10,7 +10,7 @@ import { newKey, readSaved, save, useLogin, usePageRead } from '../../platform/p
 import { buildCreateInput, createTimingIssue, emptyForm, isActivityForm, type ActivityForm } from './form';
 import { feeText, formatTime, rememberActivity } from '../../platform/activities';
 import { useStoredWrite } from '../../platform/write-state';
-import { ActivityEditor } from './activity-editor';
+import { CoreActivityEditor } from './core-editor';
 import { Action, Notice, Panel } from '../../components/ui';
 import './activity-create.css';
 import { RebookEditor } from '../rebook/RebookEditor';
@@ -32,6 +32,7 @@ export function OrdinaryEditor({ initialForm, draftSuffix = '' }: { initialForm?
   const userId = source?.user_id; const draftKey = `weego-create-draft-v1:${userId ?? 'guest'}${draftSuffix}`;
   const completedKey = `weego-created-v1:${userId ?? 'guest'}${draftSuffix}`;
   const [form, setForm] = useState<ActivityForm>(() => initialForm ?? emptyForm()); const [loadedFor, setLoadedFor] = useState('');
+  const [subpage,setSubpage]=useState<string|null>(null);
   const [validation, setValidation] = useState(''); const [draftMessage, setDraftMessage] = useState('');
   const [review, setReview] = useState<{ userId: string; input: CreateActivityInput }>();
   const mounted=useRef(true), visible=useRef(true), epoch=useRef(0);
@@ -44,7 +45,7 @@ export function OrdinaryEditor({ initialForm, draftSuffix = '' }: { initialForm?
     const stored = readSaved<ActivityForm>(draftKey);
     // A different identity must never inherit the previous person's draft.
     setForm(isActivityForm(stored) ? stored : initialForm ?? emptyForm());
-    setLoadedFor(userId);
+    setLoadedFor(userId);setSubpage(null);
   }, [userId, loadedFor, draftKey]);
   useEffect(() => {
     if (!userId || loadedFor !== userId) return;
@@ -84,7 +85,7 @@ export function OrdinaryEditor({ initialForm, draftSuffix = '' }: { initialForm?
     catch { setValidation('暂时无法开始新活动，请先查看已创建的活动。'); }
   }
   if (completedId && !write.pending) return <View className="screen">
-    <View className="page-intro"><Text className="page-eyebrow">{BRAND_NAME} / 一起出发</Text><Text className="page-title">这场活动已发起</Text><Text className="page-subtitle">安排已保存，可以进入详情邀请朋友。</Text></View>
+    <View className="page-intro"><Text className="page-eyebrow">{BRAND_NAME} / 一起出发</Text><Text className="page-title">安排已发出</Text><Text className="page-subtitle">安排已保存，可以进入详情邀请朋友。</Text></View>
     <Panel title="接下来，一起把人约齐">
       <Notice tone="success">服务端已确认保存。达到人数后，仍需你核实安排并确认成局。</Notice>
       <Action variant="primary" onClick={() => { try { assertSource(); void Taro.redirectTo({ url: `/pages/activity/index?id=${encodeURIComponent(completedId)}` }); } catch { setValidation('账号已变化，请重新读取本人创建记录。'); } }}>查看活动</Action>
@@ -94,7 +95,7 @@ export function OrdinaryEditor({ initialForm, draftSuffix = '' }: { initialForm?
     <Action variant="text" onClick={() => { void Taro.reLaunch({ url: '/pages/index/index' }); }}>回到首页</Action>
   </View>;
   return <GatheringProfileBoundary actor={userId} session={source?.session} required={!!source}><View className="screen">
-    <View className="page-intro"><Text className="page-eyebrow">{BRAND_NAME} / 发起活动</Text><Text className="page-title">{write.pending ? '先核对上次发起' : preview ? '发出前，再看一眼' : '约一次见面'}</Text><Text className="page-subtitle">{write.pending ? '下面是上次提交的原安排，日期和内容完整保留。' : preview ? '时间、人数和你的参加选择，都以这里为准。' : '把时间、地点和人数说清楚，剩下的一起商量。'}</Text></View>
+    <View className="page-intro"><Text className="page-eyebrow">{BRAND_NAME} / 发起活动</Text><Text className="page-title">{subpage ?? (write.pending ? '先核对上次发起' : preview ? '发出前，再看一眼' : '把安排写清楚')}</Text><Text className="page-subtitle">{write.pending ? '下面是上次提交的原安排，日期和内容完整保留。' : preview ? '时间、人数和你的参加选择，都以这里为准。' : '把时间、地点和人数说清楚，剩下的一起商量。'}</Text></View>
     {(!userId || identity.error || login.error) && <Panel title="先确认你的微信身份">
       {identity.loading && <Notice>正在确认本人身份……</Notice>}
       {identity.error && <Notice tone="error">{identity.error}</Notice>}{login.error && <Notice tone="error">{login.error}</Notice>}
@@ -114,14 +115,14 @@ export function OrdinaryEditor({ initialForm, draftSuffix = '' }: { initialForm?
         <Notice>{displayedPlan.participating_segment_refs.length ? `你参加：${displayedPlan.segments.filter(s => displayedPlan.participating_segment_refs.includes(s.client_ref)).map(s => s.name).join('、')}` : '你只负责组织，不占参加名额。'}</Notice>
         <Text className="caption">发起后朋友可申请加入，由你审批。发布不代表已成局或已预订。</Text>
       </Panel>
-    </View> : <ActivityEditor key={userId ?? 'guest'} value={userId && loadedFor === userId ? form : emptyForm()} onChange={next => { try { assertSource(); setForm(next); } catch { setValidation('账号已变化，旧表单已停止编辑，请重新读取身份。'); } }} disabled={disabled || !userId || loadedFor !== userId || !!identity.error} />}
+    </View> : <CoreActivityEditor sectionChanged={setSubpage} key={userId ?? 'guest'} value={userId && loadedFor === userId ? form : emptyForm()} onChange={next => { try { assertSource(); setForm(next); } catch { setValidation('账号已变化，旧表单已停止编辑，请重新读取身份。'); } }} disabled={disabled || !userId || loadedFor !== userId || !!identity.error} />}
     {validation && <Notice tone="error">{validation}</Notice>}
     {write.message && <Notice tone="error">{write.message}</Notice>}
     {write.pending && <Panel title="上次创建结果待核对">
       <Notice>发布结果还未确认。原内容已保留，先查看活动记录，或使用同一份内容核对重试。</Notice>
       <Action disabled={write.busy || !source || identity.loading || !!identity.error} onClick={() => { try { assertSource(); void write.send(); } catch { setValidation('账号已变化，不会将原请求重放给其他账号。请重新读取身份。'); } }}>核对并重试发布</Action>
     </Panel>}
-    {!write.pending && <Action variant="primary" disabled={disabled || !userId || identity.loading || !!identity.error} onClick={preview ? submit : prepare}>{write.busy ? '正在发起…' : preview ? '确认发起' : '预览活动'}</Action>}
+    {!write.pending && !subpage && <Action variant="primary" disabled={disabled || !userId || identity.loading || !!identity.error} onClick={preview ? submit : prepare}>{write.busy ? '正在发起…' : preview ? '确认创建' : '预览安排'}</Action>}
     {preview && !write.pending && <Action disabled={write.busy} onClick={() => setReview(undefined)}>返回修改</Action>}
     {!displayedPlan && <Text className="caption">{draftMessage || '登录后自动保存本机草稿。'}下一步先预览，确认后才发出。</Text>}
     <Action variant="text" onClick={() => { void Taro.navigateBack({ fail: () => { void Taro.reLaunch({ url: '/pages/index/index' }); } }); }}>返回首页</Action>

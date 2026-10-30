@@ -1,0 +1,83 @@
+@import './fonts.css';
+
+.c-shell.c-shell{padding:0 32px calc(174px + env(safe-area-inset-bottom));background:#f8f6f0;color:#222;font-family:WeeJakarta,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:28px;line-height:1.65;box-sizing:border-box}
+.c-header,.c-home,.c-navigation{box-sizing:border-box;color:#222}
+.c-header button,.c-home button,.c-navigation button{box-sizing:border-box;min-height:0;margin:0;padding:0;background:none;border:0;border-radius:0;box-shadow:none;color:inherit;text-align:left;font-family:inherit;font-size:inherit;line-height:inherit;white-space:normal}
+.c-header button::after,.c-home button::after,.c-navigation button::after{border:0}
+.c-icon{display:block;width:44px;height:44px;flex-shrink:0;vertical-align:middle}
+.c-header{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:112px;padding:22px 0 24px;background:#f8f6f0}
+.c-wordmark{font-size:62px;line-height:1.1;letter-spacing:-4px;font-weight:800;white-space:nowrap}
+.c-wordmark-vibe{color:#94df4d}
+.c-wordmark-star{display:inline-block;font-family:Arial,sans-serif;font-size:34px;vertical-align:top;letter-spacing:0;margin-left:3px}
+.c-header .c-city{display:flex;align-items:center;gap:10px;max-width:260px;padding:12px 0;font-size:24px;font-weight:600}
+.c-city>text:first-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.c-city .c-city-chevron{width:20px;height:20px;transform:rotate(90deg)}
+.c-hero{position:relative;margin:18px 0 0;min-width:0}
+.c-hero-title{display:block;white-space:pre-line;font-family:WeeJakarta,Arial,sans-serif;font-size:72px;font-weight:800;line-height:1.07;letter-spacing:-3.4px}
+.c-hero-green{color:#87d43e}
+.c-hero-star{position:absolute;right:6px;bottom:2px;font-family:Arial,sans-serif;font-size:78px;font-weight:500;color:#a7f05a;line-height:1;transform:rotate(-12deg)}
+.c-hero-translation{display:block;margin:28px 0 40px;font-size:28px;line-height:1.65;letter-spacing:.6px;color:#6f6c64}
+.c-scenes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin:12px 0 56px}
+.c-home .c-scene{position:relative;height:304px;min-width:0;border:6px solid #fff;border-radius:14px;background:#fff;box-shadow:0 4px 10px #2221;overflow:visible}
+.c-scene-clip{position:absolute;inset:0;overflow:hidden;border-radius:6px;background:#e8e4d9}
+.c-scene-image{position:absolute;top:0;width:912px;height:608px;max-width:none}
+.c-scene-image-picnic{left:calc(50% - 228px)}
+.c-scene-image-dinner{left:calc(50% - 684px)}
+.c-scene-label{position:absolute;left:-8px;bottom:-26px;display:block;max-width:115%;padding:12px 18px;border-radius:6px;background:#ff9dab;color:#222;font-size:28px;font-weight:800;line-height:1.65;white-space:nowrap;transform:rotate(-5deg)}
+.c-scene-dinner .c-scene-label{left:auto;right:-8px;background:#b7a4f8}
+.c-sample-note{position:absolute;top:8px;right:8px;padding:1px 7px;border-radius:4px;background:#2229;color:#fff;font-size:16px;font-weight:400;line-height:1.6}
+.c-ai-note{display:flex;align-items:center;gap:18px;margin:0 0 60px;font-size:24px;line-height:1.65;color:#222}
+.c-ai-pencil{position:relative;display:flex;flex-shrink:0}
+.c-ai-pencil .c-icon{width:42px;height:42px}
+.c-ai-pencil>text{position:absolute;top:-20px;right:-10px;color:#a7f05a;font-size:26px;line-height:1}
+.c-ai-confirm{position:relative;font-weight:800;white-space:nowrap}
+.c-ai-confirm::after{content:'';position:absolute;left:0;right:4px;bottom:-4px;height:6px;border-radius:8px;background:#a7f05a;transform:rotate(-3deg)}
+.c-section-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:48px 0 24px}
+.c-section-heading>text{font-size:36px;font-weight:800;line-height:1.5}
+.c-home .c-link{display:block;flex-shrink:0;padding:12px 0;font-size:22px;line-height:1.5}
+.c-empty-inline{display:block;font-size:24px;color:#79776f;line-height:1.8;padding:14px 0 24px}
+.c-empty-inline .c-link{color:#222;margin-top:8px}
+.c-home .c-login-link{display:flex;align-items:center;gap:10px}
+.c-login-link .c-icon{width:26px;height:26px}
+.c-inline-status{margin:16px 0 24px;padding:18px 0;font-size:24px;line-height:1.8;color:#777268}
+.c-small-status{display:block;margin:8px 0 22px;font-size:22px;color:#79776f}
+.c-home .c-activity-card{display:block;width:100%;border:2px solid #e9e6de;border-radius:26px;background:#ffffff99;padding:22px;margin:0 0 30px;overflow:hidden}
+.c-activity-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.c-activity-title{min-width:0;font-size:30px;font-weight:800;line-height:1.5;word-break:break-all}
+.c-pill{display:inline-block;flex-shrink:0;font-size:20px;line-height:1.5;font-weight:600;padding:6px 12px;border-radius:18px;background:#e1f5ca}
+.c-pill-lilac{background:#e1d5fb}
+.c-meta{display:flex;align-items:flex-start;gap:10px;margin-top:14px;color:#79776f;font-size:22px;line-height:1.5;min-width:0}
+.c-meta .c-icon{width:28px;height:28px;margin-top:2px}
+.c-meta>text{min-width:0;word-break:break-all}
+.c-data-warning{display:block;margin:8px 0 0 38px;font-size:21px;line-height:1.6;color:#9a604b}
+.c-activity-last{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:18px;color:#79776f;font-size:21px;line-height:1.65}
+.c-activity-last .c-icon{width:28px;height:28px}
+.c-venue-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:46px 22px}
+.c-home .c-venue-thumb{display:block;width:100%;min-width:0;text-align:left}
+.c-venue-visual{position:relative;height:216px;overflow:hidden;border-radius:18px;background:#eeece6}
+.c-venue-image{display:block;width:100%;height:100%}
+.c-venue-missing{display:flex;width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#99958b;font-size:21px}
+.c-venue-missing .c-icon{width:48px;height:48px;opacity:.5}
+.c-venue-name{display:block;margin-top:14px;font-size:28px;font-weight:800;line-height:1.5;word-break:break-all}
+.c-venue-thumb .c-meta{font-size:22px;margin-top:8px}
+.c-navigation{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:start;height:calc(138px + env(safe-area-inset-bottom));padding:0 14px env(safe-area-inset-bottom);background:#f8f6f0;border-top:2px solid #e5e2d9;border-radius:40px 40px 0 0;font-family:WeeJakarta,Arial,'PingFang SC','Microsoft YaHei',sans-serif}
+.c-navigation .c-nav-item{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:114px;text-align:center;font-size:20px;color:#222;line-height:1.5}
+.c-nav-symbol{position:relative;display:flex;align-items:center;justify-content:center;width:70px;height:58px;border-radius:30px}
+.c-nav-symbol .c-icon{width:48px;height:48px}
+.c-nav-active .c-nav-symbol{background:#dbf8b3}
+.c-nav-dot{position:absolute;right:5px;top:0;width:12px;height:12px;border-radius:50%;background:#ff9dab;border:2px solid #f8f6f0}
+.c-navigation .c-create{position:relative;top:-14px;justify-self:center;display:flex;align-items:center;justify-content:center;width:114px;height:114px;padding:0;border:8px solid #f8f6f0;border-radius:50%;background:#a7f05a;box-shadow:0 0 0 2px #ebe6da;text-align:center}
+.c-create>text{display:block;font-family:Arial,sans-serif;font-size:70px;font-weight:400;line-height:1;color:#222;transform:translateY(-3px)}
+.c-subheader{display:flex;align-items:center;gap:18px;padding:26px 0 32px}
+.c-subheader>text{flex:1;font-size:36px;font-weight:800}
+.c-subheader>button:first-child{padding:8px 0}
+.c-subheader .c-icon{width:42px;height:42px}
+.c-activity-tabs{display:flex;gap:40px;margin:4px 0 22px}
+.c-activity-tabs button{position:relative;font-size:32px;font-weight:600;padding:12px 0}
+.c-activity-tabs .c-selected{font-weight:800}
+.c-activity-tabs .c-selected::before{content:'';position:absolute;bottom:0;left:8px;right:8px;height:8px;border-radius:8px;background:#a7f05a}
+.c-activity-filters{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:30px}
+.c-activity-filters button{padding:12px 20px;border:2px solid #d7d1c5;border-radius:24px;font-size:22px;line-height:1.5}
+.c-activity-filters .c-selected{background:#a7f05a;border-color:#a7f05a;font-weight:700}
+@media(min-width:400px){.c-hero-title{font-size:74px}.c-scenes{gap:24px}.c-section-heading>text{font-size:37px}}
+@media(max-width:350px){.c-hero-title{font-size:67px}.c-hero-star{font-size:64px}.c-ai-note{font-size:23px}.c-scene-label{font-size:27px}.c-wordmark{font-size:58px}.c-header .c-city{max-width:235px}}

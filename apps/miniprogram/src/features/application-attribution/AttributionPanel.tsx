@@ -1,6 +1,6 @@
 import { Text, View } from '@tarojs/components';
 import type { ActivityDetail } from '@weevibe/contracts';
-import { Action, Notice, Panel } from '../../components/ui';
+import { Action, Notice, Panel } from '../activity-entry/ActivityUI';
 import type { ApplicationAttributionsState } from './use-attributions';
 
 export function AttributionPanel({ detail, state }: { detail: ActivityDetail; state: ApplicationAttributionsState }) {

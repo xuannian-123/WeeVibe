@@ -1,0 +1,11 @@
+# 邀请详情功能已进入当前小程序预览
+
+2026-10-29。用户要求把已确认的邀请/详情/分享卡功能合到小程序。核对当前工作树已有其它对话接入的18迁移工作流和灵感更新，全部保留，没有切回PR53的旧组合构建或代提交他人修改。
+
+当前小程序路由pages/activity/index通过ActivityEntry进入ActivityDetail，实际挂载ActivityOverview、新ActivityArrangement及ActivityShareCard；报名、审批与操作继续用ActivityUI和现有业务控制器。活动包和公共样式中核对到iv-event-card、ia-arrangement、ca-panel，旧Itinerary未挂回。报名无动物选择，筹备原有身份展示不改。
+
+小程序类型检查、演示配置构建通过；邀请/分享/成局/交接/安排7文件140项回归通过。成局新增的两项页面测试仍点击旧按钮文字，改为当前带箭头文案后通过，未删业务断言；该文件已有暂存修改保留。未将此前4254项称为当前新代码全量回归。
+
+从本轮dist固定76个构建文件到outputs/invitation-native-20261029，缺空diagnostics样式时仅添加忽略产物的打包伴随文件。微信开发者工具官方skill-index入口open_project_window和create_preview_qrcode成功，临时包1981993字节，新二维码WeeVibe-invitation-preview.png；上传前后全部76文件SHA256一致，回执receipt.json。此前普通CLI连接失败不代表本次仍未生成，旧二维码不混用。
+
+入口为首页；通过“我的活动”或已有活动进入新详情。真实手机扫码、相册/分享和本轮业务写入未执行；原生automation_evaluate超时，不声称原生页面验收通过。未修改共享API、数据库、登录函数、main，未替换体验版/提审/正式发布。原发起人公开资料与真实活动报名码仍为明确未完成项；本轮二维码只用于小程序临时预览，不是活动报名码。

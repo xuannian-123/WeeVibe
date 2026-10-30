@@ -32,6 +32,7 @@ const joinRoute = loadServer('../apps/web/src/app/api/v1/gatherings/[id]/join/ro
 const intakeRoute = loadServer('../apps/web/src/app/api/v1/gatherings/[id]/intake/route.ts') as typeof import('../apps/web/src/app/api/v1/gatherings/[id]/intake/route');
 const detailsRoute = loadServer('../apps/web/src/app/api/v1/gatherings/[id]/details/route.ts') as typeof import('../apps/web/src/app/api/v1/gatherings/[id]/details/route');
 const generationRoute = loadServer('../apps/web/src/app/api/v1/gatherings/[id]/generate/route.ts') as typeof import('../apps/web/src/app/api/v1/gatherings/[id]/generate/route');
+const workflowRoute=loadServer('../apps/web/src/app/api/v1/gatherings/[id]/workflow/route.ts') as typeof import('../apps/web/src/app/api/v1/gatherings/[id]/workflow/route');
 const finalizeRoute = loadServer('../apps/web/src/app/api/v1/gatherings/[id]/finalize/route.ts') as typeof import('../apps/web/src/app/api/v1/gatherings/[id]/finalize/route');
 const membersRoute = loadServer('../apps/web/src/app/api/v1/gatherings/[id]/members/route.ts') as typeof import('../apps/web/src/app/api/v1/gatherings/[id]/members/route');
 const organizeRoute = loadServer('../apps/web/src/app/api/v1/gatherings/organize/route.ts') as typeof import('../apps/web/src/app/api/v1/gatherings/organize/route');
@@ -209,13 +210,13 @@ try {
     rejected(await call(finalizeRoute.POST, `${finalPath}/finalize`, { method: 'POST', token: finalMember.token, id: finalId, body: oldChoice }), 403, 'FORBIDDEN');
     const foreign = await db.gatheringGeneration.findFirstOrThrow({ where: { gatheringId: friendId, status: 'ready' } });
     rejected(await call(finalizeRoute.POST, `${finalPath}/finalize`, { method: 'POST', token: finalOwner.token, id: finalId, body: { ...oldChoice, generation_id: foreign.id } }), 409, 'INVALID_INPUT');
-    rejected(await call(finalizeRoute.POST, `${finalPath}/finalize`, { method: 'POST', token: finalOwner.token, id: finalId, body: { ...oldChoice, plan_id: 'missing_plan' } }), 400, 'INVALID_INPUT');
+    rejected(await call(finalizeRoute.POST, `${finalPath}/finalize`, { method: 'POST', token: finalOwner.token, id: finalId, body: { ...oldChoice, plan_id: 'missing_plan' } }), 409, 'INVALID_INPUT');
     rejected(await call(finalizeRoute.POST, `${teamPath}/finalize`, { method: 'POST', token: owner.token, id: teamId, body: oldChoice }), 409, 'INVALID_INPUT');
     snapshot(await call(intakeRoute.POST, `${finalPath}/intake`, { method: 'POST', token: finalMember.token, id: finalId, body: changedSubmission }));
     final = snapshot(await call(itemRoute.GET, finalPath, { token: finalOwner.token, id: finalId }));
     assert.notEqual(final.source_fingerprint, oldChoice.expected_source); assert.equal(final.itinerary?.stale, true);
-    rejected(await call(finalizeRoute.POST, `${finalPath}/finalize`, { method: 'POST', token: finalOwner.token, id: finalId, body: oldChoice }), 409, 'VERSION_CONFLICT');
-    rejected(await call(finalizeRoute.POST, `${finalPath}/finalize`, { method: 'POST', token: finalOwner.token, id: finalId, body: { ...oldChoice, expected_source: final.source_fingerprint } }), 409, 'VERSION_CONFLICT');
+    rejected(await call(finalizeRoute.POST, `${finalPath}/finalize`, { method: 'POST', token: finalOwner.token, id: finalId, body: oldChoice }), 409, 'INVALID_INPUT');
+    rejected(await call(finalizeRoute.POST, `${finalPath}/finalize`, { method: 'POST', token: finalOwner.token, id: finalId, body: { ...oldChoice, expected_source: final.source_fingerprint } }), 409, 'INVALID_INPUT');
     const stored = await db.gathering.findUniqueOrThrow({ where: { id: finalId } });
     assert.equal(stored.finalGenerationId, null); assert.equal(stored.finalPlanId, null); assert.equal(stored.finalizedAt, null);
   });
@@ -227,7 +228,15 @@ try {
     const late = generateGatheringItinerary(finalId, finalOwner.id, { expected_source: final.source_fingerprint!, idempotency_key: key() }, { async generate() { lateStarted.resolve(); return lateResult.promise; } });
     const lateRejection = assert.rejects(late, { code: 'INVALID_INPUT' });
     await lateStarted.promise;
-    const selected = snapshot(await call(finalizeRoute.POST, `${finalPath}/finalize`, { method: 'POST', token: finalOwner.token, id: finalId, body: choice }));
+    const command=async(token:string,body:Record<string,unknown>)=>snapshot(await call(workflowRoute.POST,`${finalPath}/workflow`,{method:'POST',token,id:finalId,body:{...body,generation_id:choice.generation_id,idempotency_key:key(),note:''}}));
+    rejected(await call(workflowRoute.POST,`${finalPath}/workflow`,{method:'POST',id:finalId,body:{action:'select',generation_id:choice.generation_id,idempotency_key:key(),expected_version:0,plan_ids:['plan1'],note:''}}),401,'UNAUTHENTICATED');
+    await command(finalOwner.token,{action:'select',expected_version:0,plan_ids:['plan1']});
+    await command(finalMember.token,{action:'select',expected_version:0,plan_ids:['plan1','plan2']});
+    const current=snapshot(await call(itemRoute.GET,finalPath,{token:finalOwner.token,id:finalId}));
+    const proposed=await command(finalOwner.token,{action:'propose',expected_version:current.workflow!.version,plan_id:'plan1'});
+    const accepted=await command(finalOwner.token,{action:'respond',expected_version:0,proposal_version:proposed.workflow!.proposal_version,decision:'accept'});assert.equal(accepted.final_choice,null);
+    const selected=await command(finalMember.token,{action:'respond',expected_version:0,proposal_version:proposed.workflow!.proposal_version,decision:'accept'});
+
     assert.equal(selected.final_choice?.generation_id, choice.generation_id); assert.equal(selected.final_choice?.plan_id, 'plan1');
     assert.equal(selected.gathering.revision, final.gathering.revision + 1);
     assert.equal(selected.viewer.can_respond, false); assert.equal(selected.viewer.can_generate, false);
@@ -245,7 +254,7 @@ try {
     rejected(await call(intakeRoute.POST, `${finalPath}/intake`, { method: 'POST', token: finalMember.token, id: finalId, body: { ...changedSubmission, expected_version: 2, idempotency_key: key(), intake: ownIntake('MUST_NOT_SAVE') } }), 409, 'INVALID_INPUT');
     rejected(await call(intakeRoute.POST, `${finalPath}/intake`, { method: 'POST', token: finalVisitor.token, id: finalId, body: { ...memberSubmission, idempotency_key: key() } }), 409, 'INVALID_INPUT');
     rejected(await call(detailsRoute.POST, `${finalPath}/details`, { method: 'POST', token: finalOwner.token, id: finalId, body: { expected_revision: selected.gathering.revision, details: { ...selected.gathering.details, title: 'MUST_NOT_UPDATE_TITLE' } } }), 409, 'INVALID_INPUT');
-    rejected(await call(generationRoute.POST, `${finalPath}/generate`, { method: 'POST', token: finalOwner.token, id: finalId, body: { expected_source: selected.source_fingerprint, idempotency_key: key() } }), 409, 'INVALID_INPUT');
+    rejected(await call(generationRoute.POST, `${finalPath}/generate`, { method: 'POST', token: finalOwner.token, id: finalId, body: { expected_source: final.source_fingerprint, idempotency_key: key() } }), 409, 'INVALID_INPUT');
     const answerReplay = snapshot(await call(intakeRoute.POST, `${finalPath}/intake`, { method: 'POST', token: finalMember.token, id: finalId, body: changedSubmission }));
     assert.equal(answerReplay.own?.version, 2); assert.deepEqual(answerReplay.final_choice, selected.final_choice);
     assert.deepEqual(snapshot(await call(generationRoute.POST, `${finalPath}/generate`, { method: 'POST', token: finalOwner.token, id: finalId, body: regeneratedRequest })).final_choice, selected.final_choice);

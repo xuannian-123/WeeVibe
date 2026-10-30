@@ -15,23 +15,31 @@ function install() {
 /** Native consent is resolved only by the platform's actual agree button event. */
 export function PrivacyConsent() {
   const [open, setOpen] = useState(false), [contract, setContract] = useState('用户隐私保护指引'), [notice, setNotice] = useState('');
-  const active = useRef(true), pending = useRef<{ resolve: Resolver; session: string | undefined }[]>([]);
+  const active = useRef(true), mounted = useRef(false), handlerRef = useRef<((resolve: Resolver) => void) | undefined>();
+  const pending = useRef<{ resolve: Resolver; session: string | undefined }[]>([]);
   function finish(agree = false) {
     const requests = pending.current; pending.current = []; setOpen(false);
     for (const request of requests) request.resolve(agree && active.current && request.session === getToken() ? { event: 'agree', buttonId: 'weevibe-privacy-agree' } : { event: 'disagree' });
   }
   useEffect(() => {
-    active.current = true; install();
+    mounted.current = true; active.current = true; install();
     const handler = (resolve: Resolver) => {
       if (!active.current) { resolve({ event: 'disagree' }); return; }
       pending.current.push({ resolve, session: getToken() }); setOpen(true); setNotice('');
       resolve({ event: 'exposureAuthorization' });
       Taro.getPrivacySetting?.({ success: result => { if (active.current && pending.current.length) setContract(result.privacyContractName || '用户隐私保护指引'); } });
     };
-    receive = handler;
-    return () => { active.current = false; if (receive === handler) receive = undefined; const requests = pending.current; pending.current = []; for (const r of requests) r.resolve({ event: 'disagree' }); };
+    handlerRef.current = handler; receive = handler;
+    return () => { mounted.current = false; active.current = false; if (receive === handler) receive = undefined; if (handlerRef.current === handler) handlerRef.current = undefined; const requests = pending.current; pending.current = []; for (const r of requests) r.resolve({ event: 'disagree' }); };
   }, []);
-  const hide = () => { active.current = false; finish(); }; useDidHide(hide); useUnload(hide); useDidShow(() => { active.current = true; });
+  const hide = () => { active.current = false; if (receive === handlerRef.current) receive = undefined; finish(); };
+  useDidHide(hide); useUnload(hide);
+  useDidShow(() => {
+    if (!mounted.current) return;
+    active.current = true;
+    // A child page can replace and then remove the global receiver while this page stays mounted.
+    if (handlerRef.current) receive = handlerRef.current;
+  });
   if (!open) return null;
   return <Sheet title="先了解信息如何使用" close={()=>finish()} className="wv-privacy-sheet" overlayClassName="wv-privacy-overlay">
     <Text className="wv-muted">头像和昵称用于展示你主动填写的个人资料；精确位置信息只在你主动使用定位时获取，用于识别城市、查找附近地点，不用于展示私人出发位置。</Text>

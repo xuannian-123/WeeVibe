@@ -16,7 +16,7 @@ export const venueSearchSchema = z.object({
 export const venueNearbySchema = z.object({
   center: gcj02Schema, category: venueCategorySchema,
   keyword: z.string().trim().min(1).max(80).optional(),
-  radius_m: z.number().int().min(1).max(5000), page_size: z.number().int().min(1).max(10).default(5),
+  radius_m: z.number().int().min(1).max(50000), page_size: z.number().int().min(1).max(10).default(5),
 }).strict().refine(v => v.category !== 'custom' || Boolean(v.keyword), 'custom requires keyword');
 export const venueWalkSchema = z.object({ origin: gcj02Schema, destination: gcj02Schema }).strict();
 export const venueSourceSchema = z.object({
