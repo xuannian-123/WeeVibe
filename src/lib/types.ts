@@ -26,6 +26,10 @@ export type JuSpec = {
   /** 城市是怎么定的：said = 发起人亲口说的；ip = 按发起人的网络位置猜的；location = 按第一个人给的出发地校正的；default = 兜底 */
   cityFrom?: "said" | "ip" | "location" | "default";
   notes?: string;
+  /** v6 发起人没说干什么（"大家聚一下 / 你定"）：活动由局长从活动库里选，category = "局长定" */
+  open?: boolean;
+  /** v6 发起人给的候选活动池（ActivityDef.key），如 ["hotpot", "boardgame"]；open 时为空 = 全库 */
+  activities?: string[];
 };
 
 /** 候选开始时间 */
@@ -85,7 +89,9 @@ export type Notice = {
     | "recap" // #16 局后回顾
     | "seat" // #18 座位排好了 / 下一轮换桌
     | "click" // #20 双方都觉得聊得来
-    | "ask"; // v5 局长私下问你一件事（协商）
+    | "ask" // v5 局长私下问你一件事（协商）
+    | "avatar" // v6 你的分身替你做了什么
+    | "feedback"; // v6 局后一键反馈
   text: string;
   read?: boolean;
 };
@@ -159,6 +165,15 @@ export type MemberPrivate = {
   relax?: { maxLateMin?: number; minStayMin?: number };
   /** 本人同意这次不计较的软偏好（need id 或 "budget"） */
   waived?: string[];
+  // ---- v6 分身谈判（docs/AVATAR.md） ----
+  /** 这次的状态 */
+  mood?: Mood;
+  /** 想干什么交给局长定 */
+  activityOpen?: boolean;
+  /** 授权书（风格 / 可以让多少 / 底线）。需求本身仍在 availability / budgetMax / dietTags / needs 里，mandateOf() 合成完整授权书 */
+  mandate?: Mandate;
+  /** 分身替你做了什么（只给本人） */
+  avatarLog?: AvatarLogEntry[];
 };
 
 /** 局长私下问一个人的是 / 否问题。只问软的（时间门槛、软偏好），绝不请人违反硬约束 */
@@ -378,6 +393,20 @@ export type Proposal = {
   risks?: Risk[];
   /** v5：户外方案碰上坏天气（或 4 天外没有预报）时的室内备案 */
   fallback?: Fallback;
+  /** v6：节目分段（两段式时有两段；第一段 = slot / poi，老代码不改也能跑）。一段时可省略 */
+  segments?: Segment[];
+};
+
+/** v6 节目的一段 */
+export type Segment = {
+  /** ActivityDef.key */
+  activity: string;
+  /** 活动名，如 "攀岩" */
+  activityName: string;
+  poi: Poi;
+  /** ISO，带 +08:00 */
+  start: string;
+  end: string;
 };
 
 /** #9 可复核的拍板：同样输入一定得到同样结论 */
@@ -405,6 +434,8 @@ export type Plan = {
   diagnosis?: Diagnosis;
   /** v5：协商摘要（聚合），如"局长私下协调了 1 位朋友" */
   coordination?: string;
+  /** v6：分身谈判记录（公开安全，大屏直播用；说话人只有"局长"和与身份解耦的分身代号） */
+  negotiation?: Negotiation;
   /** #10 跨局公平的公开说明（聚合），如 "这次优先照顾了前几次跑得最远的 1 位朋友" */
   caredFor?: string;
   /** 聚合后的约束说明，公开安全；只有 1 人有某约束时只说"有人"，不给能反推的细节 */
@@ -714,6 +745,8 @@ export type PublicFacts = {
     tradeoffs: string[];
     highlights: string[];
     recommended: boolean;
+    /** v6 两段式："15:00 攀岩 @ 岩时攀岩馆" */
+    segments?: { activityName: string; poiName: string; time: string }[];
   }[];
   recommendation?: string;
   caredFor?: string;
@@ -801,6 +834,139 @@ export type Profile = {
   know?: Record<string, Familiarity>;
   /** v5 让步账：在协商里答应过让步的局（最近的越多，下次越不先问他） */
   concessions?: { juId: string; at: string }[];
+  // ---- v6 分身 + 固定档案（docs/AVATAR.md 第 5.3 节） ----
+  /** 分身的名字（只出现在本人视图，任何公开输出都不用） */
+  avatarName?: string;
+  /** 默认谈判风格 */
+  style?: AvatarStyle;
+  /** 常用出发地（可多个） */
+  places?: { kind: "home" | "work" | "school" | "other"; place: Place }[];
+  transport?: Transport;
+  /** 身体限制，如 "膝盖不好"（私密；确认为底线时进授权书） */
+  body?: string[];
+  /** 活动口味：ActivityDef.key -> -1..1（建档滑卡 + 每次局学到的） */
+  activityTastes?: Record<string, number>;
+  /** 「我说的」与「分身猜的」：猜的永远不能当底线 */
+  facts?: ProfileFact[];
+  /** 局后一键反馈 */
+  feedback?: FeedbackEntry[];
+  /** 完成首次建档的时间（没完成 = 下次入局先走建档，可跳过） */
+  onboardedAt?: string;
+};
+
+// ---------------------------------------------------------------- v6 分身谈判（docs/AVATAR.md）
+
+/** 这次的状态：想嗨 / 想安静聊聊 / 想动一动 / 想躺着 */
+export type Mood = "hype" | "chill" | "active" | "lazy";
+
+/** 分身的谈判风格：随和 / 平衡 / 坚持 */
+export type AvatarStyle = "easy" | "balanced" | "firm";
+
+export type Transport = "metro" | "drive" | "taxi" | "bike" | "walk";
+
+/** 分身可以自己做主的让步幅度（超出才私下问本人） */
+export type Give = {
+  /** 可以多晚到（分钟） */
+  lateMin: number;
+  /** 可以少待（分钟） */
+  stayCutMin: number;
+  /** 人均可以多花（元） */
+  budgetUp: number;
+  /** 单程可以多走（分钟） */
+  commuteUp: number;
+};
+
+/** 授权书里本人可调的部分 */
+export type Mandate = {
+  status: "draft" | "confirmed";
+  style: AvatarStyle;
+  give: Give;
+  /** 底线 key（"homeBy" | "diet:清真" | need id），最多 3 条（MAX_FLOORS） */
+  floors: string[];
+  confirmedAt?: string;
+};
+
+/** 合成后的完整授权书（mandateOf 的输出，本人视图 + 局长内部用） */
+export type MandateView = {
+  style: AvatarStyle;
+  give: Give;
+  floors: { key: string; text: string }[];
+  wants: { key: string; text: string; strength: NeedStrength }[];
+  /** 底线超过上限被降成"想要"的 */
+  demoted: { key: string; text: string }[];
+  mood?: Mood;
+  status: Mandate["status"];
+};
+
+/** 分身替本人做的一件事（只给本人） */
+export type AvatarLogEntry = {
+  id: string;
+  at: string;
+  kind: "concede" | "held" | "gained" | "ask" | "compensated";
+  /** "替你让了 15 分钟：开始时间改到 19:15" */
+  text: string;
+  /** 自动让步用到的维度（撤回时这一维的 give 视为 0） */
+  dim?: keyof Give;
+  /** 本人撤回了这次自动让步 */
+  revoked?: boolean;
+};
+
+/** 谈判记录的一条（公开安全） */
+export type NegotiationEvent = {
+  /** 0 交底 / 1 出方案 / 2 让步 / 3 交换与补偿 / 4 拍板 */
+  round: 0 | 1 | 2 | 3 | 4;
+  /** "局长" 或分身代号（"分身 A"…，按内容规范顺序分配，与成员身份无关） */
+  speaker: string;
+  kind: "open" | "propose" | "block" | "concede" | "trade" | "compensate" | "ask" | "decide";
+  text: string;
+};
+
+export type Negotiation = {
+  events: NegotiationEvent[];
+  /** 聚合数字 */
+  autoConcessions: number;
+  asked: number;
+  trades: number;
+  /** "8 个分身谈了 4 轮：2 次自动让步、1 次交换，照顾到 8/8" */
+  outcome: string;
+};
+
+/** 档案里的一条事实 */
+export type ProfileFact = {
+  key: string;
+  text: string;
+  /** said = 本人说的 / 填的；learned = 分身从行为里猜的（永远不能当底线） */
+  source: "said" | "learned";
+  /** 0..1，learned 才有意义 */
+  confidence: number;
+  at: string;
+};
+
+export type FeedbackVerdict = "great" | "tired" | "pricey" | "far" | "loud" | "ok";
+export type FeedbackEntry = { juId: string; at: string; verdict: FeedbackVerdict };
+
+/** 活动库的一项（planner/activities.ts） */
+export type ActivityDef = {
+  key: string;
+  name: string;
+  emoji: string;
+  group: "eat" | "drink" | "play" | "see" | "outdoor";
+  /** 高德搜索词 */
+  poiKeywords: string[];
+  /** 动静：0 躺 … 3 很累 */
+  energy: 0 | 1 | 2 | 3;
+  /** 能不能聊天：0 基本聊不了 … 2 就是来聊天的 */
+  talk: 0 | 1 | 2;
+  loud: boolean;
+  alcohol: boolean;
+  indoor: boolean | "either";
+  /** 人均区间（元） */
+  cost: [number, number];
+  minutes: number;
+  people: [number, number];
+  /** 晚到的人能不能中途加入 */
+  lateJoin: boolean;
+  food: boolean;
 };
 
 /** GET /api/stats —— 路演用的真实使用数据，只统计非演示成员 */
