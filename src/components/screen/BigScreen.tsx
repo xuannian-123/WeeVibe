@@ -11,6 +11,8 @@ import { categoryEmoji, confirmedProposal, dayLabel, focusProposal, slotLabel, t
 import { AuditPanel, ExperienceMatrix, Panel, PrivacyPanel } from "./PlanPanels";
 import { BondPanel, SeatingBoard } from "./SeatingPanels";
 import { TraceStream } from "./TraceStream";
+import { NegotiationLive } from "./NegotiationLive";
+import { segmentTimeline, segmentsTitle } from "./negotiation";
 
 const STATUS_TEXT: Record<string, string> = {
   collecting: "扫码入局中",
@@ -32,6 +34,8 @@ export type ScreenAdmin = {
   /** v5：冲突演示 / 替被问的演示朋友回答 */
   seedConflict?: () => Promise<void>;
   demoAnswer?: () => Promise<void>;
+  /** v6：分身谈判演示（8 个分身：门禁冲突、预算紧、想动 vs 想躺） */
+  seedAvatar?: () => Promise<void>;
 };
 
 /* ───────── 左上：二维码 + 进度 ───────── */
@@ -138,6 +142,9 @@ function Recommendation({ state }: { state: JuState }) {
     <Panel title="⚖️ 局长为什么这么排" className="shrink-0">
       <p className="text-[21px] font-semibold leading-relaxed text-cream">{plan.recommendation}</p>
       {p?.blurb && <p className="mt-2 border-l-4 border-mustard pl-3 text-[18px] text-cream-faint">“{p.blurb}”</p>}
+      {plan.negotiation?.outcome && (
+        <p className="mt-3 rounded-xl bg-night-3 px-4 py-2 text-[17px] font-bold text-[#7cc4ff]">🤝 {plan.negotiation.outcome}</p>
+      )}
       {plan.caredFor && (
         <div className="mt-3 flex items-center gap-2 rounded-xl bg-cinnabar/15 px-4 py-2 text-[18px] font-bold text-[#ff8a78]">
           <span>🤝</span>
@@ -163,14 +170,33 @@ function ConfirmedCard({ state }: { state: JuState }) {
   if (!p) return null;
   const s = ju.settlement;
   const r = ju.reservation;
+  const tl = segmentTimeline(p.segments);
   return (
     <section className="relative shrink-0 overflow-hidden rounded-[28px] border-2 border-cinnabar/70 bg-night-2 p-6">
       <div className="absolute -right-4 -top-6 opacity-90">
         <StampSlam size={150} play={false} onDark text="定局" />
       </div>
       <div className="font-num text-[34px] font-bold text-mustard">{slotLabel(p.slot)}</div>
-      <div className="mt-1 pr-36 text-[32px] font-black leading-tight text-cream">{p.poi.name}</div>
-      <div className="mt-1 truncate pr-36 text-[17px] text-cream-faint">{p.poi.address}</div>
+      {tl ? (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 pr-36">
+          {tl.items.map((x, i) =>
+            x.t === "seg" ? (
+              <span key={i} className="min-w-0 text-[26px] font-black leading-tight text-cream">
+                <span className="font-num text-mustard">{x.time}</span> {x.emoji} {x.name}
+                <span className="block truncate text-[16px] font-semibold text-cream-faint">@ {x.poi}</span>
+              </span>
+            ) : (
+              <span key={i} className="text-[18px] font-bold text-cream-faint">→ 🚶 {x.minutes}′ →</span>
+            ),
+          )}
+          <span className="font-num w-full text-[17px] text-cream-faint">{tl.endsAt} 前结束</span>
+        </div>
+      ) : (
+        <>
+          <div className="mt-1 pr-36 text-[32px] font-black leading-tight text-cream">{p.poi.name}</div>
+          <div className="mt-1 truncate pr-36 text-[17px] text-cream-faint">{p.poi.address}</div>
+        </>
+      )}
       <div className="mt-4 flex flex-wrap gap-3 text-[18px] font-bold">
         <span className="rounded-full bg-night-3 px-4 py-1.5 text-cream">👥 {p.attendCount} 人</span>
         {r && r.status !== "none" && (
@@ -256,7 +282,7 @@ function StampOverlay({ state, kind, onClose }: { state: JuState; kind: "quorum"
       <StampSlam size={460} onDark text="定局" sub={p ? p.slot.start.slice(0, 10).replace(/-/g, ".") : undefined} />
       <div className="animate-rise mt-10 text-center" style={{ animationDelay: "800ms" }}>
         <div className="font-num text-[44px] font-bold text-mustard">{slotLabel(p?.slot)}</div>
-        <div className="mt-2 text-[64px] font-black text-cream">{p?.poi.name}</div>
+        <div className="mt-2 text-[64px] font-black text-cream">{segmentsTitle(p?.segments) ?? p?.poi.name}</div>
         <div className="mt-3 text-[24px] text-cream-faint">局长拍的板，任何人都能复算</div>
       </div>
     </button>
@@ -300,6 +326,11 @@ function AdminBar({ state, admin }: { state: JuState; admin: ScreenAdmin }) {
           {admin.seedConflict && (
             <button className={btn} disabled={!!busy} onClick={run("conflict", admin.seedConflict)}>
               {busy === "conflict" ? "拉人中…" : "演示：冲突局"}
+            </button>
+          )}
+          {admin.seedAvatar && (
+            <button className={btn} disabled={!!busy} onClick={run("avatar", admin.seedAvatar)}>
+              {busy === "avatar" ? "分身入座中…" : "演示：分身谈判"}
             </button>
           )}
           <button className={btn} disabled={!!busy || state.ju.quorum?.state === "pending"} onClick={run("plan", admin.plan)}>
@@ -373,6 +404,11 @@ export function BigScreen({
   const hasPlan = !!ju.plan && (ju.status === "voting" || ju.status === "confirmed");
   // v4：定局并排了座，现场最要紧的是"这一轮坐哪"和"大家熟起来了多少"
   const seating = ju.status === "confirmed" && !!ju.seating?.rounds.length;
+  // v6：有谈判记录时，投票阶段默认上「分身谈判直播」，定局后默认回到方案；随时可切。换了一份谈判（重新出方案）就重新默认
+  const negKey = hasPlan && ju.plan?.negotiation?.events.length && !seating && !ju.recap ? ju.plan.computedAt : null;
+  const [negPick, setNegPick] = useState<{ key: string; view: "live" | "plan" } | null>(null);
+  const negView = !negKey ? "plan" : negPick?.key === negKey ? negPick.view : ju.status === "voting" ? "live" : "plan";
+  const pickView = (view: "live" | "plan") => negKey && setNegPick({ key: negKey, view });
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-night text-cream">
@@ -444,8 +480,37 @@ export function BigScreen({
             <PrivacyPanel state={state} test={selfTest} className="shrink-0" />
           </div>
         </div>
+      ) : negKey && negView === "live" ? (
+        <div className="relative grid h-[900px] grid-cols-[440px_minmax(0,1fr)] gap-7 px-12 pb-10">
+          <div className="flex min-h-0 flex-col gap-6">
+            <Panel title="🧠 局长在想什么" className="flex-1">
+              <TraceStream trace={ju.trace} size="md" max={10} />
+            </Panel>
+            <PrivacyPanel state={state} test={selfTest} className="shrink-0" />
+          </div>
+          <NegotiationLive
+            key={negKey}
+            state={state}
+            right={
+              <button
+                onClick={() => pickView("plan")}
+                className="rounded-full bg-mustard px-4 py-1.5 text-[16px] font-black text-night transition-transform hover:scale-[1.03]"
+              >
+                📊 看方案
+              </button>
+            }
+          />
+        </div>
       ) : (
         <div className="relative grid h-[900px] grid-cols-[440px_minmax(0,1fr)_720px] gap-7 px-12 pb-10">
+          {negKey && (
+            <button
+              onClick={() => pickView("live")}
+              className="absolute right-[808px] top-5 z-10 rounded-full border-2 border-mustard bg-night/85 px-4 py-1.5 text-[16px] font-black text-mustard transition-colors hover:bg-mustard hover:text-night"
+            >
+              🤝 重看分身谈判
+            </button>
+          )}
           <div className="flex min-h-0 flex-col gap-6">
             <Panel title="🧠 局长在想什么" className="flex-1">
               <TraceStream trace={ju.trace} size="md" max={10} />

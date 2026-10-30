@@ -700,6 +700,18 @@ function DemoTools({ c }: { c: Ctx }) {
             {busy === "seed-conflict" ? "拉人中…" : "冲突演示（门禁 vs 加班）"}
           </button>
         )}
+        {state.ju.status === "collecting" && api.devSeedAvatar && (
+          <button
+            className={`${btn} border-solid border-ink text-ink`}
+            disabled={!!busy}
+            onClick={run("seed-avatar", async () => {
+              apply(await api.devSeedAvatar!(state.ju.id, admin));
+              toast("8 个分身入座，打开大屏看谈判直播 🤝", "ok");
+            })}
+          >
+            {busy === "seed-avatar" ? "分身入座中…" : "🤝 分身谈判演示（8 人）"}
+          </button>
+        )}
         {state.ju.status === "voting" && (state.ju.plan?.diagnosis?.coordinating ?? 0) > 0 && (
           <button className={btn} disabled={!!busy} onClick={run("dev-answer", async () => apply(await api.devAnswer(state.ju.id, admin)))}>
             {busy === "dev-answer" ? "回答中…" : "替被问的演示朋友说「可以」"}

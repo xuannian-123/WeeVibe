@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import type { JuState } from "@/lib/types";
 import { store } from "@/lib/client/storage";
+import { fixtureAvatar, isAvatarMock } from "@/lib/client/mockJu";
 import { BigScreen, type ScreenAdmin } from "@/components/screen/BigScreen";
 import { Stage } from "@/components/screen/bits";
 import { usePublicJu } from "@/components/screen/usePublicJu";
@@ -14,7 +16,32 @@ function Center({ children }: { children: React.ReactNode }) {
   return <div className="fixed inset-0 flex flex-col items-center justify-center gap-5 bg-night text-cream">{children}</div>;
 }
 
+// 开发环境可以用 ?mock=avatar / ?mock=avatar-confirmed 预览 v6 分身谈判直播（只给公开视图）
+const MOCK_OK = process.env.NODE_ENV !== "production";
+
 export default function ScreenPage() {
+  const [mock, setMock] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    const m = MOCK_OK ? new URLSearchParams(window.location.search).get("mock") : null;
+    setMock(m && isAvatarMock(m) ? m : null);
+  }, []);
+  if (mock === undefined) return null;
+  return mock ? <MockScreen fixture={mock} /> : <LiveScreen />;
+}
+
+function MockScreen({ fixture }: { fixture: string }) {
+  const state = useMemo<JuState>(() => {
+    const s = fixtureAvatar(fixture);
+    return { ...s, me: undefined, mine: undefined, isAdmin: undefined, ju: { ...s.ju, admin: undefined } };
+  }, [fixture]);
+  return (
+    <Stage>
+      <BigScreen state={state} joinUrl="" selfTest={null} playStamp={false} />
+    </Stage>
+  );
+}
+
+function LiveScreen() {
   const { id } = useParams<{ id: string }>();
   const { state, loadError, offline, refresh } = usePublicJu(id);
   const { test } = useSelfTest();
@@ -75,6 +102,10 @@ export default function ScreenPage() {
       },
       demoAnswer: async () => {
         await organizerApi.devAnswer(id, adminToken);
+        await refresh();
+      },
+      seedAvatar: async () => {
+        await organizerApi.devSeedAvatar?.(id, adminToken);
         await refresh();
       },
       seedClub: async () => {
