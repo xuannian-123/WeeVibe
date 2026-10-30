@@ -25,8 +25,7 @@ export const requirementResponseInputSchema = z.object({
   private_origin: privateOriginSchema.nullable().optional()
 }).strict();
 export const requirementFinalSelectionSchema = z.object({ location_id: stableId.nullable(), location_other: text(500).nullable(), note: text(1000) }).strict();
-export const requirementCreateSchema = z.object({ action: z.literal('create'), kind: z.enum(['friend', 'team']), activity_id: z.uuid().optional(), idempotency_key: z.string().min(8).max(100).regex(/^[A-Za-z0-9_-]+$/), draft: requirementDraftSchema }).strict()
- .refine(v => v.kind !== 'team' || v.activity_id === undefined, '团建筹备不绑定其他活动');
+export const requirementCreateSchema = z.object({ action: z.literal('create'), kind: z.literal('friend'), activity_id: z.uuid().optional(), idempotency_key: z.string().min(8).max(100).regex(/^[A-Za-z0-9_-]+$/), draft: requirementDraftSchema }).strict();
 const expected = z.number().int().positive();
 // For respond, an omitted answer precondition is parsed only to return an explicit
 // upgrade conflict. The service never permits a write without it. 0 means no saved answer.
@@ -43,7 +42,7 @@ export type RequirementCommand = z.infer<typeof requirementCommandSchema>;
 export type RequirementFinalSelection = z.infer<typeof requirementFinalSelectionSchema>;
 export type PublicRequirementResponse = Omit<RequirementResponseInput, 'private_origin'> & { user_id: string; revision: number; updated_at: string; nickname: string };
 export type OwnRequirementResponse = PublicRequirementResponse & { response_version: number; private_origin: z.infer<typeof privateOriginSchema> | null };
-export type RequirementSummary = { id: string; kind: 'friend' | 'team'; activity_id: string | null; title: string; status: 'draft' | 'open' | 'closed' | 'finalized'; deadline_at: string | null; revision: number; is_manager: boolean; has_responded: boolean; updated_at: string };
+export type RequirementSummary = { id: string; kind: 'friend'; activity_id: string | null; title: string; status: 'draft' | 'open' | 'closed' | 'finalized'; deadline_at: string | null; revision: number; is_manager: boolean; has_responded: boolean; updated_at: string };
 const aggregateCount = z.number().int().nonnegative();
 export const requirementAggregateSchema = z.object({
   respondent_count: aggregateCount, time_respondent_count: aggregateCount,

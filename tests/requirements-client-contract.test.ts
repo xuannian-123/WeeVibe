@@ -20,6 +20,12 @@ function own() { return { user_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', revis
 beforeEach(() => { state.token = 'session-a'; state.transport.mockReset(); });
 function reply(body: unknown) { state.transport.mockResolvedValueOnce({ status: 200, body }); }
 describe('runtime requirement success payload contract (real client, mocked transport)', () => {
+  it('filters historical team summaries without relabeling them or hiding valid friend records',async()=>{
+    reply({collections:[{...snapshot().collection,kind:'team',id:activityId},snapshot().collection],limit:100,server_time:snapshot().server_time});
+    expect((await listRequirements()).collections.map(row=>row.id)).toEqual([id]);
+    reply({...snapshot(),collection:{...snapshot().collection,kind:'team'}});await expect(requestRequirement(path)).rejects.toMatchObject({code:'INVALID_RESPONSE'});
+    reply({collections:[{...snapshot().collection,kind:'unknown'}],limit:100,server_time:snapshot().server_time});await expect(listRequirements()).rejects.toMatchObject({code:'INVALID_RESPONSE'});
+  });
   it('accepts a valid older shape without the optional organizer avatar', async () => {
     const value = snapshot(); reply(value); await expect(requestRequirement(path)).resolves.toEqual(value);
   });

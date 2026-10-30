@@ -39,7 +39,7 @@ import '../../features/design-c/account-navigation.css';
 
 type Account = AccountSnapshot;
 type Tab = 'go'|'ideas'|'messages'|'me';
-type LoginDestination = ({ kind:'ideas'; keyword:string; city:string } | {kind:'account';page:CAccountPage;group?:CActivityEntry} | { kind:'friend'|'team'|'preparation'|'direct' }) & { session?:string; actor?:string };
+type LoginDestination = ({ kind:'ideas'; keyword:string; city:string } | {kind:'account';page:CAccountPage;group?:CActivityEntry} | { kind:'friend'|'preparation'|'direct' }) & { session?:string; actor?:string };
 type IdeasInput = { session:string|undefined; keyword:string; city:string };
 
 export default function Home({routePage,routeGroup='all'}:{routePage?:CAccountPage;routeGroup?:CActivityEntry}={}) {
@@ -144,7 +144,7 @@ export default function Home({routePage,routeGroup='all'}:{routePage?:CAccountPa
       if(destination?.kind==='account'){openAccountPage(destination.page,destination.group);}
       else if(destination?.kind==='ideas'){
         setIdeasInput({session,keyword:destination.keyword,city:destination.city});setTab('ideas');setSubpage(routePage||'');
-      }else if(destination?.kind==='direct')void Taro.navigateTo({url:'/pages/editor/index'});else if(destination?.kind==='friend'||destination?.kind==='team'||destination?.kind==='preparation')void Taro.navigateTo({url:`/pages/gathering/index?new=${destination.kind==='team'?'team':'friend'}`});
+      }else if(destination?.kind==='direct')void Taro.navigateTo({url:'/pages/editor/index'});else if(destination?.kind==='friend'||destination?.kind==='preparation')void Taro.navigateTo({url:'/pages/gathering/index?new=friend'});
     }catch(e){if(current())setError(errorText(e));}
     finally{if(loginBusy.current===ticket){loginBusy.current=undefined;if(cityMounted.current)setLoggingIn(false);}}
   }
@@ -167,7 +167,7 @@ export default function Home({routePage,routeGroup='all'}:{routePage?:CAccountPa
     catch{if(cityMounted.current&&cityVisible.current&&getToken()===session)setError('活动暂时无法打开，请重试。');}
     finally{activityNavigationLock.current=false;}
   }
-  function create(kind:'friend'|'team'|'preparation'|'direct'){abandonDestination();setCreateOpen(false);if(!signedIn){rememberDestination({kind,session:getToken()});setLoginOpen(true);setError('请先使用微信身份登录，登录后继续创建。');return;}void Taro.navigateTo({url:kind==='direct'?'/pages/editor/index':`/pages/gathering/index?new=${kind==='team'?'team':'friend'}`});}
+  function create(kind:'friend'|'preparation'|'direct'){abandonDestination();setCreateOpen(false);if(!signedIn){rememberDestination({kind,session:getToken()});setLoginOpen(true);setError('请先使用微信身份登录，登录后继续创建。');return;}void Taro.navigateTo({url:kind==='direct'?'/pages/editor/index':'/pages/gathering/index?new=friend'});}
   function openProfile(nickname=false){abandonDestination();setProfileNicknameFocus(nickname===true);if(account && accountSession.current===getToken()){profileBack.current=subpage==='settings'?'settings':'';setSubpage('profile');}else setError('头像与昵称尚未读取，请先刷新账户数据。');}
   function storeAccount(next:Account) { const session=accountSession.current; if(!session||session!==getToken())return; generation.current++;setBusy(false);setAccount({...next,profile:{...next.profile,avatar_url:account?.profile.avatar_url}}); }
   async function refreshInbox(){const session=getToken(),gen=generation.current;if(!session)return;setInboxError('');try{const value=await requestInbox(session);if(cityMounted.current&&cityVisible.current&&session===getToken()&&gen===generation.current)setInboxState({session,value});}catch(e){if(cityMounted.current&&session===getToken()&&gen===generation.current)setInboxError(errorText(e));}}
@@ -215,7 +215,7 @@ export default function Home({routePage,routeGroup='all'}:{routePage?:CAccountPa
     {error && !loginOpen && subpage!=='invitations' && <CNotice>{error}<Text onClick={()=>void refresh()}>　重试</Text></CNotice>}
     {supportNotice&&<CNotice>{supportNotice}</CNotice>}
     <View>
-    {tab==='go' && <CGoHome venuePreviews={browseCache.current&&browseCache.current.session===getToken()&&browseCache.current.city===city&&browseCache.current.state.venues.length?browseCache.current.state.venues:undefined} preview={venue=>{const session=getToken();if(session){setGoVenue({session,venue});setGoVenueError(undefined);}}} account={account} signedIn={signedIn} busy={busy||loggingIn} login={requestLogin} refresh={()=>void refresh()} friend={()=>create('friend')} team={()=>create('team')} all={()=>allActivities()} ideas={()=>changeTab('ideas')} openActivity={openActivity} openPreparation={id=>void Taro.navigateTo({url:`/pages/gathering/index?id=${encodeURIComponent(id)}`})} preparations={cPreparations.records} preparationsBusy={cPreparations.busy} preparationsError={cPreparations.error} retryPreparations={()=>void cPreparations.refresh()}/>}
+    {tab==='go' && <CGoHome venuePreviews={browseCache.current&&browseCache.current.session===getToken()&&browseCache.current.city===city&&browseCache.current.state.venues.length?browseCache.current.state.venues:undefined} preview={venue=>{const session=getToken();if(session){setGoVenue({session,venue});setGoVenueError(undefined);}}} account={account} signedIn={signedIn} busy={busy||loggingIn} login={requestLogin} refresh={()=>void refresh()} friend={()=>create('friend')} all={()=>allActivities()} ideas={()=>changeTab('ideas')} openActivity={openActivity} openPreparation={id=>void Taro.navigateTo({url:`/pages/gathering/index?id=${encodeURIComponent(id)}`})} preparations={cPreparations.records} preparationsBusy={cPreparations.busy} preparationsError={cPreparations.error} retryPreparations={()=>void cPreparations.refresh()}/>}
     {tab==='ideas' && <Inspiration chooseCity={openCity} autoBrowse={!!ideasAutoSource.current&&ideasAutoSource.current===getToken()&&!(ideasInput&&ideasInput.session===getToken())} manualCity={!!Taro.getStorageSync('weevibe_selected_city')} key={`${city}-${signedIn}-${getToken()||'guest'}`} city={city} authenticated={signedIn} initialBrowse={browseCache.current?.session===getToken()&&browseCache.current?.city===city?browseCache.current.state:undefined} browseChanged={state=>{browseCache.current={session:getToken(),city,state};}} initialKeyword={ideasInput&&ideasInput.session===getToken()&&ideasInput.city===city?ideasInput.keyword:undefined} login={requestIdeasLogin} initialFavorites={account?.favorites} accountChanged={storeAccount} plan={planVenue}/>}
     {tab==='messages' && (!signedIn ? loginPrompt : <Messages key={getToken()} initialPendingOnly={messageFilter.current} filterChanged={value=>{messageFilter.current=value;}} value={inbox} session={getToken()} error={inboxError} refresh={refreshInbox} changed={value=>{const session=getToken();if(session)setInboxState({session,value});}}/>)}
     {tab==='me' && <View>{myContent}</View>}

@@ -21,7 +21,7 @@ describe('legacy public writes require trusted identity without requiring accoun
   const cases=[
     ['create activity',()=>create(request(activityInput))],
     ['apply activity',()=>apply(request({idempotency_key:'profile-entry-key',expected_revision:1,segments:[{segment_id:id,plan_revision:1}]}),{params:Promise.resolve({activityId:id})})],
-    ['create requirements',()=>requirementCreate(request({action:'create',kind:'team',idempotency_key:'profile-entry-key',draft:draftInput}))],
+    ['create requirements',()=>requirementCreate(request({action:'create',kind:'friend',idempotency_key:'profile-entry-key',draft:draftInput}))],
     ['save requirements',()=>requirementCommand(request({action:'save-draft',expected_revision:1,draft:draftInput}),context)],
     ['publish requirements',()=>requirementCommand(request({action:'publish',expected_revision:1}),context)],
     ['respond requirements',()=>requirementCommand(request({action:'respond',expected_revision:1,expected_response_version:0,response:{selected_segment_ids:[],answers:[],location_ids:[],location_other:null,time_preferences:'',budget_note:'',preferences:''}}),context)],

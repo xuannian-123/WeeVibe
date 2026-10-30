@@ -1,23 +1,20 @@
 import {describe,expect,it} from 'vitest';
-import {emptyGatheringDetails,emptyGatheringIntake,gatheringDateSchema,gatheringDetailsSchema,gatheringIntakeSchema,gatheringCreateSchema,gatheringGenerateSchema,gatheringFinalizeSchema,gatheringMemberSaveSchema,gatheringSubscriptionConfigSchema,gatheringSubscriptionIntentSchema,gatheringSubscriptionIntentResultSchema,inboxMessageSchema,gatheringOwnBlocks,gatheringPublicBlocks,gatheringVisibleDetails,privateGatheringQuestion} from '../packages/contracts/src';
+import {emptyGatheringDetails,emptyGatheringIntake,gatheringDateSchema,gatheringDetailsSchema,gatheringIntakeSchema,gatheringCreateSchema,gatheringGenerateSchema,gatheringFinalizeSchema,gatheringMemberSaveSchema,gatheringSubscriptionConfigSchema,gatheringSubscriptionIntentSchema,gatheringSubscriptionIntentResultSchema,inboxMessageSchema,gatheringOwnBlocks,gatheringPublicBlocks} from '../packages/contracts/src';
 import {newKey} from '../apps/miniprogram/src/platform/local-id';
-import {gatheringModelSource,gatheringSourceFingerprint,gatheringTeamStatistics} from '../apps/web/src/server/gatherings/privacy';
+import {gatheringModelSource,gatheringSourceFingerprint} from '../apps/web/src/server/gatherings/privacy';
 
 const owner='11111111-1111-4111-8111-111111111111',member='22222222-2222-4222-8222-222222222222';
 const details=()=>({...emptyGatheringDetails(),date:'2030-02-01',title:'周末出游'});
 function intake(){const value=emptyGatheringIntake();value.public.date='2030-02-01';value.public.keywords.eat=['火锅／串串'];value.public.confirmed_keys=['eat_2'];value.private={budget_min:111,budget_max:987,budget_note:'PRIVATE_BUDGET_SENTINEL',origin:{label:'PRIVATE_HOME_SENTINEL',latitude:30.111,longitude:120.999,crs:'GCJ-02'},confirmed_keys:['budget','origin']};return value;}
 const row=(userId=owner,version=1)=>({userId,publicIntake:intake().public,privateIntake:intake().private,answers:[],responseVersion:version});
 describe('gathering private fields and confirmed blocks',()=>{
-  it('preserves legacy details and native map records, but rejects stale labels and strips unconfirmed map metadata',()=>{
+  it('preserves legacy friend details and native map records, but rejects stale labels',()=>{
     const base=details();expect(gatheringDetailsSchema.parse(base)).toEqual(base);
     const venue={name:'UNCONFIRMED_MAP',address:'UNCONFIRMED_ADDRESS',location:{latitude:31.2,longitude:120.3,crs:'GCJ-02' as const},source:{provider:'wechat' as const,source_api:'wx.chooseLocation' as const}};
     const value={...base,place:venue.name,address:venue.address,place_venue:venue,candidate_places:[]};
     expect(gatheringDetailsSchema.parse(value).place_venue).toEqual(venue);
     expect(gatheringDetailsSchema.safeParse({...value,place:'另一个地点'}).success).toBe(false);
     expect(gatheringDetailsSchema.safeParse({...base,candidate_places:[{id:'p1',label:'另一个地点',venue}]}).success).toBe(false);
-    const visible=gatheringVisibleDetails(value,'team',false);
-    expect(visible).not.toHaveProperty('place_venue');expect(JSON.stringify(visible)).not.toContain('UNCONFIRMED_');
-    expect(gatheringDetailsSchema.safeParse(visible).success).toBe(true);
     expect(JSON.stringify(gatheringModelSource(value,[]))).not.toMatch(/latitude|longitude|wx.chooseLocation/);
   });
   it('preserves private blocks for the owner while shared blocks contain only selected public input',()=>{
@@ -74,7 +71,7 @@ describe('gathering private fields and confirmed blocks',()=>{
     expect(inboxMessageSchema.safeParse({...message,section:'activity'}).success).toBe(false);
   });
 });
-describe('model input and team projection',()=>{
+describe('model input and historical question privacy',()=>{
   it('keeps real IDs, private objects and questionnaire free prose out of the AI source',()=>{
     const value=row();value.answers=[{question_id:'q1',option_ids:[],other:'',text:'PRIVATE_ANSWER'}] as never;
     const serialized=JSON.stringify(gatheringModelSource(details(),[value]));
@@ -86,26 +83,5 @@ describe('model input and team projection',()=>{
     expect(gatheringSourceFingerprint(d,[...rows].reverse())).toBe(hash);
     expect(gatheringSourceFingerprint({...d,capacity:10},rows)).not.toBe(hash);
     expect(gatheringSourceFingerprint(d,[row(owner,2),row(member)])).not.toBe(hash);
-  });
-  it('redacts every unconfirmed organizer detail for team participants',()=>{
-    const d={...details(),place:'UNCONFIRMED_PLACE',address:'UNCONFIRMED_ADDRESS',description:'UNCONFIRMED_NOTE',capacity:9,fee:{kind:'per_person' as const,amount:200,note:'UNCONFIRMED_FEE'},confirmed_details:['date'] as const};
-    const view=gatheringVisibleDetails({...d,confirmed_details:[...d.confirmed_details]},'team',false);
-    expect(view.date).toBe(d.date);expect(view.capacity).toBeNull();expect(JSON.stringify(view)).not.toMatch(/UNCONFIRMED/);
-    expect(gatheringVisibleDetails({...d,confirmed_details:[]},'friend',false).place).toBe(d.place);
-  });
-  it.each(['个人预算是多少？','你从哪里来？','你居住在哪个区域？','出发点在哪里？'])('marks %s as own-only questionnaire data',title=>{expect(privateGatheringQuestion({id:'q',title,type:'text',required:false,options:[]})).toBe(true);});
-  it('keeps a partial overnight disclosure valid without revealing its unconfirmed end date',()=>{
-    const d={...details(),start_time:'20:00',end_time:'09:00',end_date:'2030-02-02',confirmed_details:['date','start_time','end_time'] as const};
-    const visible=gatheringVisibleDetails({...d,confirmed_details:[...d.confirmed_details]},'team',false);
-    expect(visible.end_date).toBe('');expect(visible.end_time).toBe('');expect(gatheringDetailsSchema.safeParse(visible).success).toBe(true);
-  });
-  it('returns counts without private amounts, origin options or any answer prose even to the organizer',()=>{
-    const d=details();d.questions=[{id:'food',title:'吃什么',type:'single',required:false,options:[{id:'hotpot',label:'火锅'}]},{id:'budget',title:'预算范围',type:'single',required:false,options:[{id:'high',label:'987元'}]},{id:'note',title:'想法',type:'text',required:false,options:[]}];
-    const value=row();value.answers=[{question_id:'food',option_ids:['hotpot'],other:'',text:''},{question_id:'budget',option_ids:['high'],other:'PRIVATE_BUDGET_SENTINEL',text:''},{question_id:'note',option_ids:[],other:'',text:'PRIVATE_HOME_SENTINEL'}] as never;
-    const stats=gatheringTeamStatistics(d,[value]);
-    expect(stats.questions.find(q=>q.id==='food')?.options[0].count).toBe(1);
-    expect(stats.questions.find(q=>q.id==='budget')).toMatchObject({private:true,response_count:0,options:[],other_count:0});
-    expect(stats.questions.find(q=>q.id==='note')?.response_count).toBe(1);
-    expect(JSON.stringify(stats)).not.toMatch(/PRIVATE_|987/);
   });
 });

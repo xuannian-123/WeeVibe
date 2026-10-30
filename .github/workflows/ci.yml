@@ -72,6 +72,7 @@ jobs:
           pnpm exec tsx scripts/check-gathering-http.ts --fixture-only
           pnpm exec tsx scripts/check-gathering-notifications.ts --fixture-only
           pnpm exec tsx scripts/check-gathering-presentation.ts --fixture-only
+          pnpm exec tsx scripts/check-team-retirement.ts --fixture-only
           pnpm exec tsx scripts/check-inspiration-intake.ts --fixture-only
           for attempt in {1..5}; do
             pnpm exec tsx scripts/check-gathering-workflow.ts --fixture-only

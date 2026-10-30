@@ -16,7 +16,6 @@ export async function gatheringRequest<T>(session:string,path:string,method:'GET
 }
 export const parseGatheringSnapshot=(raw:unknown):GatheringSnapshot=>{
   const value=gatheringSnapshotSchema.parse(raw);
-  if(value.gathering.kind==='team'&&(!value.viewer.is_owner&&value.stats!==null||value.members!==null))throw Error('private team projection');
   if(value.members?.some(m=>m.blocks.some(b=>b.id==='budget'||b.id==='origin')))throw Error('private member fields');
   if(!value.viewer.is_member&&value.own!==null)throw Error('private own projection');
   if(!value.viewer.is_owner&&!value.viewer.is_member&&(value.members!==null||value.workflow&&(value.workflow.people.length>0||value.workflow.own_selection!==null||value.workflow.own_confirmation!==null||value.workflow.coordination_note!=='')))throw Error('private visitor projection');
@@ -30,7 +29,13 @@ export const parseGatheringSnapshot=(raw:unknown):GatheringSnapshot=>{
 };
 export const readGathering=(session:string,id:string,guard?:()=>void)=>gatheringRequest(session,`/api/v1/gatherings/${id}`,'GET',undefined,v=>parseBoundGathering(v,id),guard);
 export const parseBoundGathering=(raw:unknown,id:string)=>{const value=parseGatheringSnapshot(raw);if(value.gathering.id.toLowerCase()!==id.toLowerCase())throw Error('different gathering');return value;};
-export const readGatheringList=(session:string,guard?:()=>void)=>gatheringRequest(session,'/api/v1/gatherings','GET',undefined,v=>gatheringListSchema.parse(v),guard);
+// A previous server may still return retired records during a staged upgrade.
+// Drop only the retired kind; malformed friend records must still fail validation.
+export const parseGatheringList=(raw:unknown)=>{
+  const value=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw as Record<string,unknown>:null;
+  return gatheringListSchema.parse(value&&Array.isArray(value.gatherings)?{...value,gatherings:value.gatherings.filter(row=>!row||typeof row!=='object'||row.kind!=='team')}:raw);
+};
+export const readGatheringList=(session:string,guard?:()=>void)=>gatheringRequest(session,'/api/v1/gatherings','GET',undefined,parseGatheringList,guard);
 export const readMoreGatheringMembers=(session:string,id:string,cursor:string,guard?:()=>void)=>gatheringRequest(session,`/api/v1/gatherings/${id}/members?cursor=${cursor}`,'GET',undefined,v=>gatheringMembersPageSchema.parse(v),guard);
 export const organizeGathering=(session:string,publicInput:unknown,guard?:()=>void)=>{const {activity_nickname:_displayOnly,...preferences}=gatheringPublicIntakeSchema.parse(publicInput);return gatheringRequest(session,'/api/v1/gatherings/organize','POST',{public:preferences},v=>gatheringOrganizedSchema.parse(v),guard);};
 export function gatheringMessage(error:unknown){return error instanceof ApiClientError?error.message:error instanceof Error&&error.message!=='STALE_GATHERING'?error.message:'当前页面或账号已变化，请重新打开';}

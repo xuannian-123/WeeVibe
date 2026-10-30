@@ -102,9 +102,7 @@ try {
   assert.equal(await db.messageRead.count({where:{userId:bob.id,messageId:message.id}}),0);
  });
  current='team_fail_closed';await check(current,async()=>{
-  const team=await createRequirement(owner.id,{action:'create',kind:'team',idempotency_key:key(),draft:{...draft,questions:[]}});
-  await assert.rejects(()=>commandRequirement(team.collection.id,owner.id,{action:'publish',expected_revision:team.collection.revision}),{code:'NOT_CONFIGURED'});
-  await assert.rejects(()=>getRequirement(team.collection.id,alice.id),{code:'NOT_FOUND'});
+  await assert.rejects(()=>createRequirement(owner.id,{action:'create',kind:'team',idempotency_key:key(),draft:{...draft,questions:[]}} as never),{code:'INVALID_INPUT'});
  });
  console.log(`PASS ${passed.length} isolated PostgreSQL requirement checks; fixture identities only, not real WeChat.`);
 } catch { console.error(`FAIL ${current}; raw database errors and private fixture values deliberately omitted`); process.exitCode=1; }

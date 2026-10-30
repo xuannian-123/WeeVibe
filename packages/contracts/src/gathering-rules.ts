@@ -20,10 +20,6 @@ export const privateGatheringInputText = new RegExp([
   privateResidentialText.source,
   /从[^\n。；]{1,80}出发|出发点|个人出发|私人出发|家庭地址|家庭住址|家住|住在|居住地址/.source,
 ].join('|'), 'i');
-export function privateGatheringQuestion(question: GatheringDetails['questions'][number]) {
-  const sensitive=/预算|budget|出发|住址|居住|住在哪|在哪住|从哪|起点|家庭地址|家庭住址|[¥￥]|\d\s*元/i;
-  return sensitive.test(question.title) || question.options.some(o => sensitive.test(o.label));
-}
 export function emptyGatheringIntake(): GatheringIntake {
   return { public: {activity_nickname:'',date:'',availability:'',note:'',keywords:{eat:[],drink:[],play:[],pace:[],atmosphere:[],experience:[],arrangement:[],venue:[],environment:[],travel:[],exertion:[]},confirmed_keys:[]},
     private:{budget_min:null,budget_max:null,budget_note:'',origin:null,confirmed_keys:[]}, answers:[] };
@@ -72,20 +68,4 @@ export function gatheringCertaintyBlocks(raw: unknown): GatheringBlock[] {
 export function normalizeGatheringCertainty(value: GatheringIntake): GatheringIntake {
   const allowed=new Set(gatheringCertaintyBlocks(value).map(block=>block.id));
   return {...value,public:{...value.public,confirmed_keys:value.public.confirmed_keys.filter(id=>allowed.has(id))},private:{...value.private,confirmed_keys:[]}};
-}
-/** Team participants receive only the organizer's explicitly published information. */
-export function gatheringVisibleDetails(details: GatheringDetails, kind:'friend'|'team', owner:boolean): GatheringDetails {
-  if(kind==='friend'||owner)return details;
-  const visible={...details};
-  for(const field of ['date','title','start_time','end_date','end_time','place','address','description','approximate_time'] as const)if(!details.confirmed_details.includes(field))visible[field]='';
-  // Coordinates and the source's address must follow the same disclosure boundary.
-  if(!details.confirmed_details.includes('place')||!details.confirmed_details.includes('address'))delete visible.place_venue;
-  if(!details.confirmed_details.includes('minimum'))visible.minimum=null;
-  if(!details.confirmed_details.includes('capacity'))visible.capacity=null;
-  if(!details.confirmed_details.includes('fee'))visible.fee={kind:'unknown',amount:null,note:''};
-  // A clock without its unpublished day can turn an overnight plan into a
-  // contradictory same-day interval. Withhold dependent clocks, never the day.
-  if(!visible.date){visible.start_time='';visible.end_date='';visible.end_time='';}
-  else if(details.end_date&&details.end_date!==details.date&&!visible.end_date)visible.end_time='';
-  return visible;
 }

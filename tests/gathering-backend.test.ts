@@ -8,6 +8,8 @@ vi.mock('../apps/web/src/server/db',()=>({withDb:async(action:(db:unknown)=>unkn
 vi.mock('../apps/web/src/server/requirements/service',async()=>{const actual=await vi.importActual<typeof import('../apps/web/src/server/requirements/service')>('../apps/web/src/server/requirements/service');return{...actual,consumeRequirementBudget:h.budget};});
 import {createGathering,getGatheringMembers,gatheringSnapshotTx,joinGathering,readGatheringRows,saveGatheringIntake,updateGatheringDetails,finalizeGathering} from '../apps/web/src/server/gatherings/service';
 import {generateGatheringItinerary} from '../apps/web/src/server/gatherings/generation';
+import {commandGatheringWorkflow} from '../apps/web/src/server/gatherings/workflow';
+import {enqueueGatheringSubmission,enqueueGatheringLifecycle} from '../apps/web/src/server/gatherings/notifications';
 import {gatheringSourceFingerprint} from '../apps/web/src/server/gatherings/privacy';
 import {gatheringBackendFixture,gatheringFixtureDetails,gatheringFixtureIntake,gatheringFixturePlan,gatheringOwner as owner,gatheringAlice as alice,gatheringBob as bob,gatheringId as id} from './gathering-backend-fixture';
 
@@ -16,6 +18,22 @@ beforeEach(()=>{f=gatheringBackendFixture();h.tx=f.tx;h.budget.mockReset().mockR
 afterEach(()=>vi.useRealTimers());
 const save=(version=1,revision=1)=>({expected_version:version,expected_revision:revision,idempotency_key:randomUUID(),intake:gatheringFixtureIntake('新的公开想法')});
 const generationInput=async()=>({expected_source:gatheringSourceFingerprint(f.details(),await readGatheringRows(f.tx,id)),idempotency_key:randomUUID()});
+describe('retired teams cannot read private data, replay writes or create notifications',()=>{
+  it.each(['read','join','intake','details','generate','workflow','finalize'] as const)('rejects %s before touching members or results',async action=>{
+    f=gatheringBackendFixture('team');h.tx=f.tx;const provider={generate:vi.fn()};
+    const work={read:()=>gatheringSnapshotTx(f.tx,id,owner),join:()=>joinGathering(id,owner),intake:()=>saveGatheringIntake(id,alice,save()),details:()=>updateGatheringDetails(id,owner,{expected_revision:1,details:f.details()}),generate:()=>generateGatheringItinerary(id,owner,{expected_source:'a'.repeat(64),idempotency_key:randomUUID()},provider),workflow:()=>commandGatheringWorkflow(id,owner,{action:'select',generation_id:id,idempotency_key:randomUUID(),expected_version:0,plan_ids:['plan1'],note:''}),finalize:()=>finalizeGathering(id,owner,{expected_source:'a'.repeat(64),generation_id:id,plan_id:'plan1'})};
+    await expect(work[action]()).rejects.toMatchObject({code:'NOT_FOUND',status:404});
+    expect(f.raw.gatheringMember.findUnique).not.toHaveBeenCalled();expect(f.raw.gatheringMember.findMany).not.toHaveBeenCalled();expect(f.raw.gathering.update).not.toHaveBeenCalled();expect(provider.generate).not.toHaveBeenCalled();expect(f.events.size).toBe(0);expect(f.outbox.size).toBe(0);
+  });
+  it('rejects a fully filled team create at the contract boundary',async()=>{
+    await expect(createGathering(owner,{kind:'team',idempotency_key:randomUUID(),details:gatheringFixtureDetails(),intake:gatheringFixtureIntake()})).rejects.toMatchObject({code:'INVALID_INPUT'});
+    expect(h.budget).not.toHaveBeenCalled();expect(f.raw.gathering.create).not.toHaveBeenCalled();
+  });
+  it('does not enqueue retired submission or lifecycle events even when called directly',async()=>{
+    const row={id,kind:'team',ownerUserId:owner};await enqueueGatheringSubmission(f.tx,row,alice,1,1);await enqueueGatheringLifecycle(f.tx,row,owner,'completed');
+    expect(f.events.size).toBe(0);expect(f.recipients.size).toBe(0);expect(f.outbox.size).toBe(0);expect(f.raw.gathering.update).not.toHaveBeenCalled();
+  });
+});
 describe('gathering server projections and access',()=>{
   it('shares friend identities and public blocks but returns private fields only to their actor',async()=>{
     const privateAnswer=gatheringFixtureIntake('想一起唱歌');privateAnswer.private.budget_max=987;privateAnswer.private.budget_note='ALICE_PRIVATE_BUDGET';privateAnswer.private.origin={label:'ALICE_PRIVATE_HOME'};f.seed(alice,privateAnswer);
@@ -25,12 +43,6 @@ describe('gathering server projections and access',()=>{
     expect(f.raw.gatheringMember.findUnique.mock.calls.every(([arg])=>[owner,alice].includes(arg.where.gatheringId_userId.userId))).toBe(true);
   });
   it('gives an invitation visitor no member content, private response, generated plans or statistics without joining',async()=>{const view=await gatheringSnapshotTx(f.tx,id,bob);expect(view).toMatchObject({own:null,members:null,stats:null,itinerary:null,final_choice:null,source_fingerprint:null,viewer:{is_member:false,can_respond:true}});expect(JSON.stringify(view)).not.toContain('想一起唱歌');expect(f.raw.gatheringMember.create).not.toHaveBeenCalled();});
-  it('returns team statistics only to the owner and redacts unconfirmed owner information from participants',async()=>{
-    f=gatheringBackendFixture('team');h.tx=f.tx;const d=f.details();d.place='UNCONFIRMED_PLACE';d.questions=[{id:'q1',title:'吃什么',type:'single',required:false,options:[{id:'hotpot',label:'火锅'}]}];f.gatherings.get(id)!.details=d as never;
-    const own=gatheringFixtureIntake();own.answers=[{question_id:'q1',option_ids:['hotpot'],other:'',text:''}];f.seed(alice,own);
-    const manager=await gatheringSnapshotTx(f.tx,id,owner);expect(manager.stats?.questions[0].options[0].count).toBe(1);expect(manager.members).toBeNull();
-    const participant=await gatheringSnapshotTx(f.tx,id,alice);expect(participant.stats).toBeNull();expect(participant.members).toBeNull();expect(JSON.stringify(participant)).not.toContain('UNCONFIRMED_PLACE');
-  });
   it('paginates all public friend members without retrieving their private row',async()=>{
     for(let i=10;i<22;i++)f.seed(`99999999-9999-4999-8999-${String(i).padStart(12,'0')}`);
     const first=await gatheringSnapshotTx(f.tx,id,owner),second=await getGatheringMembers(id,owner,first.next_member_cursor!);
@@ -84,25 +96,17 @@ describe('gathering creation and response boundaries',()=>{
       f=gatheringBackendFixture('team');h.tx=f.tx;
       f.gatherings.get(id)!.details={...f.details(),...(mode==='deadline'?{deadline_at:'2000-01-01T00:00:00Z'}:{questions:[{id:'q1',title:'想吃什么',type:'single',required:true,options:[{id:'hotpot',label:'火锅'}]}]})} as never;
     }
-    await expect(saveGatheringIntake(id,bob,input)).rejects.toMatchObject({code:['revision','version'].includes(mode)?'VERSION_CONFLICT':mode==='capacity'?'CAPACITY_FULL':'INVALID_INPUT'});
+    await expect(saveGatheringIntake(id,bob,input)).rejects.toMatchObject({code:['required-answer','deadline'].includes(mode)?'NOT_FOUND':['revision','version'].includes(mode)?'VERSION_CONFLICT':mode==='capacity'?'CAPACITY_FULL':'INVALID_INPUT'});
     expect(f.members.has(`${id}:${bob}`)).toBe(false);expect(f.raw.gatheringMember.create).not.toHaveBeenCalled();expect(f.raw.gatheringMember.update).not.toHaveBeenCalled();
   });
-  it('creates a team respondent only with a complete answer and keeps post-cutoff retries idempotent',async()=>{
-    vi.useFakeTimers();vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));f=gatheringBackendFixture('team');h.tx=f.tx;
-    f.gatherings.get(id)!.details={...f.details(),questions:[{id:'q1',title:'想吃什么',type:'single',required:true,options:[{id:'hotpot',label:'火锅'}]}]} as never;
-    const input={...save(0),join_if_needed:true};input.intake.answers=[{question_id:'q1',option_ids:['hotpot'],other:'',text:''}];
-    const result=await saveGatheringIntake(id,bob,input);expect(result.own?.version).toBe(1);expect(result.stats).toBeNull();expect(result.members).toBeNull();
-    vi.setSystemTime(new Date('2030-01-31T00:00:00Z'));expect((await saveGatheringIntake(id,bob,input)).own?.version).toBe(1);expect(f.raw.gatheringMember.create).toHaveBeenCalledTimes(1);
-  });
-  it('rejects invalid required answers, stale choices and missing answer revisions',async()=>{
-    f=gatheringBackendFixture('team');h.tx=f.tx;const d=f.details();d.questions=[{id:'q1',title:'想吃什么',type:'single',required:true,options:[{id:'hotpot',label:'火锅'}]}];f.gatherings.get(id)!.details=d as never;
-    await expect(saveGatheringIntake(id,alice,save())).rejects.toMatchObject({code:'INVALID_INPUT'});
+  it('still rejects stale historical friend choices and missing answer revisions',async()=>{
+    const d=f.details();d.questions=[{id:'q1',title:'想吃什么',type:'single',required:false,options:[{id:'hotpot',label:'火锅'}]}];f.gatherings.get(id)!.details=d as never;
     const input=save();input.intake.answers=[{question_id:'q1',option_ids:['stale-option'],other:'',text:''}];await expect(saveGatheringIntake(id,alice,input)).rejects.toMatchObject({code:'INVALID_INPUT'});
     const noRevision:Record<string,unknown>={...save()};delete noRevision.expected_revision;await expect(saveGatheringIntake(id,alice,noRevision)).rejects.toMatchObject({code:'INVALID_INPUT'});
   });
-  it('samples the team cutoff after waiting for its gathering lock',async()=>{
+  it('rejects a retired team after acquiring its gathering lock',async()=>{
     vi.useFakeTimers();vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));f=gatheringBackendFixture('team');h.tx=f.tx;f.setOnLock(()=>vi.setSystemTime(new Date('2030-01-31T00:00:00Z')));
-    await expect(saveGatheringIntake(id,alice,save())).rejects.toMatchObject({code:'INVALID_INPUT'});expect(f.raw.gatheringMember.update).not.toHaveBeenCalled();expect(f.locks[0]).toContain('Gathering');
+    await expect(saveGatheringIntake(id,alice,save())).rejects.toMatchObject({code:'NOT_FOUND'});expect(f.raw.gatheringMember.update).not.toHaveBeenCalled();expect(f.locks[0]).toContain('Gathering');
   });
   it('enforces the member limit but keeps an existing join idempotent',async()=>{f.gatherings.get(id)!.details={...f.details(),capacity:2} as never;await expect(joinGathering(id,bob)).rejects.toMatchObject({code:'CAPACITY_FULL'});await joinGathering(id,alice);expect(f.raw.gatheringMember.create).not.toHaveBeenCalled();});
   it('allows only owner edits, checks the displayed revision, and rejects extra edit authority',async()=>{
@@ -165,7 +169,7 @@ describe('final choice freezes the selected gathering after generation',()=>{
     if(mode==='missing-generation')input.generation_id=randomUUID();
     if(mode==='missing-plan')input.plan_id='absent';
     if(mode==='team')f.gatherings.get(id)!.kind='team';
-    await expect(finalizeGathering(id,mode==='not-owner'?alice:owner,input)).rejects.toMatchObject({code:mode==='not-owner'?'FORBIDDEN':'INVALID_INPUT'});
+    await expect(finalizeGathering(id,mode==='not-owner'?alice:owner,input)).rejects.toMatchObject({code:mode==='team'?'NOT_FOUND':mode==='not-owner'?'FORBIDDEN':'INVALID_INPUT'});
     expect(f.gatherings.get(id)!.finalizedAt).toBeNull();
   });
   it('blocks every new mutation after selection while allowing original successful write receipts',async()=>{
@@ -200,7 +204,7 @@ describe('final choice freezes the selected gathering after generation',()=>{
 
 
 describe('preparation headcount limits keep fields aligned with actual membership',()=>{
-  it.each(['friend','team'] as const)('refuses to reduce a %s capacity below all existing members, including unsubmitted people',async kind=>{
+  it.each(['friend'] as const)('refuses to reduce a %s capacity below all existing members, including unsubmitted people',async kind=>{
     f=gatheringBackendFixture(kind);h.tx=f.tx;f.seed(bob,gatheringFixtureIntake(),0);
     await expect(updateGatheringDetails(id,owner,{expected_revision:1,details:{...f.details(),capacity:2}})).rejects.toMatchObject({code:'INVALID_INPUT',status:409});
     expect(f.raw.gathering.update).not.toHaveBeenCalled();expect(f.details().capacity).toBeNull();expect(f.gatherings.get(id)!.revision).toBe(1);expect(f.members.size).toBe(3);
@@ -249,12 +253,5 @@ describe('preparation headcount limits keep fields aligned with actual membershi
     expect((await joinGathering(id,alice)).viewer.is_member).toBe(true);expect((await saveGatheringIntake(id,alice,save())).own?.version).toBe(2);
     await expect(joinGathering(id,bob)).rejects.toMatchObject({code:'CAPACITY_FULL'});
     expect(f.members.size).toBe(51);expect(f.details().capacity).toBe(500);expect(f.raw.gatheringMember.create).not.toHaveBeenCalled();
-  });
-  it('retains the separate team maximum of 500 and does not apply the friend generation limit',async()=>{
-    f=gatheringBackendFixture('team');h.tx=f.tx;
-    const result=await updateGatheringDetails(id,owner,{expected_revision:1,details:{...f.details(),minimum:300,capacity:500}});
-    expect(result.gathering.details).toMatchObject({minimum:300,capacity:500});
-    for(let i=2;i<500;i++)f.seed(randomUUID());
-    await expect(joinGathering(id,bob)).rejects.toMatchObject({code:'CAPACITY_FULL'});expect(f.members.size).toBe(500);expect(f.raw.gatheringMember.create).not.toHaveBeenCalled();
   });
 });

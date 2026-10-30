@@ -1,5 +1,5 @@
 import {createHash,randomBytes} from 'node:crypto';
-import {activityIdSchema,gatheringDetailsSchema,gatheringSubscriptionIntentSchema} from '@weevibe/contracts';
+import {activityIdSchema,gatheringSubscriptionIntentSchema} from '@weevibe/contracts';
 import {readConfig,verify,PREFIX,NotificationProofError,type NotifyConfig} from '../../../../../cloudfunctions/weevibeNotifyGathering/protocol.cjs';
 import {readText,ServiceError} from '../http';
 import {withDb} from '../db';
@@ -29,13 +29,12 @@ export async function recordNotificationSubscription(actor:string,raw:unknown){
   const input=parsed.data,conf=config();if(input.template_id!==conf.templateId)throw new ServiceError('INVALID_INPUT',400,'订阅模板已变化，请重新确认');
   return mutation(async tx=>{
     if(!await identity(tx,actor,conf.appId))throw new ServiceError('FORBIDDEN',403,'请使用当前小程序的微信身份确认订阅');
+    const row=await lockGathering(tx,input.gathering_id);
     const previous=await tx.gatheringSubscriptionGrant.findUnique({where:{userId_authorizationKey:{userId:actor,authorizationKey:input.authorization_key}}});
     if(previous&&(previous.gatheringId!==input.gathering_id||previous.scope!==conf.scope||previous.appId!==conf.appId||previous.templateId!==conf.templateId))throw new ServiceError('IDEMPOTENCY_CONFLICT',409,'此订阅确认已用于其他活动');
     const available=()=>tx.gatheringSubscriptionGrant.count({where:{userId:actor,gatheringId:input.gathering_id,scope:conf.scope,appId:conf.appId,templateId:conf.templateId,consumedAt:null}});
     if(previous)return {recorded:true,available_intents:await available(),authorization:'one_time_intent' as const};
-    const row=await lockGathering(tx,input.gathering_id);assertGatheringEditable(row);
-    const details=gatheringDetailsSchema.parse(row.details);
-    if(row.kind==='team'&&(!details.deadline_at||Date.parse(details.deadline_at)<=Date.now()))throw new ServiceError('INVALID_INPUT',409,'填写已截止，不再接受本次订阅确认');
+    assertGatheringEditable(row);
     if(input.result!=='accept')return {recorded:false,available_intents:await available(),authorization:'one_time_intent' as const};
     if(await available()>=64)throw new ServiceError('INVALID_INPUT',409,'本次活动已有待使用的订阅确认');
     await tx.gatheringSubscriptionGrant.create({data:{userId:actor,gatheringId:input.gathering_id,scope:conf.scope,appId:conf.appId,templateId:conf.templateId,authorizationKey:input.authorization_key}});
@@ -78,7 +77,8 @@ export async function claimGatheringNotifications(request:Request){
     const candidates=await tx.$queryRaw<{id:string}[]>`SELECT o."id" FROM "GatheringPushOutbox" o
       JOIN "GatheringNotificationRecipient" r ON r."id"=o."recipientId"
       JOIN "GatheringSubmissionEvent" e ON e."id"=r."eventId"
-      WHERE o."status"='pending' AND o."nextAttemptAt"<=${now}
+      JOIN "Gathering" activity ON activity."id"=e."gatheringId"
+      WHERE activity."kind"='friend' AND o."status"='pending' AND o."nextAttemptAt"<=${now}
       AND EXISTS(SELECT 1 FROM "GatheringSubscriptionGrant" g WHERE g."userId"=r."userId" AND g."gatheringId"=e."gatheringId"
         AND g."scope"=${conf.scope} AND g."appId"=${conf.appId} AND g."templateId"=${conf.templateId}
         AND g."createdAt"<=e."createdAt" AND ((o."grantId" IS NULL AND g."consumedAt" IS NULL) OR o."grantId"=g."id"))

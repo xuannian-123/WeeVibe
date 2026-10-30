@@ -32,13 +32,9 @@ describe('per-version gathering notifications (query double, real PG verified se
     expect(f.members.get(`${id}:${alice}`)?.firstSubmissionSequence).toBe(1);expect(f.members.get(`${id}:${bob}`)?.firstSubmissionSequence).toBe(2);
     expect(f.outbox.size).toBe(7);expect(new Set([...f.outbox.values()].map(row=>row.recipientId)).size).toBe(7);
   });
-  it('notifies only the team organizer for every answer version, never another respondent',async()=>{
-    f=gatheringBackendFixture('team');h.tx=f.tx;await saveGatheringIntake(id,alice,input(1));await saveGatheringIntake(id,bob,input(0,true));await saveGatheringIntake(id,alice,input(2));
-    expect(eventRecipients().map(event=>event.to)).toEqual([[owner],[owner],[owner]]);expect(f.outbox.size).toBe(3);
-  });
   it('does not notify the organizer about their own submit but notifies previously submitted friends',async()=>{
     await saveGatheringIntake(id,owner,input(1));expect(eventRecipients()[0].to).toEqual([alice]);
-    f=gatheringBackendFixture('team');h.tx=f.tx;await saveGatheringIntake(id,owner,input(1));expect(f.events.size).toBe(1);expect(f.recipients.size).toBe(0);expect(f.outbox.size).toBe(0);
+
   });
   it('records the initial friend creator answer version without creating a self notification',async()=>{
     const result=await createGathering(owner,{kind:'friend',idempotency_key:randomUUID(),details:gatheringFixtureDetails(),intake:gatheringFixtureIntake()});

@@ -15,7 +15,8 @@ const clock = z.union([z.literal(''), z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]
 const money = z.number().min(0).max(1_000_000).refine(v => Math.abs(v * 100 - Math.round(v * 100)) < 0.000001);
 // Friends share one complete recommendation round; collection must fit the generator.
 export const gatheringFriendMemberLimit=50;
-export const gatheringKindSchema = z.enum(['friend', 'team']);
+// Public API accepts friends only; historical database rows are not converted or deleted.
+export const gatheringKindSchema = z.literal('friend');
 export const gatheringAnimalIds=['cat','dog','fox','rabbit','bear','panda','koala','tiger','lion','penguin','owl','capybara'] as const;
 export const gatheringAnimalIdSchema=z.enum(gatheringAnimalIds);
 export type GatheringAnimalId=typeof gatheringAnimalIds[number];
@@ -92,10 +93,6 @@ export const gatheringGenerateSchema = z.object({expected_source:z.string().rege
 export const gatheringFinalizeSchema = z.object({expected_source:z.string().regex(/^[a-f0-9]{64}$/),generation_id:id,plan_id:key}).strict();
 export const gatheringPersonSchema = z.object({user_id:id,nickname:text(32),avatar:avatarAssetSchema.nullable(),animal_id:gatheringAnimalIdSchema.optional(),avatar_key:gatheringAvatarKeySchema.optional()}).strict();
 export const gatheringMemberPublicSchema = z.object({person:gatheringPersonSchema,blocks:z.array(gatheringBlockSchema).max(100),submitted:z.boolean()}).strict();
-export const gatheringStatsSchema = z.object({
-  respondent_count:z.number().int().nonnegative(),
-  questions:z.array(z.object({id:key,title:text(200),type:z.enum(['single','multiple','text']),response_count:z.number().int().nonnegative(),private:z.boolean(),options:z.array(z.object({id:key,label:text(100),count:z.number().int().nonnegative()}).strict()),other_count:z.number().int().nonnegative()}).strict()),
-}).strict();
 export const gatheringSummarySchema = z.object({id,kind:gatheringKindSchema,title:text(100),date:optionalDate,stage:z.enum(['collecting','arranged']),is_owner:z.boolean(),has_responded:z.boolean(),member_count:z.number().int().positive(),updated_at:z.iso.datetime()}).strict();
 export type GatheringSummary = z.infer<typeof gatheringSummarySchema>;
 export const gatheringSnapshotSchema = z.object({
@@ -103,7 +100,7 @@ export const gatheringSnapshotSchema = z.object({
   viewer:z.object({is_owner:z.boolean(),is_member:z.boolean(),can_respond:z.boolean(),can_generate:z.boolean()}).strict(),
   own:z.object({version:z.number().int().nonnegative(),intake:gatheringIntakeSchema,blocks:z.array(gatheringBlockSchema).max(100)}).strict().nullable(),
   members:z.array(gatheringMemberPublicSchema).max(10).nullable(),next_member_cursor:id.nullable(),
-  stats:gatheringStatsSchema.nullable(),source_fingerprint:z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  stats:z.null(),source_fingerprint:z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   itinerary:gatheringItinerarySchema.extend({generation_id:id,generated_at:z.iso.datetime(),stale:z.boolean()}).nullable(),
   final_choice:z.object({generation_id:id,plan_id:key,finalized_at:z.iso.datetime()}).strict().nullable(),
   generation:z.object({id,status:z.enum(['processing','ready','failed']),error:text(100).nullable()}).strict().nullable(),

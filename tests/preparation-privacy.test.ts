@@ -14,7 +14,7 @@ function answer(user_id = actor, budget_max_yuan = 80): PublicRequirementRespons
     budget_max_yuan, preference_tags: ['桌游'], constraint_tags: ['不安排酒精'] };
 }
 describe('confirmed v38 integration privacy and idea-first preparation rules', () => {
-  it.each(['friend', 'team'] as const)('publishes a %s preparation without a formal activity, start time or place', kind => {
+  it.each(['friend'] as const)('publishes a %s preparation without a formal activity, start time or place', kind => {
     expect(requirementCreateSchema.parse({ action: 'create', kind, draft, idempotency_key: 'fixture-preparation' }).activity_id).toBeUndefined();
     expect(() => assertPublishable({ kind, activityId: null, status: 'draft', revision: 1, deadlineAt: null, closedAt: null }, draft, [], now)).not.toThrow();
   });
@@ -23,7 +23,7 @@ describe('confirmed v38 integration privacy and idea-first preparation rules', (
     expect(() => validateTeamDraft({ ...draft, deadline_at: now.toISOString() }, now.getTime(), true)).toThrow();
     expect(() => assertPublishable({ kind: 'friend', activityId: null, status: 'draft', revision: 1, deadlineAt: null, closedAt: null }, { ...draft, questions: [{ id: 'q', title: 'test', segment_id: actor, multiple: false, required: false, options: [{ id: 'yes', label: 'yes' }] }] }, [], now)).toThrow('环节');
   });
-  it('permits logged-in team answers without client group claims and preserves own structured data', () => {
+  it('permits logged-in friend answers without client group claims and preserves own structured data', () => {
     const { user_id, revision, updated_at, nickname, ...raw } = answer();
     const input = requirementResponseInputSchema.parse(raw);
     expect(input.budget_max_yuan).toBe(80);
@@ -46,9 +46,9 @@ describe('confirmed v38 integration privacy and idea-first preparation rules', (
     const row = answer(); delete row.budget_max_yuan;
     expect(aggregateResponses(draft, [row]).budget).toEqual({ min_max_yuan: null, max_max_yuan: null, structured_count: 0, text_count: 1 });
   });
-  it('validates and saves team response tags without ever acquiring a seat', () => {
+  it('validates and saves friend response tags without ever acquiring a seat', () => {
     const { user_id, revision, updated_at, nickname, ...input } = answer();
-    const result = normalizeSubmission({ kind: 'team', activityId: null, status: 'open', revision: 1, deadlineAt: new Date(draft.deadline_at), closedAt: null }, draft, actor, input, [], now);
+    const result = normalizeSubmission({ kind: 'friend', activityId: null, status: 'open', revision: 1, deadlineAt: new Date(draft.deadline_at), closedAt: null }, draft, actor, input, [], now);
     expect(result.publicAnswers.budget_max_yuan).toBe(80); expect(result.publicAnswers.constraint_tags).toEqual(['不安排酒精']);
     expect(result.publicAnswers).not.toHaveProperty('private_origin');
   });

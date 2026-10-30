@@ -12,7 +12,7 @@ import { uncertain as isUncertainWrite } from '../../platform/write-policy';
 import { adoptServerDraft, needsDraftRecovery } from './draft-recovery';
 import { DraftEditor } from './draft-editor';
 import type { SegmentChoice } from './question-editor';
-function CollectionEditorBody({kind,activityId,initial,initialSnapshot,segments=[],saved}:{kind:'friend'|'team';activityId?:string;initial:TeamDraft;initialSnapshot?:RequirementSnapshot;segments?:SegmentChoice[];saved:(snapshot:RequirementSnapshot)=>void}) {
+function CollectionEditorBody({kind,activityId,initial,initialSnapshot,segments=[],saved}:{kind:'friend';activityId?:string;initial:TeamDraft;initialSnapshot?:RequirementSnapshot;segments?:SegmentChoice[];saved:(snapshot:RequirementSnapshot)=>void}) {
   const actorSession=useRef(getToken());
   const [draft,setDraft]=useState(initial);const [current,setCurrent]=useState(initialSnapshot);const [busy,setBusy]=useState(false);const lock=useRef(false);const [notice,setNotice]=useState('');const [dirty,setDirty]=useState(!initialSnapshot);const [uncertain,setUncertain]=useState(false);
   const createRequest=useRef<RequirementCreateInput>();

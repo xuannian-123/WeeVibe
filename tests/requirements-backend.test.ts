@@ -89,9 +89,9 @@ describe('requirements persisted transaction boundaries (test transaction double
   await expect(commandRequirementTx(f.tx,id,owner,{action:'save-draft',expected_revision:2,draft:{...draft,deadline_at:'2040-01-01T00:00:00Z'}})).rejects.toMatchObject({code:'VERSION_CONFLICT'});
   expect(f.raw.requirementSurvey.update).not.toHaveBeenCalled();
  });
- it('allows team preparation publishing by owner without accepting client group claims',async()=>{
+ it('rejects retired team publishing without a write or private response query',async()=>{
   vi.useFakeTimers();vi.setSystemTime(now);const f=fixture({kind:'team',activityId:null,status:'draft',deadlineAt:null,draft:{...draft,starts_at:'',locations:[],questions:[]} as unknown as Prisma.JsonObject});
-  await expect(commandRequirementTx(f.tx,id,owner,{action:'publish',expected_revision:2})).resolves.toMatchObject({collection:{status:'open'},viewer:{can_respond:true}});
+  await expect(commandRequirementTx(f.tx,id,owner,{action:'publish',expected_revision:2})).rejects.toMatchObject({code:'NOT_FOUND'});expect(f.raw.requirementSurvey.update).not.toHaveBeenCalled();expect(f.raw.requirementSubmission.findMany).not.toHaveBeenCalled();
   expect(requirementCommandSchema.safeParse({action:'publish',expected_revision:2,verifiedGroupAccess:true}).success).toBe(false);
  });
  it('finalizes only after cutoff and never mutates original activity or user acceptance',async()=>{

@@ -58,17 +58,15 @@ try{
     const where={gatheringId_userId:{gatheringId:id,userId:peer.id}};
     await assert.rejects(()=>db.gatheringMember.update({where,data:{animalId:'unapproved-animal'}}));assert.equal((await db.gatheringMember.findUniqueOrThrow({where})).animalId,before.animalId);
   });
-  await check('legacy missing aliases use a placeholder without profile fallback and team also uses its activity alias',async()=>{
+  await check('legacy friend missing aliases use a placeholder without profile fallback',async()=>{
     const member=await db.gatheringMember.findUniqueOrThrow({where:{gatheringId_userId:{gatheringId:id,userId:peer.id}}});
     const legacy={...(member.publicIntake as Record<string,unknown>)};delete legacy.activity_nickname;
     await db.gatheringMember.update({where:{gatheringId_userId:{gatheringId:id,userId:peer.id}},data:{publicIntake:service.gatheringJson(legacy)}});
     const snapshot=valid(await service.getGathering(id,owner.id)),person=snapshot.members!.find(row=>row.person.user_id===peer.id)!.person;
     assert.equal(person.nickname,'还未设置活动昵称');assert.equal(person.animal_id,member.animalId);assert.equal(person.avatar,null);assert.ok(!JSON.stringify(snapshot).includes('PERSONAL_'));
-    const team=valid(await service.createGathering(owner.id,{kind:'team',idempotency_key:randomUUID(),details:{...details,deadline_at:new Date(Date.now()+86400000).toISOString()},intake:intake('团建活动昵称')}));
-    assert.equal(team.gathering.owner.nickname,'团建活动昵称');assert.equal(team.gathering.owner.avatar,null);
   });
-  for(const[kind,limit]of [['friend',50],['team',500]] as const)await check(`504-key pool stays unique under concurrent ${kind} joins at the ${limit}-member limit`,async()=>{
-    const groupDetails=kind==='team'?{...details,deadline_at:new Date(Date.now()+86400000).toISOString()}:details;
+  for(const[kind,limit]of [['friend',50]] as const)await check(`504-key pool stays unique under concurrent ${kind} joins at the ${limit}-member limit`,async()=>{
+    const groupDetails=details;
     const created=valid(await service.createGathering(owner.id,{kind,idempotency_key:randomUUID(),details:groupDetails,intake:intake('头像容量验收')})),group=created.gathering.id;
     const ownerKey=created.gathering.owner.avatar_key!;assert.ok(gatheringAvatarKeys.includes(ownerKey));
     const keys=gatheringAvatarKeys.filter(key=>key!==ownerKey),users=Array.from({length:limit},()=>({id:randomUUID()}));

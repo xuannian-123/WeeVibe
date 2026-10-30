@@ -14,7 +14,6 @@ const mocks=vi.hoisted(()=>({navigate:vi.fn(),toast:vi.fn(),search:vi.fn(),token
 vi.mock('../apps/miniprogram/src/features/todos/TodoPanel', () => ({ TodoPanel: () => null }));
 vi.mock('../apps/miniprogram/src/platform/api',()=>({getToken:()=>mocks.token,transport:mocks.transport,api:{me:mocks.me,searchVenues:mocks.search},establishSession:mocks.login,forgetSession:()=>{mocks.token='';}}));
 vi.mock('../apps/miniprogram/src/platform/avatar',()=>({loadAvatar:vi.fn().mockResolvedValue(undefined),uploadAvatar:vi.fn()}));
-vi.mock('../apps/miniprogram/src/features/team',()=>({TeamCreate:()=>createElement('div',{},'team editor')}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/taro',()=>({default:{getStorageSync:()=>'',setStorageSync:vi.fn(),reLaunch:vi.fn(),navigateTo:mocks.navigate,showToast:mocks.toast},usePageScroll:()=>{},useDidShow:(fn:()=>void)=>{const latest=ReactBase.useRef(fn);latest.current=fn;ReactBase.useEffect(()=>{const run=()=>latest.current();mocks.show.add(run);return()=>mocks.show.delete(run);},[]);},useDidHide:(fn:()=>void)=>{const latest=ReactBase.useRef(fn);latest.current=fn;ReactBase.useEffect(()=>{const run=()=>latest.current();mocks.hide.add(run);return()=>mocks.hide.delete(run);},[]);},useUnload:()=>{}}));
 vi.mock('../apps/miniprogram/node_modules/@tarojs/components',()=>({
  Switch:(p:any)=>createElement('input',{type:'checkbox',checked:p.checked,disabled:p.disabled,onChange:(e:any)=>p.onChange?.({detail:{value:e.currentTarget.checked}})}),
