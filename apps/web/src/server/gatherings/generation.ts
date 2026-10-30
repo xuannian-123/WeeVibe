@@ -1,3 +1,4 @@
+import {resolveMemoryRows} from './memory';
 import { gatheringDetailsSchema, gatheringGenerateSchema,gatheringFriendMemberLimit } from '@weevibe/contracts';
 import { ServiceError } from '../http';
 import { mutation } from '../activities/mutation';
@@ -26,7 +27,8 @@ export async function generateGatheringItinerary(id:string,actor:string,raw:unkn
     const workflow=tx.gatheringWorkflow?await tx.gatheringWorkflow.findUnique({where:{gatheringId:id}}):null;
     const state=workflow?.state as {selections?:Record<string,{plan_ids:string[];note:string}>;confirmations?:Record<string,{decision:string;note:string}>;coordination_note?:string}|undefined;
     const coordination=state?{choices:Object.values(state.selections??{}).map(s=>({plan_ids:s.plan_ids,note:s.note})),feedback:Object.values(state.confirmations??{}).filter(c=>c.decision==='reject').map(c=>c.note),organizer_note:state.coordination_note||''}:undefined;
-    return {existing:false as const,id:generation.id,sourceHash,workflowVersion:workflow?.version??0,source:{...gatheringModelSource(details,rows,row.kind),...(coordination?{coordination}:{})}};
+    const memory=await resolveMemoryRows(tx,rows.map(r=>({...r,gatheringId:id})));
+    return {memoryStamp:memory.stamp,existing:false as const,id:generation.id,sourceHash,workflowVersion:workflow?.version??0,source:{...gatheringModelSource(details,memory.rows,row.kind),...(coordination?{coordination}:{})}};
   });
   if(reserved.existing)return reserved.snapshot;
   try{
@@ -35,7 +37,10 @@ export async function generateGatheringItinerary(id:string,actor:string,raw:unkn
       const row=await lockGathering(tx,id);assertGatheringOwner(row,actor);
       assertGatheringEditable(row);
       const generation=await tx.gatheringGeneration.findUnique({where:{id:reserved.id}});
-      const source=gatheringSourceFingerprint(gatheringDetailsSchema.parse(row.details),await readGatheringRows(tx,id),row.kind);
+      const currentRows=await readGatheringRows(tx,id);
+      const memory=await resolveMemoryRows(tx,currentRows.map(r=>({...r,gatheringId:id})));
+      if(memory.stamp!==reserved.memoryStamp)throw gatheringConflict();
+      const source=gatheringSourceFingerprint(gatheringDetailsSchema.parse(row.details),currentRows,row.kind);
       const workflow=tx.gatheringWorkflow?await tx.gatheringWorkflow.findUnique({where:{gatheringId:id}}):null;
       if(!generation||generation.status!=='processing'||source!==reserved.sourceHash||(workflow?.version??0)!==reserved.workflowVersion)throw gatheringConflict();
       await tx.gatheringGeneration.update({where:{id:reserved.id},data:{status:'ready',result:gatheringJson(itinerary),error:null}});

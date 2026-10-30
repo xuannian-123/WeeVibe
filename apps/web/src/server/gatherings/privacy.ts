@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
 import { gatheringQuestions,gatheringPublicBlocks, gatheringPublicIntakeSchema, gatheringAnswersSchema, privateGatheringQuestion, type GatheringDetails, type GatheringSnapshot } from '@weevibe/contracts';
 
-export type PublicGatheringRow = {userId:string;publicIntake:unknown;answers:unknown;responseVersion:number};
+export type PublicGatheringRow = {userId:string;publicIntake:unknown;answers:unknown;responseVersion:number;memoryCategories?:string[]};
 /** No privateIntake, avatar, name, person IDs or raw questionnaire prose enters AI. */
 export function gatheringModelSource(details: GatheringDetails, rows: PublicGatheringRow[],kind:string='friend') {
   return {date:details.date,start_time:details.start_time,end_date:details.end_date,end_time:details.end_time,
     title:details.title,description:details.description,place:details.place,address:details.address,
     candidate_places:details.candidate_places.map(p=>p.label),
     ...(kind==='team'?{question_summary:gatheringTeamStatistics(details,rows).questions.filter(q=>!q.private)}:{}),
-    people:[...(kind==='team'?[]:rows)].sort((a,b)=>a.userId.localeCompare(b.userId)).filter(r=>r.responseVersion>0).map((row,index)=>({person_ref:`p${index+1}`,blocks:gatheringPublicBlocks(row.publicIntake)})),
+    people:[...(kind==='team'?[]:rows)].sort((a,b)=>a.userId.localeCompare(b.userId)).filter(r=>r.responseVersion>0).map((row,index)=>({person_ref:`p${index+1}`,blocks:gatheringPublicBlocks(row.publicIntake).map(b=>row.memoryCategories?.some(c=>b.id.startsWith(c+'_'))?{...b,label:'历史倾向（仅作排序参考）：'+b.label,confirmed:false}:b)})),
   };
 }
 export function gatheringSourceFingerprint(details: GatheringDetails, rows: PublicGatheringRow[],kind:string='friend') {

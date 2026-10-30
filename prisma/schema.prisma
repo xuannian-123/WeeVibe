@@ -37,6 +37,10 @@ model User {
   gatheringNotifications GatheringNotificationRecipient[]
   gatheringSubscriptionGrants GatheringSubscriptionGrant[]
   gatheringWorkflowCommands GatheringWorkflowCommand[]
+  preferenceMemory PreferenceMemory?
+  preferenceJobs PreferenceLearningJob[]
+  preferenceEvidence PreferenceEvidence[]
+
 }
 
 model WechatIdentity {
@@ -390,6 +394,9 @@ model Gathering {
   subscriptionGrants GatheringSubscriptionGrant[]
   @@unique([ownerUserId, creationKey])
   @@index([ownerUserId, updatedAt])
+  preferenceJobs PreferenceLearningJob[]
+  preferenceEvidence PreferenceEvidence[]
+
 }
 
 model GatheringMember {
@@ -540,4 +547,42 @@ model GatheringWorkflowCommand {
   hash String
   createdAt DateTime @default(now())
   @@id([gatheringId, actorId, key])
+}
+
+model PreferenceMemory {
+  userId String @id @db.Uuid
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  learning Boolean @default(false)
+  recommending Boolean @default(false)
+  version Int @default(1)
+  profileVersion Int @default(1)
+  profile Json @default("[]")
+  barriers Json @default("{}")
+  overrides Json @default("{}")
+}
+model PreferenceLearningJob {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String @db.Uuid
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  sourceId String @db.Uuid
+  source Gathering @relation(fields:[sourceId], references:[id], onDelete:Cascade)
+  sourceVersion Int
+  epoch Int
+  status String @default("pending")
+  attempts Int @default(0)
+  availableAt DateTime @default(now()) @db.Timestamptz
+  createdAt DateTime @default(now()) @db.Timestamptz
+  @@unique([userId,sourceId,sourceVersion])
+  @@index([status,availableAt],map:"PreferenceLearningJob_pending")
+}
+model PreferenceEvidence {
+  userId String @db.Uuid
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  sourceId String @db.Uuid
+  source Gathering @relation(fields:[sourceId], references:[id], onDelete:Cascade)
+  category String
+  sourceVersion Int
+  values Json
+  occurredAt DateTime @db.Timestamptz
+  @@id([userId,sourceId,category])
 }
