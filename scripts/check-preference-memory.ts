@@ -1,3 +1,4 @@
+import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 import assert from 'node:assert/strict';
@@ -16,7 +17,9 @@ try{
  await changeMemory(a.id,{action:'settings',learning:true,recommending:true});
  const first=intake();first.public.keywords.play=['看展'];
  let one=await createGathering(a.id,{kind:'friend',idempotency_key:randomUUID(),details:{...emptyGatheringDetails(),date:first.public.date},intake:first});
- const jobs=await drain();assert.equal((await readMemory(a.id)).profiles[0].values[0],'看展');console.log('PASS A persisted evidence + concurrent processor');
+ execFileSync(process.execPath,['--import','tsx','scripts/preference-memory-worker.ts','--once'],{stdio:'inherit'});
+ const jobs=await db.$queryRaw<{id:string}[]>`SELECT id FROM "PreferenceLearningJob" WHERE "userId"=${a.id}::uuid`;assert(jobs.length>0);
+ assert.equal((await readMemory(a.id)).profiles[0].values[0],'看展');console.log('PASS A persisted evidence through executable worker');
  const defaults=await readMemory(a.id);assert(defaults.profiles.some(p=>p.values.includes('看展')));console.log('PASS B server defaults (UI still separately required)');
  const second=intake();second.public.keywords.play=['看展'];second.private.preference_memory={use_history:true,automatic:{play:['看展']}};
  const two=await createGathering(a.id,{kind:'friend',idempotency_key:randomUUID(),details:{...emptyGatheringDetails(),date:second.public.date},intake:second});await drain();
@@ -28,7 +31,8 @@ try{
  await generateGatheringItinerary(two.gathering.id,a.id,{idempotency_key:randomUUID(),expected_source:saved.source_fingerprint},provider);assert(captured.includes('唱歌')&&!captured.includes('看展'));console.log('PASS D current input overrides history');
  for(let n=0;n<2;n++){one=await saveGatheringIntake(one.gathering.id,a.id,{idempotency_key:randomUUID(),expected_revision:one.gathering.revision,expected_version:one.own!.version,intake:first});await drain();}
  const evidence=await db.$queryRaw<{count:bigint}[]>`SELECT count(*) FROM "PreferenceEvidence" WHERE "userId"=${a.id}::uuid AND "sourceId"=${one.gathering.id}::uuid`;assert.equal(Number(evidence[0].count),1);console.log('PASS E replace source, never accumulate saves');
- await changeMemory(a.id,{action:'delete',category:'play'});for(const j of jobs){await db.$executeRaw`UPDATE "PreferenceLearningJob" SET status='pending' WHERE id=${j.id}::uuid`;await processMemoryJob(j.id);}assert.equal((await readMemory(a.id)).profiles.length,0);console.log('PASS F deletion survives replay');
+ const replay=await db.$queryRaw<{id:string}[]>`SELECT id FROM "PreferenceLearningJob" WHERE "userId"=${a.id}::uuid`;assert(replay.length>0);
+ await changeMemory(a.id,{action:'delete',category:'play'});for(const j of replay){await db.$executeRaw`UPDATE "PreferenceLearningJob" SET status='pending' WHERE id=${j.id}::uuid`;await processMemoryJob(j.id);}assert.equal((await readMemory(a.id)).profiles.length,0);console.log('PASS F deletion survives replay');
  assert.equal((await readMemory(b.id)).profiles.length,0);console.log('PASS G actor-bound service reads (HTTP auth separately tested)');
  const normal=await createGathering(b.id,{kind:'friend',idempotency_key:randomUUID(),details:{...emptyGatheringDetails(),date:first.public.date},intake:intake()});await generateGatheringItinerary(normal.gathering.id,b.id,{idempotency_key:randomUUID(),expected_source:normal.source_fingerprint},provider);assert.equal((await readMemory(b.id)).profiles.length,0);console.log('PASS H legacy create/fill/generate');
 }finally{await db.gathering.deleteMany({where:{ownerUserId:{in:[a.id,b.id]}}});await db.user.deleteMany({where:{id:{in:[a.id,b.id]}}});await db.$disconnect();}
