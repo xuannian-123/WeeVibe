@@ -6,9 +6,13 @@ export function CIcon({ name, className = '' }: { name: CIconName; className?: s
   return <Image className={`c-icon ${className}`} src={cIcons[name]} mode="aspectFit" ariaHidden />;
 }
 
+export function CWordmark() {
+  return <Text className="c-wordmark">wee<Text className="c-wordmark-vibe">vibe</Text><Text className="c-wordmark-star">✳</Text></Text>;
+}
+
 export function CHeader({ city, chooseCity }: { city: string; chooseCity: () => void }) {
   return <View className="c-header">
-    <Text className="c-wordmark">wee<Text className="c-wordmark-vibe">vibe</Text><Text className="c-wordmark-star">✳</Text></Text>
+    <CWordmark />
     <Button className="c-city" ariaLabel="选择城市" onClick={chooseCity}><Text>{city}</Text><CIcon name="right" className="c-city-chevron" /></Button>
   </View>;
 }

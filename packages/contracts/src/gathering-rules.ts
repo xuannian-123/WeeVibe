@@ -31,6 +31,13 @@ export function emptyGatheringIntake(): GatheringIntake {
 export function emptyGatheringDetails(): GatheringDetails {
   return {date:'',title:'',start_time:'',end_date:'',end_time:'',place:'',address:'',description:'',approximate_time:'',minimum:null,capacity:null,fee:{kind:'unknown',amount:null,note:''},candidate_places:[],questions:[],deadline_at:null,confirmed_details:[]};
 }
+/** Stable derived question: venue IDs remain the answer IDs, never display indexes. */
+export const gatheringPlaceQuestionId = 'candidate_place_choice';
+export function gatheringQuestions(details: GatheringDetails): GatheringDetails['questions'] {
+  return details.candidate_places.length > 1
+    ? [{id:gatheringPlaceQuestionId,title:'你想选择哪个候选地点？',type:'single',required:true,options:details.candidate_places.map(place=>({id:place.id,label:place.label}))},...details.questions]
+    : details.questions;
+}
 /** Shared blocks are built only from this allowlist, never from the private object. */
 export function gatheringPublicBlocks(raw: unknown): GatheringBlock[] {
   const value = gatheringPublicIntakeSchema.parse(raw);
@@ -40,8 +47,12 @@ export function gatheringPublicBlocks(raw: unknown): GatheringBlock[] {
   for (const section of gatheringSections) for (const group of section.groups) {
     const chosen=value.keywords[group.id];
     if(chosen.some(option=>!(group.options as readonly string[]).includes(option)) || new Set(chosen).size!==chosen.length) throw Error('关键词选项不正确');
-    group.options.forEach((option,index)=>{if(chosen.includes(option))add(`${group.id}_${index}`,group.title,option);});
+    const notes=value.keyword_notes?.[group.id as 'eat'|'drink'|'play'];
+    if(notes&&privateGatheringInputText.test(notes))throw Error('预算和个人出发地点请填写在仅本人可见的栏位');
+    let used=false;group.options.forEach((option,index)=>{if(chosen.includes(option)){const detail=notes?.startsWith(option+'：')?notes:option;used=used||detail===notes;add(`${group.id}_${index}`,group.title,detail);}});
+    if(notes&&!used)add(`${group.id}_note`,group.title,notes);
   }
+  for(const place of value.selected_places??[]){const group=gatheringSections[0].groups.find(g=>g.id===place.group);if(!group?.options.includes(place.option)||!value.keywords[place.group].includes(place.option))throw Error('地点与所选活动分类不一致');}
   if(privateGatheringInputText.test(value.note) || privateGatheringInputText.test(value.availability)) throw Error('预算和个人出发地点请填写在仅本人可见的栏位');
   add('note','补充想法',value.note);
   if(value.confirmed_keys.some(id=>!blocks.some(b=>b.id===id)) || new Set(value.confirmed_keys).size!==value.confirmed_keys.length)throw Error('确定项与当前填写内容不一致，请重新选择');
@@ -53,6 +64,14 @@ export function gatheringOwnBlocks(raw: unknown): GatheringBlock[] {
   if(own.origin)blocks.push({id:'origin',label:'出发地点 · 仅本人',value:own.origin.label||'已保存私人坐标',confirmed:own.confirmed_keys.includes('origin')});
   if(own.confirmed_keys.some(id=>!blocks.some(b=>b.id===id)))throw Error('私人确定项与当前填写内容不一致');
   return blocks;
+}
+/** Certainty review is limited to the date and concrete eating/drinking/playing choices. */
+export function gatheringCertaintyBlocks(raw: unknown): GatheringBlock[] {
+  return gatheringOwnBlocks(raw).filter(block=>block.id==='date'||/^(eat|drink|play)_/.test(block.id));
+}
+export function normalizeGatheringCertainty(value: GatheringIntake): GatheringIntake {
+  const allowed=new Set(gatheringCertaintyBlocks(value).map(block=>block.id));
+  return {...value,public:{...value.public,confirmed_keys:value.public.confirmed_keys.filter(id=>allowed.has(id))},private:{...value.private,confirmed_keys:[]}};
 }
 /** Team participants receive only the organizer's explicitly published information. */
 export function gatheringVisibleDetails(details: GatheringDetails, kind:'friend'|'team', owner:boolean): GatheringDetails {

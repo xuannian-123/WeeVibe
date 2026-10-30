@@ -1,3 +1,4 @@
+import {CAction} from '../design-c/ui';
 import {useEffect,useRef,useState} from 'react';
 import Taro from '@tarojs/taro';
 import {Button,Text,View} from '@tarojs/components';
@@ -34,9 +35,10 @@ export function useGatheringSubscription(actor:string,session:string){
     if(!config?.enabled||!config.template_id||typeof Taro.requestSubscribeMessage!=='function'){
       setNotice('微信提醒暂未开启；成员更新仍会保存在小程序消息中。');return;
     }
-    lock.current=true;setAuthorizing(true);setNotice('');const guard=source.ticket(),template=config.template_id;
+    lock.current=true;setAuthorizing(true);setNotice('');const guard=source.ticket(),template=config.template_id;let timer:ReturnType<typeof setTimeout>|undefined;
     try{
       const result=await new Promise<string>((resolve,reject)=>{
+        timer=setTimeout(()=>reject(Error('SUBSCRIPTION_TIMEOUT')),20000);
         try{const pending=(Taro.requestSubscribeMessage as unknown as WechatSubscribe)({tmplIds:[template],success:value=>resolve(String(value[template]??'')),fail:()=>reject(Error('SUBSCRIPTION_UNAVAILABLE'))});
           if(pending&&typeof pending.catch==='function')void pending.catch(()=>reject(Error('SUBSCRIPTION_UNAVAILABLE')));
         }catch{reject(Error('SUBSCRIPTION_UNAVAILABLE'));}
@@ -46,13 +48,14 @@ export function useGatheringSubscription(actor:string,session:string){
       if(result!=='accept')setNotice('你未开启微信提醒；站内更新仍会保留。');
       return {authorization_key:newKey(),template_id:template,result};
     }catch{if(source.valid())setNotice('微信提醒授权未完成，提交和站内提醒仍可继续。');return;}
-    finally{lock.current=false;if(source.alive())setAuthorizing(false);}
+    finally{if(timer)clearTimeout(timer);lock.current=false;if(source.alive())setAuthorizing(false);}
   }
   async function record(gatheringId:string,intent:Intent){if(source.valid())await write.send({...intent,gathering_id:gatheringId});}
   return {config,authorizing,busy:authorizing||write.busy,pending:write.pending,notice:write.message||notice,requestFromTap,record,retry:()=>write.send(),reload:load};
 }
 
-export function GatheringSubscription({value,gatheringId}:{value:ReturnType<typeof useGatheringSubscription>;gatheringId:string}){
+export function GatheringSubscription({value,gatheringId,appearance='default'}:{value:ReturnType<typeof useGatheringSubscription>;gatheringId:string;appearance?:'default'|'c'}){
+  if(appearance==='c')return <View className="gp-panel gp-subscription"><Text className="gp-section-title">活动更新提醒</Text><Text className="gp-caption">站内消息保留每次更新。微信提醒由你自愿开启，每次同意可接收一条后续提醒。</Text>{value.notice&&<Text>{value.notice}</Text>}{value.pending?<CAction disabled={value.busy} loading={value.busy} onClick={()=>void value.retry()}>核对上次微信提醒授权</CAction>:value.config?.enabled?<CAction disabled={value.busy} loading={value.busy} onClick={()=>{void value.requestFromTap().then(intent=>intent?value.record(gatheringId,intent):undefined);}}>开启微信提醒</CAction>:<CAction disabled={value.busy} onClick={()=>void value.reload()}>读取微信提醒设置</CAction>}</View>;
   return <View className="gg-panel"><Text className="gg-heading">活动更新提醒</Text><Text className="gg-muted">站内消息保留每次更新。微信服务通知需要你同意订阅，每次同意可接收一条本次活动的后续提醒。</Text>
     {value.notice&&<Text className="gg-notice">{value.notice}</Text>}
     {value.pending?<Button className="gg-secondary" loading={value.busy} disabled={value.busy} onClick={()=>void value.retry()}>核对上次微信提醒授权</Button>:value.config?.enabled?<Button className="gg-secondary" loading={value.busy} disabled={value.busy} onClick={()=>{void value.requestFromTap().then(intent=>intent?value.record(gatheringId,intent):undefined);}}>开启微信提醒</Button>:<Button className="gg-link" onClick={()=>void value.reload()}>读取微信提醒设置</Button>}

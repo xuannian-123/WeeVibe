@@ -36,7 +36,7 @@ function ActivityTime({ record }: { record: AccountActivityRecord }) {
 export function CActivityCard({ item, openActivity, openPreparation }: { item: CFeedItem; openActivity: (id: string) => void; openPreparation: (id: string) => void }) {
   const preparation = item.kind === 'preparation';
   const record = item.record;
-  const status = item.kind === 'preparation' ? item.record.stage === 'arranged' ? '筹备已定案' : '筹备中' : cActivityPhase(item.record);
+  const status = item.kind === 'preparation' ? item.record.stage === 'arranged' ? '已有方案' : '筹备中' : cActivityPhase(item.record);
   return <Button className="c-activity-card activity-card" onClick={() => item.kind === 'preparation' ? openPreparation(item.record.id) : openActivity(item.record.activity_id)}>
     <View className="c-activity-heading"><Text className="c-activity-title">{record.title}</Text><Text className={`c-pill ${preparation ? 'c-pill-lilac' : ''}`}>{status}</Text></View>
     {item.kind === 'activity' ? <ActivityTime record={item.record} /> : <View className="c-meta"><CIcon name="calendar" /><Text>{item.record.date || '日期待确认'} · {item.record.kind === 'friend' ? '朋友出游' : '一起团建'}</Text></View>}

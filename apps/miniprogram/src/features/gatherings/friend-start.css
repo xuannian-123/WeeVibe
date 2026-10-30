@@ -1,0 +1,29 @@
+/* Friends entry follows the supplied C screen; no legacy planning-card styles. */
+.gf-start{color:#222;font-family:WeeJakarta,Arial,'PingFang SC','Microsoft YaHei',sans-serif;padding:2px 0 18px}
+.gf-start button{box-sizing:border-box;width:100%;margin:0;border:0;box-shadow:none;font-family:inherit;white-space:normal;line-height:1.6;color:inherit}
+.gf-start button::after{border:0}
+.gf-header{display:flex;align-items:center;gap:20px;min-height:96px;padding:8px 0 18px}
+.gf-start .gf-back{display:flex;align-items:center;justify-content:center;flex:none;width:80px;min-height:84px;padding:18px;background:none;border-radius:0}
+.gf-back .c-icon{width:40px;height:40px}
+.gf-heading{margin:28px 0 36px}
+.gf-eyebrow{display:block;font-size:19px;letter-spacing:1.5px;color:#777167}
+.gf-title{display:block;font-size:58px;font-weight:800;line-height:1.3;margin-top:16px;letter-spacing:-2px}
+.gf-marker{width:300px;max-width:54%;height:9px;background:#a7f05a;border-radius:8px;margin-top:22px;transform:rotate(-2deg)}
+.gf-cards{display:grid;gap:22px}
+.gf-start .gf-card{position:relative;display:block;min-height:214px;padding:27px 32px 30px;border-radius:26px;text-align:left}
+.gf-card.gf-ai{background:#e9e1fa}
+.gf-card-top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:19px}
+.gf-card .gf-icon{width:36px;height:36px;opacity:.65}
+.gf-badge{flex:none;font-size:19px;line-height:1.6;color:#625c51;background:#ffffffa6;border-radius:7px;padding:3px 10px}
+.gf-badge.gf-complete{color:#334b28;background:#d9f5ba}
+.gf-card-title{display:block;font-size:33px;font-weight:700;line-height:1.5;margin-bottom:10px}
+.gf-card-description{display:block;font-size:25px;line-height:1.65;color:#706a60;padding-right:35px;overflow-wrap:anywhere}
+.gf-arrow{position:absolute;bottom:30px;right:32px;color:#6b765f;font-size:29px;line-height:1.4}
+.gf-start .gf-needs-attention{box-shadow:inset 0 0 0 3px #9e354b}
+.gf-notice{margin-top:20px;padding:20px 24px;border-radius:15px;background:#ffe6e8;color:#9e354b;font-size:24px;line-height:1.7}
+.gf-start .gf-publish{display:flex;width:100%;margin-top:34px}
+.gf-start .gf-card:active,.gf-start .gf-publish:active{filter:brightness(.96)}
+.gf-start button[disabled]{opacity:.5}.gf-start .gf-publish[disabled]{background:#e1ded3;color:#777167}
+.gf-footnote{display:block;margin-top:17px;text-align:center;font-size:21px;line-height:1.7;color:#777167}
+
+.gf-journey{padding:28px 26px;margin:28px 0;border:1px solid #ded8cc;border-radius:24px;background:#fffdf8}.gf-journey>text{display:block;margin:15px 0;font-size:25px;line-height:1.8}.gf-journey>.gp-section-title{font-size:29px;margin-top:0}.gf-single-start .gf-card{min-height:230px}

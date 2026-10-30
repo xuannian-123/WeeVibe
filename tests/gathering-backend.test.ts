@@ -40,6 +40,11 @@ describe('gathering server projections and access',()=>{
   it.each(['visitor','team'])('rejects the member-list endpoint for %s',async mode=>{if(mode==='team'){f=gatheringBackendFixture('team');h.tx=f.tx;}await expect(getGatheringMembers(id,mode==='visitor'?bob:owner,undefined)).rejects.toMatchObject({code:'FORBIDDEN'});});
 });
 describe('gathering creation and response boundaries',()=>{
+  it.each(['nickname','date'] as const)('rejects missing %s before creating any friend gathering or member',async missing=>{
+    f.gatherings.clear();f.members.clear();const input={kind:'friend',idempotency_key:randomUUID(),details:gatheringFixtureDetails(),intake:gatheringFixtureIntake()};
+    if(missing==='nickname')input.intake.public.activity_nickname='';else input.details.date='';
+    await expect(createGathering(owner,input)).rejects.toMatchObject({code:'INVALID_INPUT'});expect(f.raw.gathering.create).not.toHaveBeenCalled();expect(f.raw.gatheringMember.create).not.toHaveBeenCalled();
+  });
   it('creates once with the original owner key and rejects changed payload reuse',async()=>{
     f.gatherings.clear();f.members.clear();const input={kind:'friend',idempotency_key:randomUUID(),details:gatheringFixtureDetails(),intake:gatheringFixtureIntake()};
     const created=await createGathering(owner,input),replay=await createGathering(owner,input);expect(replay.gathering.id).toBe(created.gathering.id);expect(f.raw.gathering.create).toHaveBeenCalledTimes(1);
@@ -190,5 +195,66 @@ describe('final choice freezes the selected gathering after generation',()=>{
     const pending=generateGatheringItinerary(id,owner,await generationInput(),provider);await vi.waitFor(()=>expect(provider.generate).toHaveBeenCalledTimes(1));
     await finalizeGathering(id,owner,input);finish(gatheringFixturePlan());await expect(pending).rejects.toMatchObject({code:'INVALID_INPUT',status:409});
     expect(f.gatherings.get(id)!.currentGenerationId).toBe(input.generation_id);expect(f.gatherings.get(id)!.finalGenerationId).toBe(input.generation_id);
+  });
+});
+
+
+describe('preparation headcount limits keep fields aligned with actual membership',()=>{
+  it.each(['friend','team'] as const)('refuses to reduce a %s capacity below all existing members, including unsubmitted people',async kind=>{
+    f=gatheringBackendFixture(kind);h.tx=f.tx;f.seed(bob,gatheringFixtureIntake(),0);
+    await expect(updateGatheringDetails(id,owner,{expected_revision:1,details:{...f.details(),capacity:2}})).rejects.toMatchObject({code:'INVALID_INPUT',status:409});
+    expect(f.raw.gathering.update).not.toHaveBeenCalled();expect(f.details().capacity).toBeNull();expect(f.gatherings.get(id)!.revision).toBe(1);expect(f.members.size).toBe(3);
+  });
+  it('checks actual membership after acquiring the gathering lock rather than trusting the old visible count',async()=>{
+    f.setOnLock(()=>f.seed(bob,gatheringFixtureIntake(),0));
+    await expect(updateGatheringDetails(id,owner,{expected_revision:1,details:{...f.details(),capacity:2}})).rejects.toMatchObject({code:'INVALID_INPUT',status:409});
+    expect(f.locks[0]).toContain('Gathering');expect(f.members.size).toBe(3);expect(f.raw.gathering.update).not.toHaveBeenCalled();
+  });
+  it('allows capacity equal to current members without finalizing or occupying formal seats',async()=>{
+    const result=await updateGatheringDetails(id,owner,{expected_revision:1,details:{...f.details(),capacity:2}});
+    expect(result.gathering.details.capacity).toBe(2);expect(result.gathering.revision).toBe(2);expect(result.final_choice).toBeNull();expect(result.viewer.can_respond).toBe(true);expect(f.raw).not.toHaveProperty('participation');
+  });
+  it('lets the owner clear a self-set limit and permits another member within the system limit',async()=>{
+    f.gatherings.get(id)!.details={...f.details(),capacity:2} as never;
+    const result=await updateGatheringDetails(id,owner,{expected_revision:1,details:{...f.details(),capacity:null}});
+    expect(result.gathering.details.capacity).toBeNull();expect((await joinGathering(id,bob)).gathering.member_count).toBe(3);expect(f.details().capacity).toBeNull();
+  });
+  it('stores a reference minimum above present membership without inventing a formation condition',async()=>{
+    const result=await updateGatheringDetails(id,owner,{expected_revision:1,details:{...f.details(),minimum:5,capacity:10}});
+    expect(result.gathering.member_count).toBe(2);expect(result.gathering.details.minimum).toBe(5);expect(result.final_choice).toBeNull();expect(f.gatherings.get(id)!.finalizedAt).toBeNull();
+  });
+  it.each(['minimum','capacity'] as const)('rejects a new friend %s above 50 before creating or replacing records',async field=>{
+    const details={...f.details(),[field]:51};
+    await expect(createGathering(owner,{kind:'friend',idempotency_key:randomUUID(),details,intake:gatheringFixtureIntake()})).rejects.toMatchObject({code:'INVALID_INPUT'});
+    await expect(updateGatheringDetails(id,owner,{expected_revision:1,details})).rejects.toMatchObject({code:'INVALID_INPUT'});
+    expect(f.raw.gathering.create).not.toHaveBeenCalled();expect(f.raw.gathering.update).not.toHaveBeenCalled();expect(f.members.size).toBe(2);
+  });
+  it.each(['join','intake'] as const)('blocks a new friend %s at the default 50-person ceiling even when capacity is null',async mode=>{
+    for(let i=2;i<50;i++)f.seed(randomUUID());
+    const attempt=()=>mode==='join'?joinGathering(id,bob):saveGatheringIntake(id,bob,{...save(0),join_if_needed:true});
+    await expect(attempt()).rejects.toMatchObject({code:'CAPACITY_FULL',status:409});
+    expect(f.details().capacity).toBeNull();expect(f.members.size).toBe(50);expect(f.members.has(`${id}:${bob}`)).toBe(false);expect(f.raw.gatheringMember.create).not.toHaveBeenCalled();
+    expect((await joinGathering(id,alice)).viewer.is_member).toBe(true);expect((await saveGatheringIntake(id,alice,save())).own?.version).toBe(2);
+  });
+  it.each(['join','intake'] as const)('allows exactly the 50th friend through %s and preserves successful retries',async mode=>{
+    for(let i=2;i<49;i++)f.seed(randomUUID());
+    const input={...save(0),join_if_needed:true};
+    const attempt=()=>mode==='join'?joinGathering(id,bob):saveGatheringIntake(id,bob,input);
+    expect((await attempt()).gathering.member_count).toBe(50);expect((await attempt()).gathering.member_count).toBe(50);
+    expect(f.raw.gatheringMember.create).toHaveBeenCalledTimes(1);expect(f.members.size).toBe(50);
+  });
+  it('preserves old oversized friend records and existing members without admitting another person',async()=>{
+    f.gatherings.get(id)!.details={...f.details(),capacity:500} as never;for(let i=2;i<51;i++)f.seed(randomUUID());
+    expect((await gatheringSnapshotTx(f.tx,id,owner)).gathering.member_count).toBe(51);
+    expect((await joinGathering(id,alice)).viewer.is_member).toBe(true);expect((await saveGatheringIntake(id,alice,save())).own?.version).toBe(2);
+    await expect(joinGathering(id,bob)).rejects.toMatchObject({code:'CAPACITY_FULL'});
+    expect(f.members.size).toBe(51);expect(f.details().capacity).toBe(500);expect(f.raw.gatheringMember.create).not.toHaveBeenCalled();
+  });
+  it('retains the separate team maximum of 500 and does not apply the friend generation limit',async()=>{
+    f=gatheringBackendFixture('team');h.tx=f.tx;
+    const result=await updateGatheringDetails(id,owner,{expected_revision:1,details:{...f.details(),minimum:300,capacity:500}});
+    expect(result.gathering.details).toMatchObject({minimum:300,capacity:500});
+    for(let i=2;i<500;i++)f.seed(randomUUID());
+    await expect(joinGathering(id,bob)).rejects.toMatchObject({code:'CAPACITY_FULL'});expect(f.members.size).toBe(500);expect(f.raw.gatheringMember.create).not.toHaveBeenCalled();
   });
 });

@@ -1,0 +1,7 @@
+.gpd-panel{padding:28px 26px;margin:24px 0;border:1px solid #ded8cc;border-radius:24px;background:#fffdf8;min-width:0}
+.gpd-title{display:block;font-size:29px;font-weight:700;line-height:1.7}
+.gpd-group{margin-top:22px}.gpd-group+.gpd-group{padding-top:22px;border-top:1px solid #ded8cc}
+.gpd-label{display:block;font-size:23px;line-height:1.7;color:#706a60}
+.gpd-value{display:block;margin-top:12px;font-size:27px;font-weight:700;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
+.gpd-note{display:block;margin-top:14px;font-size:25px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
+.gpd-caption{display:block;margin-top:14px;font-size:23px;line-height:1.8;color:#706a60}

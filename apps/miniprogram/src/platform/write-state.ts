@@ -51,5 +51,11 @@ export function useStoredWrite<I, O>({ storageKey, userId, parse, execute, commi
       if (visible.current && actor.current === userId) setMessage(errorText(error) + (uncertain(error) ? ' 原内容已保留，请先刷新核对，再决定是否重试。' : ' 草稿和所选环节已保留。'));
     } finally { lock.current = false; if (visible.current) setBusy(false); }
   }
-  return { pending, busy, blocked, result, message, send, resetResult: () => { setResult(undefined); setMessage(''); } };
+  // Explicit local reconciliation only; this does not claim or undo a server write.
+  function clearPending(){
+    if(lock.current||!userId||actor.current!==userId)return false;
+    try{Taro.removeStorageSync(storageKey);pendingRef.current=undefined;setPending(undefined);setBlocked(false);setResult(undefined);setMessage('');return true;}
+    catch{setBlocked(true);setMessage('本机待核对记录暂时无法清除，请保留记录后重试。');return false;}
+  }
+  return { pending, busy, blocked, result, message, send, clearPending, resetResult: () => { setResult(undefined); setMessage(''); } };
 }

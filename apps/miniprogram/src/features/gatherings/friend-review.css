@@ -1,0 +1,14 @@
+.gf-review .gf-title{font-size:49px}
+.gr-section{padding:28px 26px;background:#fffdf8;border:1px solid #ded8cc;border-radius:24px;margin:24px 0;min-width:0}
+.gr-arrangement{background:#e4f4d2}.gr-private{background:#e9e1fa}
+.gr-section>text{display:block;margin-top:12px;font-size:27px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}
+.gr-section-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.gr-section-heading>text{font-size:29px;font-weight:700}
+.gr-section-heading .c-action{width:auto;flex:none}
+.gr-section .gr-name{font-size:35px;font-weight:800}
+.gr-section .c-action-text{font-size:23px}
+.gr-section-heading>.c-icon{width:32px;height:32px}
+.gr-preference{margin-top:22px}.gr-preference>text{display:block;font-size:26px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere}
+.gr-preference .gr-label{font-size:22px;color:#706a60;margin-bottom:5px}
+.gr-caption,.gr-section .gr-caption{display:block;font-size:23px;color:#706a60;line-height:1.8;margin-top:22px;white-space:pre-wrap}
+.gf-review .gf-publish{margin-bottom:24px}

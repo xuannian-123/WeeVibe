@@ -3,23 +3,25 @@ import { Button, ScrollView, Text, View } from '@tarojs/components';
 import type { GatheringBlock } from '@weevibe/contracts';
 import { GatheringDesignChrome } from '../gatherings/page-chrome';
 import { CIcon } from './chrome';
+import {GatheringFlowHeader} from '../gatherings/flow-header';
+import '../gatherings/preference-form.css';
 import './interview.css';
 import './interview-review.css';
 
 type Props = {
   blocks: GatheringBlock[]; selected: string[]; summary: string; saving: boolean;
   onToggle: (id: string) => void; onCommit: () => void; onBack: () => void;
-  notice?: string; onRetry?: () => void; retryBusy?: boolean; participationNotice?: string;
+  commitLabel?:string;formLayout?:boolean; sourceLabel?:string; notice?: string; onRetry?: () => void; retryBusy?: boolean; participationNotice?: string;
 };
 
 /** Explicit certainty review; selecting a block does not publish or confirm the final plan. */
-export function CInterviewReview({ blocks, selected, summary, saving, onToggle, onCommit, onBack, notice = '', onRetry, retryBusy = false, participationNotice = '' }: Props) {
+export function CInterviewReview({ blocks, selected, summary, saving, onToggle, onCommit, onBack, notice = '', onRetry, retryBusy = false, participationNotice = '', sourceLabel = '小橘头 · 整理结果', formLayout = false, commitLabel }: Props) {
   const chrome = useContext(GatheringDesignChrome);
   useEffect(() => { chrome?.('interview'); return () => chrome?.(null); }, [chrome]);
   const privateBlock = (block: GatheringBlock) => block.id === 'budget' || block.id === 'origin';
-  return <View className="c-interview ci-review">
-    <View className="ci-header"><Button className="ci-back" ariaLabel="返回修改" disabled={saving} onClick={onBack}><CIcon name="back" /><Text className="ci-sr-only">返回修改</Text></Button><View className="ci-heading"><Text>再确认一步</Text><Text>小橘头 · 整理结果</Text></View></View>
-    <ScrollView className="ci-scroll" scrollY><View className="cr-content">
+  return <View className={formLayout?'c-ui gf-start gp-certainty':'c-interview ci-review'}>
+    {formLayout?<GatheringFlowHeader back={onBack} disabled={saving} label="返回修改"/>:<View className="ci-header"><Button className="ci-back" ariaLabel="返回修改" disabled={saving} onClick={onBack}><CIcon name="back" /><Text className="ci-sr-only">返回修改</Text></Button><View className="ci-heading"><Text>再确认一步</Text><Text>{sourceLabel}</Text></View></View>}
+    <ScrollView className={formLayout?'gp-confirm-content':'ci-scroll'} scrollY={!formLayout}><View className="cr-content">
       <Text className="cr-title">哪些内容已经确定了？</Text><Text className="cr-caption">可以多选，也可以一个都不选。其余内容继续留待商量。</Text>
       {participationNotice && <Text className="cr-participation-notice">{participationNotice}</Text>}
       {summary && <View className="cr-summary"><Text>{summary}</Text></View>}
@@ -30,6 +32,6 @@ export function CInterviewReview({ blocks, selected, summary, saving, onToggle, 
       })}
       {!blocks.length && <Text className="cr-caption">暂未填写偏好，可以先保留待定。</Text>}
     </View></ScrollView>
-    <View className="ci-footer cr-footer">{notice && <Text className="cr-save-notice">{notice}</Text>}{onRetry && <Button className="cr-retry" disabled={retryBusy} onClick={onRetry}>{retryBusy ? '正在核对保存…' : '沿用原请求核对保存'}</Button>}<Text className="cr-save-hint">确定的是本人偏好，不代表已经接受最终安排。</Text><Button className="cr-commit" disabled={saving} loading={saving && !onRetry} onClick={onCommit}>{saving ? onRetry ? '保存结果待核对' : '正在保存…' : selected.length ? '这些是已经确定了的' : '还都没确定'}</Button></View>
+    <View className={formLayout?'gp-footer cr-footer':'ci-footer cr-footer'}>{notice && <Text className="cr-save-notice">{notice}</Text>}{onRetry && <Button className="cr-retry" disabled={retryBusy} onClick={onRetry}>{retryBusy ? '正在核对保存…' : '沿用原请求核对保存'}</Button>}<Text className="cr-save-hint">确定的是本人偏好，不代表已经接受最终安排。</Text><Button className={formLayout?'c-action c-action-primary cr-commit':'cr-commit'} disabled={saving} loading={saving && !onRetry} onClick={onCommit}>{saving ? onRetry ? '保存结果待核对' : '正在保存…' : commitLabel || (selected.length ? '这些是已经确定了的' : '还都没确定')}</Button></View>
   </View>;
 }
