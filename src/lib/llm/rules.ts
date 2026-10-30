@@ -1,5 +1,6 @@
 // 规则兜底：没有 LLM 或 LLM 出错时用。纯函数、确定性，便于单测。
 import type { DietTag, JuSpec } from "../types";
+import { ACTIVITY_LIB, activitiesIn, activityByKey } from "../planner/activities";
 import { NUM_RE_SRC, parseCnNumber } from "./cn-number";
 import {
   addDays,
@@ -358,6 +359,24 @@ function defaultWindow(kind: Kind | undefined, dates: string[], category = ""): 
   }
 }
 
+// ---------------------------------------------------------------- v6 活动层：干什么交给局长 / 给一个候选池
+
+/** "大家聚一下 / 你定 / 玩点什么"：发起人没定干什么。"随便 / 都行"太常见（"口味随便"），不算 */
+const OPEN_RE =
+  /聚一下|聚一聚|聚聚|聚会|你定|你来定|局长定|局长来定|随便玩|玩点什么|玩点啥|玩什么|干点什么|干点啥|干什么|干啥|做点什么|搞点什么|整点什么|整点啥|出来玩|出去玩|见个面|碰个面|去哪玩|不知道(?:干|玩|去)/;
+const EAT_RE = /吃|饭|餐/;
+
+/** 发起解析的活动部分：说了 ≥ 2 种活动 = 候选池；没说干什么但说了"聚一下 / 你定" = 交给局长定（只说了吃 = 吃什么交给局长） */
+export function detectActivities(text: string): { open?: true; activities?: string[] } {
+  const acts = activitiesIn(text);
+  if (acts.length >= 2) return { activities: acts.slice(0, 6) };
+  if (acts.length === 0 && OPEN_RE.test(text)) {
+    if (EAT_RE.test(text)) return { open: true, activities: ACTIVITY_LIB.filter((a) => a.food).map((a) => a.key) };
+    return { open: true };
+  }
+  return {};
+}
+
 // ---------------------------------------------------------------- 主入口
 
 const NOTE_RE = /(包间|安静|能停车|好停车|露天|带娃|带孩子|能喝酒|有投影|看球|生日)/g;
@@ -366,11 +385,25 @@ export function ruleParsePrompt(prompt: string, now: Date, defaultCity: string):
   const text = (prompt ?? "").trim();
   const sh = shanghaiNow(now);
   const { def, raw } = detectCategory(text);
-  const kind: Kind | undefined = def?.kind ?? (raw ? undefined : "food");
+  // v6：没定干什么（交给局长）只在没认出具体品类时成立（"周六打篮球，大家聚一下" 仍是篮球局）
+  const v6 = detectActivities(text);
+  const open = v6.open && (!def || def.category === "聚餐");
+  const pool = v6.activities && (open || !v6.open) ? v6.activities : undefined;
+  const kind: Kind | undefined = open && !pool ? "fun" : (def?.kind ?? (raw ? undefined : "food"));
 
-  const category = def?.category ?? raw ?? "聚餐";
-  const poiKeywords = def ? [...def.keywords] : raw ? [raw] : ["餐厅"];
-  const durationMinutes = def?.duration ?? 120;
+  let category = def?.category ?? raw ?? "聚餐";
+  let poiKeywords = def ? [...def.keywords] : raw ? [raw] : ["餐厅"];
+  let durationMinutes = def?.duration ?? 120;
+  if (open) {
+    category = "局长定";
+    poiKeywords = pool ? [...new Set(pool.map((k) => activityByKey(k)!.poiKeywords[0]))].slice(0, 3) : ["餐厅"];
+    durationMinutes = pool ? 120 : 180;
+  } else if (pool) {
+    const names = pool.map((k) => activityByKey(k)!.name);
+    category = Array.from(names.join("/")).slice(0, 20).join("");
+    poiKeywords = [...new Set(pool.map((k) => activityByKey(k)!.poiKeywords[0]))].slice(0, 3);
+    durationMinutes = Math.max(...pool.map((k) => activityByKey(k)!.minutes));
+  }
 
   const headcount = detectHeadcount(text);
   const budgetPerPerson = detectBudget(text, headcount);
@@ -405,8 +438,20 @@ export function ruleParsePrompt(prompt: string, now: Date, defaultCity: string):
     durationMinutes,
     city,
     ...(notes.length ? { notes: notes.join("、") } : {}),
+    ...(open ? { open: true } : {}),
+    ...(pool ? { activities: pool } : {}),
   };
-  return { title: makeTitle(dateLabel, category, headcount), spec };
+  return { title: activityTitle(dateLabel, spec, headcount) ?? makeTitle(dateLabel, category, headcount), spec };
+}
+
+/** v6 局名："周六聚一聚" / "周六吃什么局" / "周六桌游或火锅局"（太长就叫"周六组局"）；v5 单品类返回 undefined */
+export function activityTitle(dateLabel: string, spec: Pick<JuSpec, "open" | "activities">, headcount?: number): string | undefined {
+  const suffix = headcount && headcount >= 10 ? "大局" : "局";
+  const pool = (spec.activities ?? []).map((k) => activityByKey(k)?.name).filter((x): x is string => !!x);
+  if (spec.open) return pool.length && pool.length === ACTIVITY_LIB.filter((a) => a.food).length ? `${dateLabel}吃什么${suffix}` : `${dateLabel}聚一聚`;
+  if (pool.length < 2) return undefined;
+  const joined = pool.join("或");
+  return Array.from(joined).length <= 6 ? `${dateLabel}${joined}${suffix}` : `${dateLabel}组${suffix}`;
 }
 
 /** “周五火锅局” / “明晚烧烤局” / “周末羽毛球局” */
@@ -428,7 +473,7 @@ export function titleFromSpec(spec: JuSpec, now: Date): string {
     else if (d === addDays(sh.ymd, 1)) label = evening ? "明晚" : "明天";
     else label = dowLabel(isoDowOf(d));
   }
-  return makeTitle(label, spec.category, spec.headcount);
+  return activityTitle(label, spec, spec.headcount) ?? makeTitle(label, spec.category, spec.headcount);
 }
 
 // ---------------------------------------------------------------- 忌口

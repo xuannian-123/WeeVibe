@@ -16,6 +16,7 @@ import type {
   Poi,
   Proposal,
   ProposalLabel,
+  Segment,
   Slot,
   TraceEvent,
 } from "../types";
@@ -23,13 +24,16 @@ import { estimateCommute, haversineKm, round1 } from "../map/geo";
 import { fairCenter } from "./center";
 import { categoryMatches, categoryWords } from "./category";
 import { isHotpotCategory } from "./diet";
-import { CARE_FLOOR, experienceDetail, queueMinutes, slotTimes, type PlanContext, type PrivateFlags, type SoftCost } from "./experience";
+import { CARE_FLOOR, experienceDetail, HARD_DIET, queueMinutes, slotTimes, type PlanContext, type PrivateFlags, type SoftCost } from "./experience";
 import { planRepairs, type AskDraft } from "./repair";
 import { openFits, risksFor, slotWeather, weatherEffects, type Effects, type SlotWeather } from "./external";
 import { poiIndoor } from "./needs";
 import { fairnessWeights } from "./fairness";
 import { generateSlots } from "./slots";
-import { canonicalJson, chainName, cmpStr, hmToMin, hmacHex, sha256Hex, slotLabel } from "./util";
+import { bjIso, canonicalJson, chainName, cmpStr, hmToMin, hmacHex, minToHm, sha256Hex, slotLabel } from "./util";
+import { activityByKey, type ActivityInfo, type ActivityProfile } from "./activities";
+import { buildPrograms, moodSummary, poolSummary, programExperience, segmentTimes, WALK_MAX_MIN, type Program, type ProgramRow, type SegRun } from "./program";
+import { dietConflictReason } from "./diet";
 
 export const ALGORITHM_VERSION = "juzhang-planner/3.0";
 export const SEARCH_RADIUS_M = 3000;
@@ -85,6 +89,12 @@ export type Candidate = {
   infeasible?: string;
   /** v5 外部因素：这个时间段的天气 */
   wx: SlotWeather;
+  /** v6 活动层：节目 key（"climbing+homestyle"）。v5 单品类时没有 */
+  program?: string;
+  /** v6 活动层：节目的每一段（单段节目也有一段，用来显示活动名）。v5 单品类时没有 */
+  segments?: Segment[];
+  /** v6 两段式：每人的公开到场情况（两段都在 / 只第一段 / 只第二段 / 来不了），与 members 一一对应 */
+  parts?: ProgramRow["part"][];
 };
 
 export function inMembersOf(members: Member[]): Member[] {
@@ -180,6 +190,9 @@ function median(xs: number[]): number | undefined {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
+/** 每人一行的体验（evaluateCandidate / 节目计算共用） */
+type Row = Pick<ProgramRow, "pub" | "mine" | "flags" | "soft">;
+
 /** 某个候选的全量计算 */
 export function evaluateCandidate(
   members: Member[],
@@ -192,22 +205,24 @@ export function evaluateCandidate(
   fallbackCost: number,
   eff?: Effects,
 ): Candidate {
-  const pubs: Experience[] = [];
-  const mines: Candidate["mines"] = [];
-  const flags: PrivateFlags[] = [];
-  const softs: SoftCost[][] = [];
-  members.forEach((m, i) => {
+  const rows: Row[] = members.map((m, i) => {
     const d = experienceDetail(m, slot, poi, commutes[i], ctx);
     // 天气（公开事实）：户外 + 小雨 / 高温 / 严寒 / 大风，所有到场的人一起扣
     if (eff?.penalty && d.pub.status !== "absent") {
       const u = Math.max(0, d.mine.utility - eff.penalty);
       d.mine = { ...d.mine, utility: u, cared: d.mine.cared && u >= CARE_FLOOR, notes: eff.note ? [...d.mine.notes, eff.note] : d.mine.notes };
     }
-    pubs.push(d.pub);
-    mines.push(d.mine);
-    flags.push(d.flags);
-    softs.push(d.soft);
+    return d;
   });
+  return aggregateCandidate(members, slot, poi, rows, weights, idx, poi.costPerPerson ?? fallbackCost);
+}
+
+/** 每人的体验 → 三级准则要用的聚合数（到场、照顾到几个人、加权损失、纳什福利…） */
+export function aggregateCandidate(members: Member[], slot: Slot, poi: Poi, rows: Row[], weights: number[], idx: number, cost: number): Candidate {
+  const pubs: Experience[] = rows.map((r) => r.pub);
+  const mines: Candidate["mines"] = rows.map((r) => r.mine);
+  const flags: PrivateFlags[] = rows.map((r) => r.flags);
+  const softs: SoftCost[][] = rows.map((r) => r.soft);
   const here = members.map((_, i) => i).filter((i) => pubs[i].status !== "absent");
   const attend = here.length;
   const caredIdx = members.map((_, i) => i).filter((i) => mines[i].cared);
@@ -237,7 +252,7 @@ export function evaluateCandidate(
     minU,
     avgU,
     wMin,
-    cost: poi.costPerPerson ?? fallbackCost,
+    cost,
     score: attend ? Math.round(Math.max(0, Math.min(100, raw))) : 0,
     vetoed,
     risks: [],
@@ -312,6 +327,8 @@ function strictlyBetter(label: ProposalLabel, c: Candidate, chosen: Candidate[])
  * 不同日期一定算；同一天要么到场人数不同，要么（换了店的前提下）人均差 ≥ 15、加权最低满意度差 ≥ 8（不同时段 ≥ 5）、开始时间差 ≥ 60 分钟之一。
  */
 export function meaningfullyDifferent(a: Candidate, b: Candidate): boolean {
+  // v6：干的事不一样（桌游 vs 攀岩 → 家常菜）本身就是实质差异
+  if ((a.program ?? "") !== (b.program ?? "")) return true;
   if (a.slot.id === b.slot.id && (a.poi.id === b.poi.id || chainName(a.poi.name) === chainName(b.poi.name))) return false;
   const ta = slotTimes(a.slot);
   const tb = slotTimes(b.slot);
@@ -360,6 +377,29 @@ export function proposalIdFor(slot: Slot, poi: Poi): string {
   return `p_${sha256Hex(`${slot.id}|${poi.id}`).slice(0, 10)}`;
 }
 
+/** 候选的方案 id：v5 = 时间 × 店；v6 活动层 = 时间 × 每段（活动 + 店），同一家店的不同节目不会撞 id */
+export function proposalIdOf(c: Pick<Candidate, "slot" | "poi" | "segments">): string {
+  if (!c.segments?.length) return proposalIdFor(c.slot, c.poi);
+  return `p_${sha256Hex(`${c.slot.id}|${c.segments.map((s) => `${s.activity}:${s.poi.id}`).join("|")}`).slice(0, 10)}`;
+}
+
+/** 公开显示的人均：两段式 = 两段合计；其余 = 这家店的人均（可能未知） */
+function shownCost(c: Candidate): number | undefined {
+  return c.segments && c.segments.length > 1 ? c.cost : c.poi.costPerPerson;
+}
+
+/** 两段之间走路几分钟（一段时为 undefined） */
+function walkOf(c: Pick<Candidate, "segments">): number | undefined {
+  const sg = c.segments;
+  if (!sg || sg.length < 2) return undefined;
+  return Math.round((new Date(sg[1].start).getTime() - new Date(sg[0].end).getTime()) / 60000);
+}
+
+/** 只来第二段的人（公开事实：几点到场本来就看得见） */
+function secondOnly(c: Candidate, i: number): boolean {
+  return c.parts?.[i] === "second";
+}
+
 function attendIdx(c: Candidate): number[] {
   return c.pubs.map((_, i) => i).filter((i) => c.pubs[i].status !== "absent");
 }
@@ -368,11 +408,17 @@ export function headlineFor(c: Candidate, members: Member[]): string {
   const n = members.length;
   const parts: string[] = [c.attend === n ? `${n} 人全到` : `${c.attend} 人到场`];
   const lates = attendIdx(c)
+    .filter((i) => !secondOnly(c, i))
     .map((i) => c.pubs[i].lateMin)
     .filter((x) => x > 0);
   if (lates.length === 1) parts.push(`1 人晚到 ${lates[0]} 分钟`);
   else if (lates.length > 1) parts.push(`${lates.length} 人晚到（最多 ${Math.max(...lates)} 分钟）`);
-  if (c.poi.costPerPerson !== undefined) parts.push(`人均 ${c.poi.costPerPerson}`);
+  const second = attendIdx(c).filter((i) => secondOnly(c, i)).length;
+  if (second) parts.push(`${second} 人直接来第二段`);
+  const cost = shownCost(c);
+  if (cost !== undefined) parts.push(c.segments && c.segments.length > 1 ? `两段人均 ${cost}` : `人均 ${cost}`);
+  // v6 活动层：先说干什么
+  if (c.segments?.length) parts.unshift(c.segments.map((s) => s.activityName).join(" → "));
   return parts.join("，");
 }
 
@@ -390,12 +436,17 @@ function textsFor(
   if (absentNames.length) tradeoffs.push(`${absentNames.join("、")}这个时间来不了`);
   const early = here.filter((i) => c.pubs[i].leaveAt);
   if (early.length) tradeoffs.push(`${early.length} 人需要提前走`);
-  const maxLate = Math.max(0, ...here.map((i) => c.pubs[i].lateMin));
+  const maxLate = Math.max(0, ...here.filter((i) => !secondOnly(c, i)).map((i) => c.pubs[i].lateMin));
   if (maxLate >= 15) tradeoffs.push(`有人要晚到 ${maxLate} 分钟`);
+  const second = here.filter((i) => secondOnly(c, i)).length;
+  if (second) tradeoffs.push(someone(second, "只赶得上第二段"));
   const commutes = here.map((i) => c.pubs[i].commuteMin);
   const maxCommute = commutes.length ? Math.max(...commutes) : 0;
   if (maxCommute >= 40) tradeoffs.push(`最远的人路上 ${maxCommute} 分钟`);
-  const q = queueMinutes(c.slot, c.poi);
+  const q =
+    c.segments && c.segments.length > 1
+      ? Math.max(...c.segments.map((s) => queueMinutes({ id: c.slot.id, start: s.start, end: s.end }, s.poi)))
+      : queueMinutes(c.slot, c.poi);
   if (q > 0) tradeoffs.push(`饭点可能要排队 ${q} 分钟`);
   // 私密因素只给聚合计数
   const over = here.filter((i) => c.flags[i].overBudget).length;
@@ -404,18 +455,21 @@ function textsFor(
   if (diet) tradeoffs.push(someone(diet, "的忌口和这家冲突"));
   const pass = here.filter((i) => c.flags[i].verdict === "pass").length;
   if (pass) tradeoffs.push(someone(pass, "刷卡时不太想去这家"));
-  if (ref && ref !== c && c.poi.costPerPerson !== undefined && ref.poi.costPerPerson !== undefined) {
-    const d = c.poi.costPerPerson - ref.poi.costPerPerson;
+  const cost = shownCost(c);
+  const refCost = ref ? shownCost(ref) : undefined;
+  if (ref && ref !== c && cost !== undefined && refCost !== undefined) {
+    const d = cost - refCost;
     if (d >= 5) tradeoffs.push(`比推荐方案每人贵 ${d} 元`);
   }
 
   if (c.attend === members.length && members.length > 1) highlights.push("全员到齐");
   const budgeted = here.filter((i) => (members[i].private?.budgetMax ?? 0) > 0).length;
-  if (c.poi.costPerPerson !== undefined) {
-    if (budgeted > 0 && over === 0) highlights.push(`人均 ${c.poi.costPerPerson}，大家都在预算内`);
-    if (ref && ref !== c && ref.poi.costPerPerson !== undefined && ref.poi.costPerPerson - c.poi.costPerPerson >= 5)
-      highlights.push(`比推荐方案每人省 ${ref.poi.costPerPerson - c.poi.costPerPerson} 元`);
+  if (cost !== undefined) {
+    if (budgeted > 0 && over === 0) highlights.push(`人均 ${cost}，大家都在预算内`);
+    if (ref && ref !== c && refCost !== undefined && refCost - cost >= 5) highlights.push(`比推荐方案每人省 ${refCost - cost} 元`);
   }
+  const walk = walkOf(c);
+  if (walk !== undefined) highlights.push(`两段的店走路 ${walk} 分钟`);
   const want = here.filter((i) => c.flags[i].verdict === "love" || c.flags[i].verdict === "like").length;
   if (want) highlights.push(someone(want, "刷卡点了想去"));
   if (here.some((i) => c.flags[i].yuanyang) && !diet) highlights.push("有鸳鸯锅，不吃辣的也能吃");
@@ -439,7 +493,7 @@ export function toProposal(
 ): Proposal {
   const { tradeoffs, highlights } = textsFor(c, members, weights, ref, ctx);
   return {
-    id: proposalIdFor(c.slot, c.poi),
+    id: proposalIdOf(c),
     label,
     labelText: LABEL_TEXT[label],
     slot: c.slot,
@@ -455,6 +509,7 @@ export function toProposal(
     recommended,
     cared: c.cared,
     ...(c.risks.length ? { risks: c.risks } : {}),
+    ...(c.segments?.length ? { segments: c.segments } : {}),
   };
 }
 
@@ -476,6 +531,8 @@ export function whyLines(c: Candidate, members: Member[]): string[] {
     else out.push(`最吃亏的朋友也只是${worst.notes.filter((x) => !/路上/.test(x)).join("、") || `路上 ${worst.commuteMin} 分钟`}`);
   }
   if (absent) out.push(`${absent} 位朋友这个时间来不了`);
+  const second = c.pubs.filter((_, i) => secondOnly(c, i)).length;
+  if (second) out.push(`${someone(second, "只能晚到")}，直接来第二段`);
   return out;
 }
 
@@ -506,7 +563,12 @@ export function constraintSummariesFor(members: Member[], ju: Ju, maxCost: numbe
   return out;
 }
 
-export function auditInput(ju: Ju, members: Member[], ledgers: Record<string, LedgerEntry[]>): unknown {
+export function auditInput(
+  ju: Ju,
+  members: Member[],
+  ledgers: Record<string, LedgerEntry[]>,
+  profiles?: Record<string, ActivityProfile>,
+): unknown {
   return {
     algorithmVersion: ALGORITHM_VERSION,
     juId: ju.id,
@@ -524,9 +586,15 @@ export function auditInput(ju: Ju, members: Member[], ledgers: Record<string, Le
         budgetMax: m.private?.budgetMax,
         notes: m.private?.notes ?? [],
         swipes: m.private?.swipes ?? {},
+        // v6 活动层：没有时是 undefined，规范化 JSON 会去掉，v5 的输入哈希不变
+        mood: m.private?.mood,
+        activityOpen: m.private?.activityOpen,
       },
     })),
     ledgers: Object.fromEntries(members.map((m) => [m.id, ledgers[m.id] ?? []])),
+    ...(profiles && Object.keys(profiles).length
+      ? { profiles: Object.fromEntries(members.filter((m) => profiles[m.id]).map((m) => [m.id, profiles[m.id]])) }
+      : {}),
   };
 }
 
@@ -556,7 +624,10 @@ export async function computeCandidates(
   ledgers: Record<string, LedgerEntry[]>,
   trace: TraceFn,
   only?: { slots?: Slot[]; pois?: Poi[] },
-) {
+  extra: { profiles?: Record<string, ActivityProfile> } = {},
+): Promise<CandidateSet> {
+  // v6：发起人没定干什么 / 给了多个候选 → 先走活动层。指定了时间或店（重算原方案、切备案）时仍按单店算
+  if (!only && activityMode(ju.spec)) return computeActivityCandidates(ju, members, map, ledgers, trace, extra.profiles ?? {});
   const slots = only?.slots ?? (ju.slots?.length ? ju.slots : generateSlots(ju.spec));
   if (slots.length === 0) throw new Error("没有候选时间，无法出方案");
   const located = members.filter((m) => m.location && Number.isFinite(m.location.lat) && Number.isFinite(m.location.lng));
@@ -630,7 +701,253 @@ export async function computeCandidates(
   if (feasible.length && feasible.length < cands.length) {
     trace("filter", [closed ? `${closed} 个组合打烊前来不及` : "", rained ? `${rained} 个户外组合遇上坏天气` : ""].filter(Boolean).join("，") + "，直接排除");
   }
-  return { slots, pois, center, located, cands: feasible.length ? feasible : cands, weights, ctx, matrix };
+  return { slots, pois, center, located, cands: feasible.length ? feasible : cands, weights, ctx, matrix, total: cands.length };
+}
+
+/** computeCandidates 的结果 */
+export type CandidateSet = {
+  slots: Slot[];
+  pois: Poi[];
+  center: LatLng;
+  located: Member[];
+  cands: Candidate[];
+  weights: number[];
+  ctx: PlanContext;
+  matrix: number[][];
+  /** 一共算了多少个组合（含不成立的） */
+  total: number;
+  /** v6 活动层排出的节目（只在活动层模式下有） */
+  programs?: Program[];
+};
+
+// ---------------- v6 活动层（docs/AVATAR.md 第 3 节）----------------
+
+/** 发起人没定干什么（open），或给了 ≥ 2 个认识的候选活动 → 走活动层；否则和 v5 完全一样 */
+export function activityMode(spec: Ju["spec"]): boolean {
+  if (spec.open) return true;
+  return (spec.activities ?? []).filter((k) => activityByKey(k)).length >= 2;
+}
+
+/** 活动层最多搜几次店（每种活动一次，命中太少时放宽一次）；加上通勤和天气，总地图调用不超过 v5 的 2 倍 */
+export const MAX_ACTIVITY_SEARCHES = 6;
+/** 活动层最多查几家店的通勤（v5 是 SHORTLIST = 8 家） */
+export const MAX_ACTIVITY_POIS = 10;
+const WALK_KMH = 4.5;
+
+/** 两家店之间步行几分钟（直线 × 1.25 绕路系数） */
+export function walkMinutes(a: LatLng, b: LatLng): number {
+  return Math.max(1, Math.ceil(((haversineKm(a, b) * 1.25) / WALK_KMH) * 60));
+}
+
+/** 某种活动在公平集合点附近的店：有清真的朋友时只搜清真的；命中太少且还有搜索次数时放宽到 6km */
+export async function searchActivityPois(
+  act: ActivityInfo,
+  center: LatLng,
+  map: MapProvider,
+  city: string,
+  halal: boolean,
+  allowWide: boolean,
+): Promise<{ pois: Poi[]; calls: number; radiusM: number }> {
+  const keywords = halal && act.halalKeywords?.length ? act.halalKeywords : act.poiKeywords;
+  const words = [
+    ...new Set([...categoryWords({ category: act.name, poiKeywords: act.poiKeywords }), ...act.aliases.map((a) => a.toLowerCase()), ...(halal ? ["清真"] : [])]),
+  ].sort();
+  let best: { all: Poi[]; matched: Poi[]; radiusM: number } | undefined;
+  let calls = 0;
+  for (const radiusM of allowWide ? [SEARCH_RADIUS_M, SEARCH_RADIUS_WIDE_M] : [SEARCH_RADIUS_M]) {
+    calls++;
+    const raw = await map.searchAround(center, keywords, radiusM, city);
+    const uniq = new Map<string, Poi>();
+    for (const p of raw) if (p?.id && !uniq.has(p.id)) uniq.set(p.id, p);
+    const all = [...uniq.values()];
+    const matched = all.filter((p) => categoryMatches(p, words));
+    if (!best || matched.length > best.matched.length) best = { all, matched, radiusM };
+    if (matched.length >= MIN_MATCHED) break;
+  }
+  const { all, matched, radiusM } = best!;
+  const pois = matched.length >= MIN_MATCHED || all.length === matched.length ? matched : [...matched, ...all.filter((p) => !matched.includes(p))];
+  return { pois, calls, radiusM };
+}
+
+/** 一个节目落到店上的组合：每段一家店 + 两段之间走路的分钟 */
+type Combo = { pois: Poi[]; walk: number };
+
+/** 有清真 / 素食的朋友时，这家店和几个人的饮食底线冲突（只在内部挑第二家店用） */
+function hardDietClashes(poi: Poi, act: ActivityInfo, members: Member[]): number {
+  if (!act.food) return 0;
+  return members.filter((m) => (m.private?.dietTags ?? []).some((t) => HARD_DIET.includes(t) && dietConflictReason(t, poi))).length;
+}
+
+/**
+ * v6 活动层的候选全量计算：活动层（不调地图）排出前 K 个节目 → 每种活动搜一次店 → 每个节目预筛几家店
+ * （两段式配上步行 15 分钟内的第二家）→ 节目 × 开始时间 × 店，每人每段分别算到场与满意度。
+ * 地图调用：天气 1 + 搜店 ≤ MAX_ACTIVITY_SEARCHES + 通勤 ≤ MAX_ACTIVITY_POIS（第二段的店离第一段步行 15 分钟内，通勤按第一段估）。
+ */
+async function computeActivityCandidates(
+  ju: Ju,
+  members: Member[],
+  map: MapProvider,
+  ledgers: Record<string, LedgerEntry[]>,
+  trace: TraceFn,
+  profiles: Record<string, ActivityProfile>,
+): Promise<CandidateSet> {
+  const spec = ju.spec;
+  const starts = ju.slots?.length ? ju.slots : generateSlots(spec);
+  if (starts.length === 0) throw new Error("没有候选时间，无法出方案");
+  const located = members.filter((m) => m.location && Number.isFinite(m.location.lat) && Number.isFinite(m.location.lng));
+  const center = fairCenter(located.map((m) => m.location!));
+  const origins: LatLng[] = members.map((m) => (m.location ? { lat: m.location.lat, lng: m.location.lng } : center));
+  if (located.length >= 2) {
+    const r = Math.max(...located.map((m) => haversineKm(center, m.location!)));
+    trace("compute", `以 ${located.length} 个出发地求公平集合点（最小包围圆），离集合点最远的人直线 ${round1(r)} km`);
+  }
+  const w = fairnessWeights(Object.fromEntries(members.map((m) => [m.id, ledgers[m.id] ?? []])));
+  const weights = members.map((m) => w[m.id] ?? 1);
+  const ctx: PlanContext = { spec };
+
+  // 1. 天气先查（户外活动要看）
+  let forecast: WeatherDay[] = [];
+  if (map.weather) {
+    try {
+      forecast = await map.weather(center);
+    } catch {
+      forecast = [];
+    }
+  }
+
+  // 2. 活动层：每人对每种活动的契合度 → 三级准则排出前 K 个节目（只说聚合）
+  const pp = buildPrograms(members, spec, forecast, { profiles, weights });
+  trace("listen", poolSummary(spec));
+  const ms = moodSummary(pp.split);
+  if (ms) trace("listen", ms);
+  if (pp.rainedOut) trace("filter", `${pp.rainedOut} 种户外活动那几天预报有大雨，先不考虑`);
+  if (pp.blocked) trace("filter", `有人的底线（饮食 / 身体 / 预算）和 ${pp.blocked} 种活动冲突，这些活动排到后面`);
+  const hasPair = pp.programs.some((p) => p.segs.length > 1);
+  if (hasPair) {
+    const why = [pp.split.diverged ? "大家这次的状态不太一样" : "", pp.split.late ? someone(pp.split.late, "只能晚到") : ""].filter(Boolean).join("，");
+    trace("compute", `${why}，考虑分两段：一段玩、一段吃，第二家店离第一家步行 ${WALK_MAX_MIN} 分钟以内${pp.split.late ? "，晚到的朋友可以直接来第二段" : ""}`);
+  }
+  if (pp.programs.length === 0) throw new Error("候选的活动这几天都不成立（户外遇上大雨），换个活动或日期吧");
+  trace("decide", `活动层按三级准则排出 ${pp.programs.length} 个节目：${pp.programs.map((p) => p.label).join(" / ")}，接下来逐个搜店`);
+
+  // 3. 每种活动搜一次店（有清真的朋友时吃饭的活动只搜清真店，不多调地图）
+  const halalCrowd = members.some((m) => (m.private?.dietTags ?? []).includes("清真"));
+  const acts: ActivityInfo[] = [];
+  for (const p of pp.programs) for (const s of p.segs) if (!acts.includes(s.act)) acts.push(s.act);
+  const found = new Map<string, Poi[]>();
+  let searches = 0;
+  for (let k = 0; k < acts.length; k++) {
+    const a = acts[k];
+    if (searches >= MAX_ACTIVITY_SEARCHES) break;
+    const allowWide = searches + (acts.length - k) < MAX_ACTIVITY_SEARCHES;
+    const r = await searchActivityPois(a, center, map, spec.city, halalCrowd && a.food && !!a.halalKeywords?.length, allowWide);
+    searches += r.calls;
+    found.set(a.key, r.pois);
+  }
+
+  // 4. 每个节目预筛几家店；两段式给每家第一段的店配一家步行 15 分钟内的第二段
+  const perProgram = Math.max(2, Math.min(4, Math.floor(MAX_ACTIVITY_POIS / pp.programs.length)));
+  const ref = located.length ? origins : [center];
+  const kept: { pr: Program; combos: Combo[] }[] = [];
+  const dropped: string[] = [];
+  for (const pr of pp.programs) {
+    const first = found.get(pr.segs[0].act.key) ?? [];
+    let combos: Combo[] = [];
+    if (pr.segs.length === 1) combos = shortlistPois(first, ref, perProgram).map((p) => ({ pois: [p], walk: 0 }));
+    else {
+      const second = found.get(pr.segs[1].act.key) ?? [];
+      for (const p1 of shortlistPois(first, ref, perProgram * 3)) {
+        if (combos.length >= perProgram) break;
+        const near = second
+          .filter((p2) => p2.id !== p1.id)
+          .map((p2) => ({ p2, walk: walkMinutes(p1, p2), clash: hardDietClashes(p2, pr.segs[1].act, members) }))
+          .filter((x) => x.walk <= WALK_MAX_MIN)
+          .sort((a, b) => a.clash - b.clash || (b.p2.rating ?? 0) - (a.p2.rating ?? 0) || a.walk - b.walk || cmpStr(a.p2.id, b.p2.id));
+        if (near.length) combos.push({ pois: [p1, near[0].p2], walk: near[0].walk });
+      }
+    }
+    if (combos.length) kept.push({ pr, combos });
+    else dropped.push(pr.label);
+  }
+  if (dropped.length) trace("warn", `「${dropped.join("」「")}」附近没找到合适的店${dropped.some((d) => d.includes("→")) ? "（或第二家不在步行 15 分钟内）" : ""}，先不考虑`);
+  if (kept.length === 0) throw new Error(`公平集合点附近没找到「${pp.programs.map((p) => p.label).join("/")}」的店`);
+
+  // 5. 通勤：只查第一段的店（第二段的店就在旁边，去 / 回程按同一个通勤估）
+  const pois: Poi[] = [];
+  for (const k of kept) for (const c of k.combos) if (!pois.some((p) => p.id === c.pois[0].id)) pois.push(c.pois[0]);
+  const matrix = await commuteMatrix(map, origins, pois);
+  const flat = matrix.flat();
+  trace(
+    "search",
+    `为 ${kept.length} 个节目在公平集合点附近搜了 ${found.size} 类店，预筛出 ${pois.length} 家，查了 ${flat.length} 条通勤，最远单程 ${flat.length ? Math.max(...flat) : 0} 分钟`,
+  );
+  const dates = [...new Set(starts.map((sl) => slotWeather(forecast, sl).label))];
+  const known = dates.map((label) => ({ label, w: starts.map((sl) => slotWeather(forecast, sl)).find((x) => x.label === label)! })).filter((x) => x.w.half);
+  if (known.length) trace("search", `查了天气：${known.map((x) => `${x.label}${x.w.half!.text} ${x.w.half!.temp}℃`).join("，")}`);
+
+  // 6. 节目 × 开始时间 × 店：每人每段分别算
+  const cands: Candidate[] = [];
+  let idx = 0;
+  for (const { pr, combos } of kept)
+    for (const st of starts) {
+      const { date, start } = slotTimes(st);
+      for (const combo of combos) {
+        const times = segmentTimes(start, pr.segs, combo.walk);
+        const runs: SegRun[] = pr.segs.map((sg, k) => {
+          const slot: Slot = { id: st.id, start: bjIso(date, times[k].start), end: bjIso(date, times[k].end) };
+          return { act: sg.act, poi: combo.pois[k], slot, eff: weatherEffects(slotWeather(forecast, slot), combo.pois[k]) };
+        });
+        const slot: Slot = { id: st.id, start: runs[0].slot.start, end: runs[runs.length - 1].slot.end };
+        const factor = runs[0].eff?.commuteFactor ?? 1;
+        const row = matrix[pois.findIndex((p) => p.id === combo.pois[0].id)];
+        const commutes = factor === 1 ? row : row.map((c) => Math.round(c * factor));
+        const rows = members.map((m, i) => programExperience(m, runs, commutes[i], ctx, profiles[m.id]));
+        const cost = runs.reduce((s, r) => s + (r.poi.costPerPerson ?? Math.round((r.act.cost[0] + r.act.cost[1]) / 2)), 0);
+        const c = aggregateCandidate(members, slot, combo.pois[0], rows, weights, idx++, cost);
+        c.program = pr.key;
+        c.segments = runs.map((r) => ({ activity: r.act.key, activityName: r.act.name, poi: r.poi, start: r.slot.start, end: r.slot.end }));
+        if (runs.length > 1) c.parts = rows.map((r) => r.part);
+        c.wx = slotWeather(forecast, runs[0].slot);
+        const risks: Risk[] = [];
+        for (const r of runs) {
+          const t = slotTimes(r.slot);
+          const open = openFits(r.poi.openTime, t.start, t.end);
+          for (const rk of risksFor(r.slot, r.poi, slotWeather(forecast, r.slot), open, queueMinutes(r.slot, r.poi)))
+            if (!risks.some((x) => x.kind === rk.kind && x.text === rk.text)) risks.push(rk);
+          if (!c.infeasible && open.fit === "no") c.infeasible = open.closeAt ? `${r.poi.name} ${open.closeAt} 打烊，来不及` : `${r.poi.name}那个时间不营业`;
+          else if (!c.infeasible && r.eff?.infeasible) c.infeasible = r.eff.reason;
+        }
+        // 两段时，第一段结束得早就不是"夜归"；risksFor 已按每段自己的结束时间算
+        c.risks = risks;
+        cands.push(c);
+      }
+    }
+  const feasible = cands.filter((c) => !c.infeasible);
+  const closed = cands.filter((c) => c.infeasible?.includes("打烊") || c.infeasible?.includes("营业")).length;
+  const rained = cands.length - feasible.length - closed;
+  if (feasible.length && feasible.length < cands.length) {
+    trace("filter", [closed ? `${closed} 个组合打烊前来不及` : "", rained ? `${rained} 个户外组合遇上坏天气` : ""].filter(Boolean).join("，") + "，直接排除");
+  }
+  return {
+    slots: starts,
+    pois,
+    center,
+    located,
+    cands: feasible.length ? feasible : cands,
+    weights,
+    ctx,
+    matrix,
+    total: cands.length,
+    programs: kept.map((k) => k.pr),
+  };
+}
+
+/** 方案的"在哪"：v5 = 店名；单段节目 = 活动 + 店；两段 = 两段各自的时间、活动、店 */
+export function whereText(p: Pick<Proposal, "slot" | "poi" | "segments">): string {
+  const sg = p.segments;
+  if (!sg?.length) return `${slotLabel(p.slot.start)} 在${p.poi.name}`;
+  if (sg.length === 1) return `${slotLabel(p.slot.start)} ${sg[0].activityName}，在${sg[0].poi.name}`;
+  return `${slotLabel(sg[0].start)} ${sg[0].activityName}（${sg[0].poi.name}）→ ${minToHm(slotTimes({ id: "", start: sg[1].start, end: sg[1].end }).start)} ${sg[1].activityName}（${sg[1].poi.name}）`;
 }
 
 /** v5 备案：户外方案碰上小雨 / 还没有预报时，挑同一时间最好的室内（或不是户外的）店 */
@@ -641,7 +958,7 @@ export function fallbackFor(c: Candidate, pool: Candidate[]): Fallback | undefin
   return {
     trigger: c.wx.kind === "unknown" ? "到时候下雨（前一天局长再确认天气）" : "雨下大了（中雨及以上）",
     poi: alt.poi,
-    proposalId: proposalIdFor(alt.slot, alt.poi),
+    proposalId: proposalIdOf(alt),
   };
 }
 
@@ -660,6 +977,8 @@ export async function planJu(
     now?: Date;
     /** v5 让步账：memberId -> 最近答应过让步的次数（越多越不先问） */
     concessions?: Record<string, number>;
+    /** v6 活动层：memberId -> 档案里的活动口味、身体限制（Profile 的子集）。不传 = 只看本次说的 */
+    profiles?: Record<string, ActivityProfile>;
   },
 ): Promise<{ plan: Plan; mine: Record<string, MyExperience[]>; asks: AskDraft[] }> {
   const trace: TraceFn = (k, t) => {
@@ -687,9 +1006,12 @@ export async function planJu(
     `${n} 位朋友在局里，${withLoc} 人给了出发地` + (shared ? `，${shared} 人私下跟局长说了自己的情况` : ""),
   );
 
-  const { slots, pois, center, cands, weights, ctx } = await computeCandidates(ju, inMembers, map, ledgers, trace);
+  const profiles = opts.profiles ?? {};
+  const { slots, pois, center, cands, weights, ctx, total, programs } = await computeCandidates(ju, inMembers, map, ledgers, trace, undefined, { profiles });
 
-  trace("compute", `计算了 ${slots.length} 个时段 × ${pois.length} 家店 × ${n} 个人 = ${slots.length * pois.length * n} 次体验`);
+  if (programs)
+    trace("compute", `计算了 ${programs.length} 个节目 × ${slots.length} 个开始时间 × 预筛的店 = ${total} 个组合 × ${n} 个人 = ${total * n} 次体验（两段的每人每段分别算）`);
+  else trace("compute", `计算了 ${slots.length} 个时段 × ${pois.length} 家店 × ${n} 个人 = ${slots.length * pois.length * n} 次体验`);
 
   let pool = cands.filter((c) => !c.vetoed && c.attend > 0);
   const hasMust = inMembers.some((m) => m.role === "must");
@@ -726,15 +1048,15 @@ export async function planJu(
   const why = whyLines(rec, inMembers);
   trace("decide", `三级准则：先看照顾到几个人（${rec.cared}/${n}），再看最吃亏的人，最后看大家整体`);
   const recommendation =
-    `推荐「${top.labelText}」：${slotLabel(top.slot.start)} 在${top.poi.name}。${why.join("；")}` +
+    `推荐「${top.labelText}」：${whereText(top)}。${why.join("；")}` +
     (caredCount && rec.pubs.some((e, i) => weights[i] >= CARED_WEIGHT && e.status !== "absent") ? "；也照顾了之前吃亏多的朋友。" : "。");
   const caredFor = caredCount ? `这次优先照顾了前几次跑得最远的 ${caredCount} 位朋友` : undefined;
   const maxCost = Math.max(0, ...pois.map((p) => p.costPerPerson ?? 0)) || undefined;
   const constraintSummaries = constraintSummariesFor(inMembers, ju, maxCost);
 
-  const candidates = slots.length * pois.length;
+  const candidates = programs ? total : slots.length * pois.length;
   const audit = {
-    inputHash: hmacHex(opts.auditSecret, canonicalJson(auditInput(ju, inMembers, ledgers))),
+    inputHash: hmacHex(opts.auditSecret, canonicalJson(auditInput(ju, inMembers, ledgers, profiles))),
     outputHash: "",
     candidates,
     evaluations: candidates * n,
@@ -763,7 +1085,7 @@ export async function planJu(
   audit.outputHash = outputHashOf({ ...body, audit });
   const plan: Plan = { ...body, audit, computedAt: (opts.now ?? new Date()).toISOString() };
   if (!caredFor) delete plan.caredFor;
-  trace("decide", `推荐「${top.labelText}」：${slotLabel(top.slot.start)} ${top.poi.name}，${top.attendCount} 人到场`);
+  trace("decide", `推荐「${top.labelText}」：${programs ? whereText(top) : `${slotLabel(top.slot.start)} ${top.poi.name}`}，${top.attendCount} 人到场`);
   trace("done", `审计：输出哈希 ${audit.outputHash.slice(0, 8)}…（输入另有 HMAC 存证），同样的输入一定得到同样的结论`);
 
   const mine: Record<string, MyExperience[]> = {};

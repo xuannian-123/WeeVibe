@@ -38,3 +38,16 @@ export {
 } from "./formats";
 export { slotWeather, classifyWeather, risksFor, openFits, parseOpenTime, weatherEffects, type SlotWeather, type WeatherKind } from "./external";
 export { poiIndoor } from "./needs";
+// v6 活动层（docs/AVATAR.md 第 3 节）
+export {
+  ACTIVITY_LIB,
+  activityByKey,
+  activitiesIn,
+  activityFit,
+  scoreActivities,
+  type ActivityInfo,
+  type ActivityProfile,
+  type ActivityScore,
+} from "./activities";
+export { buildPrograms, programExperience, moodSummary, type Program, type ProgramRow, type SegRun } from "./program";
+export { activityMode, proposalIdOf, whereText } from "./plan";
