@@ -1,3 +1,5 @@
+import {gatheringModelSource} from '../apps/web/src/server/gatherings/privacy';
+import {emptyGatheringDetails} from '../packages/contracts/src';
 import {describe,it,expect,vi,beforeEach} from 'vitest';
 import {emptyGatheringIntake} from '../packages/contracts/src';
 import {aggregate,allowed} from '../apps/web/src/server/gatherings/memory-rules';
@@ -25,3 +27,5 @@ describe('explainable preference learning boundaries',()=>{
 });
 
 it('explicitly clearing an autofilled category suppresses reinjection',async()=>{const f=fixture();f.intake.private.preference_memory={use_history:true,automatic:{},suppressed_categories:['play']};f.intake.public.keywords.play=[];const result=await resolveMemoryRows(f.tx,[{userId:actor,gatheringId:id,publicIntake:f.intake.public,answers:[],responseVersion:1}]);expect((result.rows[0].publicIntake as typeof f.intake.public).keywords.play).toEqual([]);});
+
+it('group generation projects history only as bounded unowned ranking hints',async()=>{const f=fixture();f.intake.private.preference_memory={use_history:true,automatic:{}};f.intake.public.keywords.play=[];const r=await resolveMemoryRows(f.tx,[{userId:actor,gatheringId:id,publicIntake:f.intake.public,answers:[],responseVersion:1}]);const source=gatheringModelSource(emptyGatheringDetails(),r.rows);expect(source.people[0].blocks.some(b=>b.value==='看展')).toBe(false);expect(source.preference_hints).toEqual([{category:'play',value:'看展',usage:'仅作排序参考，不是硬约束'}]);expect(JSON.stringify(source)).not.toContain(actor);});
