@@ -25,13 +25,16 @@ async function one(profileId?: string) {
 beforeEach(() => db._resetDbForTest());
 afterEach(() => vi.restoreAllMocks());
 
-describe("偏好卡片", () => {
-  it("一次确认直接完成，不调用模型、不伪造刷卡，不公开私密预算", async () => {
+// v6：偏好卡片改造成授权书卡片（docs/AVATAR.md 5.2）。结构化保存沿用，「就这样」同时让授权书生效。
+describe("授权书卡片（原偏好卡片）", () => {
+  it("一次确认直接完成，不调用模型、不伪造刷卡，不公开私密预算；授权书生效", async () => {
     const { id, token } = await one();
     const model = vi.spyOn(llm, "chatTurn");
     const result = await chat(id, token, chatBody.parse({ ...form, preferenceAction: "finish" }));
     expect(model).not.toHaveBeenCalled();
     expect(result.me.intake).toBe("done");
+    expect(result.me.private?.mandate).toMatchObject({ status: "confirmed", style: "balanced" });
+    expect(result.reply).toContain("授权书");
     expect(result.me.private?.swipes).toEqual({});
     expect(result.me.private?.budgetMax).toBe(88);
     expect(result.me.private?.pendingConfirm).toBeUndefined();
@@ -40,10 +43,13 @@ describe("偏好卡片", () => {
     expect(pub.members.every((m) => !m.private && !m.secret)).toBe(true);
   });
 
-  it("可以主动选刷店，也可以只保存草稿继续私聊", async () => {
+  it("可以主动选刷店，也可以只保存草稿继续私聊（草稿不写进私聊记录，授权书仍是草稿）", async () => {
     const { id, token } = await one();
+    const before = db.getMember((await getState(id, { memberToken: token })).me!.id)!.private!.chat.length;
     const draft = await chat(id, token, chatBody.parse({ ...form, preferenceAction: "review" }));
     expect(draft.me.intake).toBe("chatting");
+    expect(draft.me.private?.chat.length).toBe(before);
+    expect(draft.me.private?.mandate?.status ?? "draft").toBe("draft");
     const result = await chat(id, token, chatBody.parse({ ...form, preferenceAction: "swipe" }));
     expect(result.me.intake).toBe("swiping");
   });

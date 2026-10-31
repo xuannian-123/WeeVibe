@@ -1,6 +1,7 @@
 // API 入参 zod 校验
 import { z } from "zod";
 import { juSpecSchema } from "../llm/schemas";
+import { GIVE_MAX, MAX_FLOORS, ONBOARD_FLOORS } from "../client/mandate";
 
 export { juSpecSchema };
 
@@ -69,6 +70,57 @@ export const joinBody = z.object({
   seedId: z.string().trim().min(1).max(20).optional(),
 });
 
+// ---- v6 分身：授权书 / 建档 / 档案 / 反馈 ----
+const MOODS = ["hype", "chill", "active", "lazy"] as const;
+const STYLES = ["easy", "balanced", "firm"] as const;
+const TRANSPORTS = ["metro", "drive", "taxi", "bike", "walk"] as const;
+const activityKey = z.string().regex(/^[a-z]{2,20}$/, "活动 key 不对");
+
+export const giveSchema = z.object({
+  lateMin: z.number().int().min(0).max(GIVE_MAX.lateMin),
+  stayCutMin: z.number().int().min(0).max(GIVE_MAX.stayCutMin),
+  budgetUp: z.number().int().min(0).max(GIVE_MAX.budgetUp),
+  commuteUp: z.number().int().min(0).max(GIVE_MAX.commuteUp),
+});
+
+const mandateInput = z.object({
+  style: z.enum(STYLES),
+  give: giveSchema.optional(),
+  /** 底线 key，最多 3 条 */
+  floors: z.array(z.string().min(1).max(40)).max(MAX_FLOORS, `底线最多 ${MAX_FLOORS} 条：底线越少，分身越好谈`).default([]),
+});
+
+const profilePlace = z.object({ kind: z.enum(["home", "work", "school", "other"]), place: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180), label: z.string().trim().max(100).default("") }) });
+
+export const onboardingBody = z.object({
+  avatarName: z.string().trim().max(12).optional(),
+  places: z.array(profilePlace).max(4).optional(),
+  transport: z.enum(TRANSPORTS).optional(),
+  floors: z.array(z.enum(ONBOARD_FLOORS)).max(MAX_FLOORS, `底线最多 ${MAX_FLOORS} 条：底线越少，分身越好谈`).optional(),
+  homeBy: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式 HH:mm").optional(),
+  allergy: z.string().trim().max(20).optional(),
+  budget: z.number().min(0).max(100000).optional(),
+  swipes: z.record(activityKey, z.enum(["love", "like", "pass"])).optional(),
+});
+
+export const profileEditBody = z
+  .object({
+    avatarName: z.string().trim().max(12).nullable().optional(),
+    style: z.enum(STYLES).nullable().optional(),
+    places: z.array(profilePlace).max(4).nullable().optional(),
+    transport: z.enum(TRANSPORTS).nullable().optional(),
+    usualHomeBy: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式 HH:mm").nullable().optional(),
+    dietTags: z.array(z.enum(["不吃辣", "素食", "清真", "不吃牛肉", "不吃海鲜", "不吃内脏"])).max(6).optional(),
+    body: z.array(z.string().trim().min(1).max(20)).max(5).optional(),
+    typicalBudget: z.number().min(0).max(100000).nullable().optional(),
+    activityTastes: z.record(activityKey, z.number().min(-1).max(1)).optional(),
+    forget: z.array(z.string().min(1).max(60)).max(50).optional(),
+    forgetLearned: z.literal(true).optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "没有要修改的字段" });
+
+export const feedbackBody = z.object({ verdict: z.enum(["great", "tired", "pricey", "far", "loud", "ok"]) });
+
 const dayAvailability = z.object({
   from: z.string().regex(HM, "时间格式 HH:mm"),
   homeBy: z.string().regex(HM, "时间格式 HH:mm").optional(),
@@ -87,6 +139,16 @@ export const chatBody = z
     autofill: z.literal(true).optional(),
     preferenceAction: z.enum(["review", "finish", "swipe"]).optional(),
     preferencesChat: z.literal(true).optional(),
+    // ---- v6 授权书卡片（docs/AVATAR.md 5.2），全部是私密字段 ----
+    mood: z.enum(MOODS).nullable().optional(),
+    activityOpen: z.boolean().optional(),
+    /** 想干什么（活动 key，完整选择：没出现的 = 取消） */
+    activities: z.array(activityKey).max(6).optional(),
+    /** 讲究标签（CARE_TAGS 的 key，完整选择） */
+    tags: z.array(z.string().min(1).max(20)).max(12).optional(),
+    mandate: mandateInput.optional(),
+    /** 首次建档（写进本人档案，并按新档案重新预填这次的卡片） */
+    onboarding: onboardingBody.optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined && x !== ""), { message: "说点什么吧" });
 
@@ -137,3 +199,5 @@ export type PatchMemberInput = z.output<typeof patchMemberBody>;
 
 // ---- v5 协商 ----
 export const askBody = z.object({ askId: z.string().min(1).max(20), answer: z.enum(["yes", "no"]) });
+export type ProfileEditInput = z.output<typeof profileEditBody>;
+export type OnboardingBody = z.output<typeof onboardingBody>;

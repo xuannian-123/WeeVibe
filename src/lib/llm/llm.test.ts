@@ -330,7 +330,7 @@ describe("chatTurn 规则版", () => {
 
   it("说“都行”→ wantsAutofill，跳过时间 / 忌口 / 预算", async () => {
     const r = await talk(mkJu(), mkMe(), [null, "漕河泾", "都行，你定", "没有了"]);
-    expect(r[2].patch).toEqual({ wantsAutofill: true });
+    expect(r[2].patch).toEqual({ wantsAutofill: true, style: "easy" }); // v6："都行"也是随和风格
     expect(r[2].reply).toMatch(/帮你填上/);
     expect(classifyAsk(r[2].reply)).toBe("notes");
     expect(r[3].widget).toBe("swipe");
