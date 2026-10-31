@@ -74,7 +74,7 @@ function num(s: string): number | undefined {
 
 const NUM = "(\\d+(?:\\.\\d+)?|[一二两三四五六七八九十]{1,3})";
 
-function minutesIn(s: string): number | undefined {
+export function minutesIn(s: string): number | undefined {
   if (/半(个)?(小时|钟头)/.test(s)) return 30;
   const h = new RegExp(`${NUM}\\s*个?\\s*半?\\s*(小时|钟头)`).exec(s);
   if (h) {
@@ -85,7 +85,7 @@ function minutesIn(s: string): number | undefined {
   return m ? num(m[1]) : undefined;
 }
 
-function clockIn(s: string): string | undefined {
+export function clockIn(s: string): string | undefined {
   const m = new RegExp(`${NUM}\\s*(?:点|:|：)\\s*(半|\\d{2})?`).exec(s);
   if (!m) return undefined;
   // 聚会语境里说"几点结束 / 几点前回"指的是下午晚上："10 点" = 22:00，"12 点" = 午夜
@@ -254,15 +254,19 @@ export function evaluateRule(rule: NeedRule, ctx: NeedCtx): NeedEval {
 /** 把 ChatPatch 里的需求变成入库的 Need（补 id / 时间 / 来源），去掉和已有需求重复的 */
 export function materializeNeeds(existing: Need[], incoming: ExtractedNeed[], source: Need["source"], at: string): Need[] {
   const out = [...existing];
+  // 算不了的（custom）只能按原话区分："花生过敏"和"芒果过敏"是两条
+  const sigOf = (x: Pick<Need, "dim" | "rule" | "text">) => `${x.dim}|${JSON.stringify(x.rule)}${x.rule.t === "custom" ? `|${x.text}` : ""}`;
   for (const n of incoming) {
-    const sig = `${n.dim}|${JSON.stringify(n.rule)}`;
-    const i = out.findIndex((x) => `${x.dim}|${JSON.stringify(x.rule)}` === sig);
+    const i = out.findIndex((x) => sigOf(x) === sigOf(n));
     // 同一条需求再说一遍：取更强的那个说法
     if (i >= 0) {
       if (n.strength > out[i].strength || (n.kind === "hard" && out[i].kind === "soft")) out[i] = { ...out[i], ...n };
       continue;
     }
-    out.push({ ...n, id: `n${out.length + 1}-${n.rule.t}`, source, at });
+    // 删过需求之后长度会变短，编号要避开已有的
+    let k = out.length + 1;
+    while (out.some((x) => x.id === `n${k}-${n.rule.t}`)) k++;
+    out.push({ ...n, id: `n${k}-${n.rule.t}`, source, at });
   }
   return out.slice(-20);
 }

@@ -127,11 +127,16 @@ export type OnboardingInput = {
   avatarName?: string;
   places?: NonNullable<Profile["places"]>;
   transport?: Transport;
+  transports?: Transport[];
   floors?: OnboardFloor[];
+  /** 自己写的底线 */
+  customFloors?: string[];
   /** 选了"门禁"时几点 */
   homeBy?: string;
   /** 选了"过敏"时对什么过敏 */
   allergy?: string;
+  /** 选了"路程上限"时最多几分钟 */
+  commuteMax?: number;
   /** 平时人均；0 = 不太在意 */
   budget?: number;
   /** 滑卡：活动 key -> 表态（右滑 like / 上滑 love / 左滑 pass） */
@@ -139,6 +144,28 @@ export type OnboardingInput = {
 };
 
 const SWIPE_TASTE: Record<SwipeVerdict, number> = { love: 1, like: 0.5, pass: -0.5 };
+
+/** 建档写的底线事实（入局时由 prefillAvatar 转成这次的硬需求）；noAlcohol / allergy / body:膝盖不好 是旧档案的写法 */
+export function isFloorFact(key: string): boolean {
+  return key.startsWith("floor:") || key === "noAlcohol" || key === "allergy" || key === "body:膝盖不好";
+}
+
+function setTransports(p: Profile, ts: Transport[], now: Date): void {
+  const list = [...new Set(ts)].slice(0, 5);
+  p.transports = list;
+  delete p.transport;
+  setSaid(p, "transport", `常用交通：${list.map((t) => TRANSPORT_LABEL[t]).join("、")}`, now);
+}
+
+/** 自己写的底线整组替换（原话就是底线的文字） */
+function setCustomFloors(p: Profile, texts: string[], now: Date): void {
+  forget(p, "floor:custom:*");
+  texts
+    .map((t) => t.trim().slice(0, 40))
+    .filter(Boolean)
+    .slice(0, 3)
+    .forEach((t, i) => setSaid(p, `floor:custom:${i + 1}`, t, now));
+}
 export const TRANSPORT_LABEL: Record<Transport, string> = { metro: "地铁公交", drive: "开车", taxi: "打车", bike: "骑车", walk: "走路" };
 
 /**
@@ -152,26 +179,40 @@ export function applyOnboarding(prev: Profile | null, pid: string, input: Onboar
     p.places = input.places.slice(0, 4);
     if (!p.lastLocation) p.lastLocation = { ...input.places[0].place };
   }
-  if (input.transport) {
-    p.transport = input.transport;
-    setSaid(p, "transport", `常用交通：${TRANSPORT_LABEL[input.transport]}`, now);
-  }
-  for (const f of [...new Set(input.floors ?? [])].slice(0, 3)) {
-    if (f === "homeBy" && input.homeBy) {
-      p.usualHomeBy = input.homeBy;
-      setSaid(p, "homeBy", `${input.homeBy} 前必须回去`, now);
-    } else if (f === "清真" || f === "素食") {
-      p.dietTags = [...new Set([...p.dietTags, f])];
-      setSaid(p, `diet:${f}`, `只能吃${f}`, now);
-    } else if (f === "过敏") {
-      const what = input.allergy?.trim().slice(0, 20);
-      setSaid(p, "allergy", what ? `对${what}过敏` : "有过敏的东西", now);
-    } else if (f === "膝盖不好") {
-      p.body = [...new Set([...(p.body ?? []), "膝盖不好"])];
-      setSaid(p, "body:膝盖不好", "膝盖不好", now);
-    } else if (f === "不喝酒") {
-      setSaid(p, "noAlcohol", "不喝酒", now);
+  const transports = input.transports?.length ? input.transports : input.transport ? [input.transport] : undefined;
+  if (transports) setTransports(p, transports, now);
+  if (input.floors || input.customFloors) {
+    // 这一屏重新选过：换掉上次建档写的底线（门禁时间、清真素食在各自的字段里，下面会重写）
+    p.facts = (p.facts ?? []).filter((f) => !(f.source === "said" && isFloorFact(f.key)));
+    let n = 0;
+    for (const f of [...new Set(input.floors ?? [])]) {
+      if (n >= 3) break;
+      if (f === "homeBy" && input.homeBy) {
+        p.usualHomeBy = input.homeBy;
+        setSaid(p, "homeBy", `${input.homeBy} 前必须回去`, now);
+      } else if (f === "清真" || f === "素食") {
+        p.dietTags = [...new Set([...p.dietTags, f])];
+        setSaid(p, `diet:${f}`, `只能吃${f}`, now);
+      } else if (f === "不吃辣") {
+        p.dietTags = [...new Set([...p.dietTags, f])];
+        setSaid(p, "floor:不吃辣", "一点辣都不能吃", now);
+      } else if (f === "过敏") {
+        // 不写对什么过敏，分身没法守：不记
+        const what = input.allergy?.trim().slice(0, 20);
+        if (!what) continue;
+        setSaid(p, "floor:过敏", `对${what}过敏`, now);
+      } else if (f === "commute") {
+        if (!input.commuteMax) continue;
+        setSaid(p, "floor:commute", `路上最多 ${input.commuteMax} 分钟`, now);
+      } else if (f === "剧烈运动") {
+        p.body = [...new Set([...(p.body ?? []), "不能剧烈运动"])];
+        setSaid(p, "floor:剧烈运动", "不能剧烈运动", now);
+      } else if (f === "不喝酒") {
+        setSaid(p, "floor:不喝酒", "不喝酒", now);
+      } else continue;
+      n++;
     }
+    setCustomFloors(p, (input.customFloors ?? []).slice(0, Math.max(0, 3 - n)), now);
   }
   if (input.budget !== undefined) {
     if (input.budget > 0) {
@@ -301,6 +342,9 @@ export type ProfileEdit = {
   style?: AvatarStyle | null;
   places?: NonNullable<Profile["places"]> | null;
   transport?: Transport | null;
+  transports?: Transport[];
+  /** 自己写的底线（整组替换） */
+  customFloors?: string[];
   usualHomeBy?: string | null;
   dietTags?: DietTag[];
   body?: string[];
@@ -336,6 +380,15 @@ export function editProfile(prev: Profile | null, pid: string, e: ProfileEdit, n
       forget(p, "transport");
     }
   }
+  if (e.transports) {
+    if (e.transports.length) setTransports(p, e.transports, now);
+    else {
+      delete p.transports;
+      delete p.transport;
+      forget(p, "transport");
+    }
+  }
+  if (e.customFloors) setCustomFloors(p, e.customFloors, now);
   if (e.usualHomeBy !== undefined) {
     if (e.usualHomeBy) {
       p.usualHomeBy = e.usualHomeBy;
@@ -374,7 +427,11 @@ export function editProfile(prev: Profile | null, pid: string, e: ProfileEdit, n
     // 忘掉一条说过的事，对应的档案字段也一起清掉（不然下次又被预填回来）
     if (k === "homeBy") delete p.usualHomeBy;
     else if (k === "budget") delete p.typicalBudget;
-    else if (k === "transport") delete p.transport;
+    else if (k === "transport") {
+      delete p.transport;
+      delete p.transports;
+    } else if (k === "floor:不吃辣") p.dietTags = p.dietTags.filter((t) => t !== "不吃辣");
+    else if (k === "floor:剧烈运动") p.body = (p.body ?? []).filter((x) => x !== "不能剧烈运动");
     else if (k.startsWith("diet:")) p.dietTags = p.dietTags.filter((t) => t !== k.slice(5));
     else if (k.startsWith("body:")) p.body = (p.body ?? []).filter((b) => b !== k.slice(5));
   }

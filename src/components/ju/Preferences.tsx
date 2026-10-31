@@ -121,6 +121,7 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [floorWarn, setFloorWarn] = useState(false);
+  const [ownText, setOwnText] = useState<{ hard: string; soft: string }>({ hard: "", soft: "" });
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [same, setSame] = useState(() => isReturning(me, profile));
   const litTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -222,6 +223,51 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
       setBusy(false);
     }
   };
+
+  /** 自己写一条底线 / 想要：先存卡片上改过的，再交给服务端转成规则；新的格子亮一下 */
+  const addOwn = async (kind: "hard" | "soft") => {
+    const t = ownText[kind].trim();
+    if (busy || !t) return;
+    if (kind === "hard" && floors.length >= MAX_FLOORS) return setFloorWarn(true);
+    setBusy(true);
+    setError(null);
+    try {
+      if (dirty && !pending) await actions.chat(bodyOf(final, "review"));
+      const r = await actions.chat({ addNeed: { text: t, kind }, preferenceAction: "review" });
+      const next = draftFor(state, r.me, profile);
+      flash(litCells(draft, next));
+      setDraft(next);
+      if (kind === "hard") setFloorsTouched(true);
+      setDirty(false);
+      setSame(false);
+      setOwnText((o) => ({ ...o, [kind]: "" }));
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const removeOwn = async (id: string) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (dirty && !pending) await actions.chat(bodyOf(final, "review"));
+      const r = await actions.chat({ removeNeed: id, preferenceAction: "review" });
+      setDraft(draftFor(state, r.me, profile));
+      setDirty(false);
+      setSame(false);
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  // 本人亲手写的（卡片 / 建档里写的），可以删
+  const ownIds = new Set((me.private?.needs ?? []).filter((n) => n.source === "widget" && !CARE_TAGS.some((t) => t.match?.(n))).map((n) => n.id));
+  const ownWants = (me.private?.needs ?? []).filter((n) => ownIds.has(n.id) && n.kind === "soft");
+  // 算不了的（"芒果过敏"）：如实标出来
+  const customKeys = new Set((me.private?.needs ?? []).filter((n) => n.rule.t === "custom").map((n) => n.id));
 
   const toggleFloor = (key: string) => {
     setFloorsTouched(true);
@@ -359,15 +405,29 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
                       <li key={o.key}>
                         <label className={`flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border-2 px-3 py-2 text-[14px] ${on ? "border-ink bg-cinnabar-soft font-black" : "border-line bg-card"}`}>
                           <input type="checkbox" className="size-4 shrink-0 accent-[var(--color-cinnabar)]" checked={on} onChange={() => toggleFloor(o.key)} />
-                          <span className="min-w-0 flex-1 break-words">{o.text}</span>
+                          <span className="min-w-0 flex-1 break-words">
+                            {o.text}
+                            {customKeys.has(o.key) && <span className="block text-[11px] font-normal text-ink-faint">局长没法按它挑店，到店记得跟店家说一声</span>}
+                          </span>
                           {!on && o.hard && <span className="shrink-0 text-[11px] text-ink-faint">降为想要</span>}
                           {!on && !o.hard && <span className="shrink-0 text-[11px] text-ink-faint">设为底线</span>}
+                          {ownIds.has(o.key) && (
+                            <button type="button" aria-label={`删掉：${o.text}`} className="-my-1 min-h-9 min-w-9 shrink-0 text-ink-soft" onClick={(e) => { e.preventDefault(); void removeOwn(o.key); }}>✕</button>
+                          )}
                         </label>
                       </li>
                     );
                   })}
                 </ul>
               )}
+              <OwnInput
+                value={ownText.hard}
+                onChange={(v) => setOwnText((o) => ({ ...o, hard: v }))}
+                onAdd={() => void addOwn("hard")}
+                busy={busy}
+                placeholder="自己写一条，比如：对芒果过敏、十点前必须到家"
+                cta="加一条底线"
+              />
               {(floorWarn || demoted.length > 0) && (
                 <p className={`mt-2 text-[12.5px] leading-relaxed ${floorWarn ? "font-bold text-cinnabar" : "text-ink-soft"}`}>底线越少，分身越好谈；真正必须的事 {MAX_FLOORS} 条够用。{demoted.length > 0 && !floorWarn ? "没勾的会当成最用力的「想要」。" : ""}</p>
               )}
@@ -420,6 +480,24 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
               ) : (
                 <p className="text-[13px] text-ink-faint">没什么特别想要的——分身会照大家的意思来。</p>
               )}
+              {ownWants.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {ownWants.map((n) => (
+                    <li key={n.id} className="flex items-center gap-2 text-[13px]">
+                      <span className="min-w-0 flex-1 break-words">✏️ {n.text}{n.rule.t === "custom" ? <span className="ml-1 text-[11px] text-ink-faint">（局长记下了，但没法算进方案）</span> : null}</span>
+                      <button type="button" aria-label={`删掉：${n.text}`} className="min-h-9 min-w-9 shrink-0 text-ink-soft" onClick={() => void removeOwn(n.id)}>✕</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <OwnInput
+                value={ownText.soft}
+                onChange={(v) => setOwnText((o) => ({ ...o, soft: v }))}
+                onAdd={() => void addOwn("soft")}
+                busy={busy}
+                placeholder="自己写一条，比如：想吃日料、想有个能拍照的地方"
+                cta="加一条想要"
+              />
             </MandateBlock>
           </div>
         </section>
@@ -566,6 +644,31 @@ function MandateBlock({ title, hint, children }: { title: string; hint: string; 
         <span className="text-[11.5px] text-ink-faint">{hint}</span>
       </div>
       {children}
+    </div>
+  );
+}
+
+/** 授权书上"自己写一条"的输入框（回车也能加） */
+function OwnInput({ value, onChange, onAdd, busy, placeholder, cta }: { value: string; onChange: (v: string) => void; onAdd: () => void; busy: boolean; placeholder: string; cta: string }) {
+  return (
+    <div className="mt-2 flex gap-2">
+      <input
+        className="field min-w-0 flex-1 px-3 py-2 text-[13.5px]"
+        maxLength={40}
+        value={value}
+        placeholder={placeholder}
+        aria-label={cta}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            onAdd();
+          }
+        }}
+      />
+      <Button size="sm" variant="secondary" className="shrink-0 whitespace-nowrap" disabled={busy || !value.trim()} onClick={onAdd}>
+        {cta}
+      </Button>
     </div>
   );
 }

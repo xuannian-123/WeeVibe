@@ -96,12 +96,17 @@ export const onboardingBody = z.object({
   avatarName: z.string().trim().max(12).optional(),
   places: z.array(profilePlace).max(4).optional(),
   transport: z.enum(TRANSPORTS).optional(),
+  transports: z.array(z.enum(TRANSPORTS)).max(5).optional(),
   floors: z.array(z.enum(ONBOARD_FLOORS)).max(MAX_FLOORS, `底线最多 ${MAX_FLOORS} 条：底线越少，分身越好谈`).optional(),
+  /** 自己写的底线（和上面的加起来最多 3 条） */
+  customFloors: z.array(z.string().trim().min(1).max(40)).max(MAX_FLOORS).optional(),
   homeBy: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式 HH:mm").optional(),
   allergy: z.string().trim().max(20).optional(),
+  /** 选了"路程上限"时最多几分钟 */
+  commuteMax: z.number().int().min(5).max(180).optional(),
   budget: z.number().min(0).max(100000).optional(),
   swipes: z.record(activityKey, z.enum(["love", "like", "pass"])).optional(),
-});
+}).refine((v) => (v.floors?.length ?? 0) + (v.customFloors?.length ?? 0) <= MAX_FLOORS, { message: `底线最多 ${MAX_FLOORS} 条：底线越少，分身越好谈` });
 
 export const profileEditBody = z
   .object({
@@ -109,6 +114,9 @@ export const profileEditBody = z
     style: z.enum(STYLES).nullable().optional(),
     places: z.array(profilePlace).max(4).nullable().optional(),
     transport: z.enum(TRANSPORTS).nullable().optional(),
+    transports: z.array(z.enum(TRANSPORTS)).max(5).optional(),
+    /** 自己写的底线（整组替换） */
+    customFloors: z.array(z.string().trim().min(1).max(40)).max(MAX_FLOORS).optional(),
     usualHomeBy: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式 HH:mm").nullable().optional(),
     dietTags: z.array(z.enum(["不吃辣", "素食", "清真", "不吃牛肉", "不吃海鲜", "不吃内脏"])).max(6).optional(),
     body: z.array(z.string().trim().min(1).max(20)).max(5).optional(),
@@ -149,6 +157,10 @@ export const chatBody = z
     mandate: mandateInput.optional(),
     /** 首次建档（写进本人档案，并按新档案重新预填这次的卡片） */
     onboarding: onboardingBody.optional(),
+    /** 授权书上自己写一条：hard = 底线，soft = 想要 */
+    addNeed: z.object({ text: z.string().trim().min(1).max(40), kind: z.enum(["hard", "soft"]) }).optional(),
+    /** 删掉自己写的一条（need id） */
+    removeNeed: z.string().min(1).max(60).optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined && x !== ""), { message: "说点什么吧" });
 

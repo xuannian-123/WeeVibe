@@ -81,6 +81,10 @@ export function AvatarProfile() {
   const said = new Map(saidFacts(profile).map((f) => [f.key, f]));
   const tastes = Object.entries(profile.activityTastes ?? {}).filter(([k]) => activityOf(k));
   const ed = (k: string) => editing === k;
+  const transports = profile.transports ?? (profile.transport ? [profile.transport] : []);
+  // 建档选的底线 + 自己写的（门禁、忌口在各自那一行）
+  const floorFacts = saidFacts(profile).filter((f) => f.key.startsWith("floor:") || ["noAlcohol", "allergy"].includes(f.key));
+  const customFloorTexts = floorFacts.filter((f) => f.key.startsWith("floor:custom:")).map((f) => f.text);
 
   return (
     <div className="mt-4 space-y-4">
@@ -124,12 +128,20 @@ export function AvatarProfile() {
             </ul>
             <p className="mt-1 text-[12px] text-ink-faint">新的出发地在入局卡片里选一次就会记住。</p>
           </Row>
-          <Row label="常用交通" value={TRANSPORTS.find(([t]) => t === profile.transport)?.[1]} editing={ed("transport")} onEdit={() => setEditing("transport")} onDelete={() => save({ transport: null }, "删掉了")}>
+          <Row
+            label="常用交通"
+            value={transports.length ? TRANSPORTS.filter(([t]) => transports.includes(t)).map(([, l]) => l).join("、") : undefined}
+            editing={ed("transport")}
+            onEdit={() => setEditing("transport")}
+            onDelete={() => save({ transports: [] }, "删掉了")}
+          >
             <div className="flex flex-wrap gap-2">
-              {TRANSPORTS.map(([t, label]) => (
-                <Chip key={t} selected={profile.transport === t} onClick={() => void save({ transport: t })} className="px-3 text-[14px]">{label}</Chip>
-              ))}
+              {TRANSPORTS.map(([t, label]) => {
+                const on = transports.includes(t);
+                return <Chip key={t} selected={on} onClick={() => void save({ transports: on ? transports.filter((x) => x !== t) : [...transports, t] })} className="px-3 text-[14px]">{label}</Chip>;
+              })}
             </div>
+            <p className="mt-1 text-[12px] text-ink-faint">可以多选。</p>
           </Row>
           <Row label="门禁" value={profile.usualHomeBy ? `${profile.usualHomeBy} 前回去` : undefined} editing={ed("homeBy")} onEdit={() => setEditing("homeBy")} onDelete={() => save({ usualHomeBy: null }, "删掉了")}>
             <TimeEdit initial={profile.usualHomeBy ?? "22:30"} onSave={(v) => save({ usualHomeBy: v })} busy={busy} />
@@ -152,9 +164,13 @@ export function AvatarProfile() {
           <Row label="平时人均" value={profile.typicalBudget ? `¥${profile.typicalBudget} 左右` : said.get("budget")?.text} editing={ed("budget")} onEdit={() => setEditing("budget")} onDelete={() => save({ typicalBudget: null }, "删掉了")}>
             <NumberEdit initial={profile.typicalBudget ?? 100} onSave={(v) => save({ typicalBudget: v })} busy={busy} />
           </Row>
-          {(["noAlcohol", "allergy"] as const).filter((k) => said.has(k)).map((k) => (
-            <Row key={k} label={k === "noAlcohol" ? "酒" : "过敏"} value={said.get(k)!.text} editing={false} onDelete={() => save({ forget: [k] }, "删掉了")} />
+          {floorFacts.map((f) => (
+            <Row key={f.key} label="底线" value={f.text} editing={false} onDelete={() => save({ forget: [f.key] }, "删掉了")} />
           ))}
+          <Row label={floorFacts.length ? "加一条底线" : "底线"} value={undefined} editing={ed("floor")} onEdit={() => setEditing("floor")} onDelete={() => undefined}>
+            <TextEdit initial="" max={40} onSave={(v) => (v.trim() ? save({ customFloors: [...customFloorTexts, v.trim()].slice(0, 3) }) : Promise.resolve())} busy={busy} />
+            <p className="mt-1 text-[12px] text-ink-faint">比如：对芒果过敏、不去酒吧。每次入局分身都会死守，最多 3 条（门禁、清真素食之外）。</p>
+          </Row>
           <Row
             label="活动口味"
             value={tastes.length ? tasteLines(tastes) : undefined}

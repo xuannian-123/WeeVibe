@@ -841,7 +841,10 @@ export type Profile = {
   style?: AvatarStyle;
   /** 常用出发地（可多个） */
   places?: { kind: "home" | "work" | "school" | "other"; place: Place }[];
+  /** 旧档案的单选交通；新的写 transports */
   transport?: Transport;
+  /** 常用交通（可多选） */
+  transports?: Transport[];
   /** 身体限制，如 "膝盖不好"（私密；确认为底线时进授权书） */
   body?: string[];
   /** 活动口味：ActivityDef.key -> -1..1（建档滑卡 + 每次局学到的） */

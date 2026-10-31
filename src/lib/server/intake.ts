@@ -20,7 +20,7 @@ import type {
   SwipeVerdict,
 } from "../types";
 import { activityKeyOfWord } from "../client/activities";
-import { activityNeed, CARE_TAGS, careTag, floorCandidates, GIVE_BY_STYLE, HARD_DIET, MOOD_LABEL } from "../client/mandate";
+import { activityNeed, CARE_TAGS, careTag, chosenFloors, floorCandidates, GIVE_BY_STYLE, HARD_DIET, MAX_FLOORS, MOOD_LABEL } from "../client/mandate";
 import { findByToken, quorumHidden, safeEqual, selfMember, visibleMembers } from "./firewall";
 import { HttpError } from "./http";
 import { AVATARS, isAdminToken, loadJu, loadMembers, mutateJu, type MutateCtx, type Viewer } from "./ju";
@@ -35,8 +35,9 @@ import {
   recomputeMatches,
   setMemberStatus,
 } from "./ju-core";
+import { customNeed, type CustomNeed } from "../planner/customNeed";
 import { materializeNeeds } from "../planner/needs";
-import { applyOnboarding, commuteLimitOf, getProfile, learnedFacts, learnFromMember, saidFacts, saveProfile } from "./profile";
+import { applyOnboarding, commuteLimitOf, getProfile, isFloorFact, learnedFacts, learnFromMember, saidFacts, saveProfile } from "./profile";
 import type { ChatBody, JoinInput } from "./schemas";
 import { prefillKnow } from "./social";
 
@@ -184,13 +185,14 @@ export function prefillAvatar(m: Member, profile: Profile | undefined, now: Date
   if (said.has("homeBy") && Object.values(p.availability).some((a) => a.homeBy)) confirm("homeBy");
   for (const t of HARD_DIET) if (said.has(`diet:${t}`) && p.dietTags.includes(t)) confirm(`diet:${t}`);
   const hard: Omit<Need, "id" | "at" | "source">[] = [];
-  if (said.has("body:膝盖不好")) hard.push(careNeed("knee", "hard")!);
-  if (said.has("noAlcohol")) {
-    hard.push(careNeed("noalcohol", "hard")!);
-    p.billFacts = { ...p.billFacts, noAlcohol: true };
+  // 建档写的底线（选的和自己写的）：按原话转成这次的规则；门禁、忌口写进各自的字段
+  for (const f of saidFacts(profile).filter((x) => isFloorFact(x.key))) {
+    const cn = customNeed(f.text, "hard");
+    hard.push(...cn.needs);
+    applyCustomFields(p, cn);
+    if (cn.homeBy) confirm("homeBy");
+    for (const t of cn.dietTags) if (HARD_DIET.includes(t)) confirm(`diet:${t}`);
   }
-  const allergy = saidFacts(profile).find((f) => f.key === "allergy");
-  if (allergy) hard.push({ dim: "food", kind: "hard", strength: 3, rule: { t: "custom" }, text: allergy.text });
   const soft: Omit<Need, "id" | "at" | "source">[] = [];
   if (learnedFacts(profile, now).some((f) => f.key === "quiet" && f.confidence >= 0.3)) soft.push(careNeed("quiet")!);
   const commute = commuteLimitOf(profile, now);
@@ -199,6 +201,13 @@ export function prefillAvatar(m: Member, profile: Profile | undefined, now: Date
   if (hard.length || soft.length) p.needs = materializeNeeds(p.needs ?? [], [...hard, ...soft], "profile", at);
   for (const n of p.needs ?? []) if (!before.has(n.id) && n.kind === "hard") confirm(n.id);
   if (!p.mandate) p.mandate = draftMandate(p, profile);
+}
+
+/** 自己写的一条里，落到忌口 / 门禁 / 不喝酒（分账）的部分 */
+function applyCustomFields(p: MemberPrivate, cn: CustomNeed): void {
+  if (cn.dietTags.length) p.dietTags = [...new Set([...p.dietTags, ...cn.dietTags])];
+  if (cn.homeBy) for (const d of Object.keys(p.availability)) if (!p.availability[d].homeBy) p.availability[d] = { ...p.availability[d], homeBy: cn.homeBy };
+  if (cn.needs.some((n) => n.rule.t === "noAlcohol")) p.billFacts = { ...p.billFacts, noAlcohol: true };
 }
 
 /** 授权书卡片提交的 v6 字段（完整选择：没出现的标签 / 活动 = 取消）。返回是否改了排方案的输入 */
@@ -235,6 +244,36 @@ function applyCard(ctx: MutateCtx, me: Member, body: ChatBody, profile: Profile 
       if (on.has(t.key) !== has) changed = true;
     }
     if (!p.billFacts.noAlcohol) delete p.billFacts.noAlcohol;
+  }
+  // 授权书上自己写一条：底线（hard）/ 想要（soft）。原话就是这条需求的文字
+  if (body.addNeed) {
+    const hardOne = body.addNeed.kind === "hard";
+    if (hardOne && chosenFloors(p).length >= MAX_FLOORS) throw new HttpError(400, `底线最多 ${MAX_FLOORS} 条：先去掉一条，或者把它加到"想要"里`);
+    const cn = customNeed(body.addNeed.text, body.addNeed.kind);
+    const before = new Set((p.needs ?? []).map((n) => n.id));
+    if (cn.needs.length) p.needs = materializeNeeds(p.needs ?? [], cn.needs, "widget", at);
+    applyCustomFields(p, cn);
+    if (hardOne) {
+      const keys = [
+        ...(p.needs ?? []).filter((n) => !before.has(n.id) && n.kind === "hard").map((n) => n.id),
+        ...(cn.homeBy ? ["homeBy"] : []),
+        ...cn.dietTags.filter((t) => HARD_DIET.includes(t)).map((t) => `diet:${t}`),
+      ];
+      p.confirmed = [...new Set([...(p.confirmed ?? []), ...keys])];
+      const m = draftMandate(p, profile);
+      m.floors = [...new Set([...chosenFloors(p).filter((k) => !keys.includes(k)), ...keys])].slice(0, MAX_FLOORS);
+      p.mandate = m;
+    }
+    changed = true;
+  }
+  if (body.removeNeed) {
+    const id = body.removeNeed;
+    if ((p.needs ?? []).some((n) => n.id === id)) {
+      p.needs = (p.needs ?? []).filter((n) => n.id !== id);
+      p.confirmed = (p.confirmed ?? []).filter((k) => k !== id);
+      if (p.mandate) p.mandate = { ...p.mandate, floors: p.mandate.floors.filter((k) => k !== id) };
+      changed = true;
+    }
   }
   if (body.mandate) {
     const m = draftMandate(p, profile);

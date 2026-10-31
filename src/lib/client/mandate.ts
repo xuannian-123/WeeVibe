@@ -25,7 +25,8 @@ export const MOOD_LABEL: Record<Mood, { text: string; emoji: string }> = {
 };
 
 /** 建档的底线选项（一点即选，最多 3 条） */
-export const ONBOARD_FLOORS = ["homeBy", "清真", "素食", "过敏", "膝盖不好", "不喝酒"] as const;
+// 按常见程度排：门禁、不喝酒、不吃辣、路程上限、过敏（要写对什么过敏）、身体原因；清真 / 素食放后面。其余的自己写
+export const ONBOARD_FLOORS = ["homeBy", "不喝酒", "不吃辣", "commute", "过敏", "剧烈运动", "清真", "素食"] as const;
 export type OnboardFloor = (typeof ONBOARD_FLOORS)[number];
 
 // ---------------------------------------------------------------- 讲究标签 ↔ 需求

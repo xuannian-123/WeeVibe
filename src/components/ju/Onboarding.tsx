@@ -16,7 +16,16 @@ type PlaceKind = NonNullable<Profile["places"]>[number]["kind"];
 
 const KIND_LABEL: Record<PlaceKind, string> = { home: "🏠 家", work: "🏢 公司", school: "🎓 学校", other: "📍 其他" };
 const TRANSPORTS: [Transport, string][] = [["metro", "🚇 地铁公交"], ["taxi", "🚕 打车"], ["drive", "🚗 开车"], ["bike", "🚲 骑车"], ["walk", "🚶 走路"]];
-const FLOOR_LABEL: Record<OnboardFloor, string> = { homeBy: "⏰ 有门禁", 清真: "☪️ 清真", 素食: "🥬 素食", 过敏: "🤧 有过敏", 膝盖不好: "🦵 膝盖不好", 不喝酒: "🚫🍺 不喝酒" };
+const FLOOR_LABEL: Record<OnboardFloor, string> = {
+  homeBy: "⏰ 几点前必须到家",
+  不喝酒: "🚫🍺 不喝酒",
+  不吃辣: "🌶️ 一点辣都不能吃",
+  commute: "🚇 路上不能太久",
+  过敏: "🤧 有过敏",
+  剧烈运动: "🦵 不能剧烈运动",
+  清真: "☪️ 清真",
+  素食: "🥬 素食",
+};
 const BUDGETS: [number, string][] = [[50, "¥50 左右"], [100, "¥100 左右"], [200, "¥200 左右"], [0, "不太在意"]];
 const STEPS = ["起个名", "常从哪出发", "底线", "平时花多少", "喜欢玩什么"] as const;
 const SWIPE_PX = 70;
@@ -40,8 +49,11 @@ export function OnboardingView({
   const [name, setName] = useState(profile?.avatarName ?? `${me.name}的分身`);
   const [places, setPlaces] = useState<NonNullable<Profile["places"]>>(profile?.places ?? (me.location ? [{ kind: "home", place: me.location }] : []));
   const [kind, setKind] = useState<PlaceKind>(places.length ? "work" : "home");
-  const [transport, setTransport] = useState<Transport | undefined>(profile?.transport);
+  const [transports, setTransports] = useState<Transport[]>(profile?.transports ?? (profile?.transport ? [profile.transport] : []));
   const [floors, setFloors] = useState<OnboardFloor[]>([]);
+  const [customFloors, setCustomFloors] = useState<string[]>([]);
+  const [customText, setCustomText] = useState("");
+  const [commuteMax, setCommuteMax] = useState(40);
   const [floorHint, setFloorHint] = useState(false);
   const [homeBy, setHomeBy] = useState(profile?.usualHomeBy ?? "22:30");
   const [allergy, setAllergy] = useState("");
@@ -55,14 +67,29 @@ export function OnboardingView({
 
   const realName = me.name.trim().length >= 2 && name.includes(me.name.trim());
 
+  const floorCount = floors.length + customFloors.length;
   const toggleFloor = (f: OnboardFloor) => {
     touch(2);
     if (floors.includes(f)) {
       setFloors(floors.filter((x) => x !== f));
       setFloorHint(false);
-    } else if (floors.length >= MAX_FLOORS) setFloorHint(true);
+    } else if (floorCount >= MAX_FLOORS) setFloorHint(true);
     else setFloors([...floors, f]);
   };
+  const addCustomFloor = () => {
+    const t = customText.trim();
+    if (!t) return;
+    touch(2);
+    if (floorCount >= MAX_FLOORS) return setFloorHint(true);
+    if (!customFloors.includes(t)) setCustomFloors([...customFloors, t]);
+    setCustomText("");
+  };
+  const toggleTransport = (t: Transport) => {
+    touch(1);
+    setTransports(transports.includes(t) ? transports.filter((x) => x !== t) : [...transports, t]);
+  };
+  // 过敏不写对什么、路程上限不写几分钟，分身没法守：不能下一步
+  const floorMissing = touched.has(2) && floors.includes("过敏") && !allergy.trim() ? "写一下对什么过敏，分身才守得住" : null;
 
   const finish = async (finalSwipes = swipes) => {
     if (busy) return;
@@ -72,12 +99,14 @@ export function OnboardingView({
     if (touched.has(0) || !profile?.avatarName) body.avatarName = name.trim();
     if (touched.has(1)) {
       if (places.length) body.places = places;
-      if (transport) body.transport = transport;
+      if (transports.length) body.transports = transports;
     }
-    if (touched.has(2) && floors.length) {
+    if (touched.has(2)) {
       body.floors = floors;
+      if (customFloors.length) body.customFloors = customFloors;
       if (floors.includes("homeBy")) body.homeBy = homeBy;
       if (floors.includes("过敏") && allergy.trim()) body.allergy = allergy.trim();
+      if (floors.includes("commute")) body.commuteMax = commuteMax;
     }
     if (budget !== undefined) body.budget = budget;
     if (Object.keys(finalSwipes).length) body.swipes = finalSwipes;
@@ -90,7 +119,10 @@ export function OnboardingView({
     }
   };
 
-  const next = () => (step < STEPS.length - 1 ? setStep(step + 1) : void finish());
+  const next = () => {
+    if (step === 2 && floorMissing) return;
+    return step < STEPS.length - 1 ? setStep(step + 1) : void finish();
+  };
 
   return (
     <div className="space-y-4 pb-10">
@@ -177,10 +209,10 @@ export function OnboardingView({
               </div>
             )}
             <div>
-              <p className="mb-2 text-[14px] font-black">常用交通</p>
+              <p className="mb-2 text-[14px] font-black">常用交通 <span className="text-[12px] font-bold text-ink-faint">可以多选</span></p>
               <div className="flex flex-wrap gap-2">
                 {TRANSPORTS.map(([t, label]) => (
-                  <Chip key={t} selected={transport === t} onClick={() => { setTransport(t); touch(1); }} className="px-3 text-[14px]">{label}</Chip>
+                  <Chip key={t} selected={transports.includes(t)} onClick={() => toggleTransport(t)} className="px-3 text-[14px]">{label}</Chip>
                 ))}
               </div>
             </div>
@@ -199,9 +231,40 @@ export function OnboardingView({
                 <input type="time" className="field w-32 px-2 py-2" value={homeBy} onChange={(e) => setHomeBy(e.target.value)} />
               </label>
             )}
-            {floors.includes("过敏") && (
-              <input className="field text-[14px]" maxLength={20} placeholder="对什么过敏？比如：花生、海鲜" value={allergy} onChange={(e) => setAllergy(e.target.value)} aria-label="过敏的东西" />
+            {floors.includes("commute") && (
+              <label className="flex items-center justify-between gap-3 text-[14px] font-bold">单程最多
+                <span className="flex items-center gap-2">
+                  <input type="number" inputMode="numeric" min={5} max={180} step={5} className="field w-20 px-2 py-2 text-center" value={commuteMax} onChange={(e) => setCommuteMax(Math.max(5, Math.min(180, Number(e.target.value) || 0)))} />
+                  分钟
+                </span>
+              </label>
             )}
+            {floors.includes("过敏") && (
+              <input className="field text-[14px]" maxLength={20} placeholder="对什么过敏？比如：花生、海鲜、芒果" value={allergy} onChange={(e) => setAllergy(e.target.value)} aria-label="过敏的东西" />
+            )}
+            {customFloors.length > 0 && (
+              <ul className="space-y-1.5">
+                {customFloors.map((t) => (
+                  <li key={t} className="flex items-center gap-2 rounded-xl border-2 border-ink bg-cinnabar/10 px-3 py-2 text-[14px] font-bold">
+                    <span className="min-w-0 flex-1 break-words">✏️ {t}</span>
+                    <button type="button" aria-label={`删掉：${t}`} className="min-h-9 min-w-9 text-ink-soft" onClick={() => { setCustomFloors(customFloors.filter((x) => x !== t)); setFloorHint(false); }}>✕</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex gap-2">
+              <input
+                className="field min-w-0 flex-1 text-[14px]"
+                maxLength={40}
+                placeholder="自己写一条，比如：不去酒吧、腰不好不能久坐"
+                value={customText}
+                onChange={(e) => setCustomText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomFloor(); } }}
+                aria-label="自己写一条底线"
+              />
+              <Button size="sm" variant="secondary" onClick={addCustomFloor} disabled={!customText.trim()}>加上</Button>
+            </div>
+            {floorMissing && <p role="alert" className="text-[12.5px] font-bold text-cinnabar">{floorMissing}</p>}
             <p className={`text-[12.5px] leading-relaxed ${floorHint ? "font-bold text-cinnabar" : "text-ink-faint"}`}>
               {floorHint ? `最多 ${MAX_FLOORS} 条：底线越少，分身越好谈。先去掉一条再选。` : `最多 ${MAX_FLOORS} 条。没有就跳过——其余的事分身都可以商量。`}
             </p>

@@ -171,6 +171,10 @@ export type ChatBody =
       tags?: string[];
       mandate?: { style: AvatarStyle; give?: Give; floors: string[] };
       onboarding?: OnboardingBody;
+      /** 授权书上自己写一条：hard = 底线，soft = 想要 */
+      addNeed?: { text: string; kind: "hard" | "soft" };
+      /** 删掉自己写的一条（need id） */
+      removeNeed?: string;
     };
 export type ChatResult = ChatReply & { me: Member };
 
@@ -179,9 +183,14 @@ export type OnboardingBody = {
   avatarName?: string;
   places?: NonNullable<Profile["places"]>;
   transport?: Transport;
+  transports?: Transport[];
   floors?: string[];
+  /** 自己写的底线 */
+  customFloors?: string[];
   homeBy?: string;
   allergy?: string;
+  /** 路程上限（分钟） */
+  commuteMax?: number;
   /** 0 = 不太在意 */
   budget?: number;
   swipes?: Record<string, SwipeVerdict>;
@@ -192,6 +201,8 @@ export type ProfileEditBody = {
   style?: AvatarStyle | null;
   places?: NonNullable<Profile["places"]> | null;
   transport?: Transport | null;
+  transports?: Transport[];
+  customFloors?: string[];
   usualHomeBy?: string | null;
   dietTags?: DietTag[];
   body?: string[];

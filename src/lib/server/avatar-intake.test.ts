@@ -10,7 +10,7 @@ import type { JuSpec, Member, Plan, Profile, Proposal } from "../types";
 import { ruleActivities, ruleActivityOpen, ruleIntent, ruleMood, ruleStyle } from "../llm/intent";
 import { bodyOf, draftFor, litCells, missingRequired } from "../client/intakeDraft";
 import { chosenFloors, floorCandidates, GIVE_BY_STYLE, mandateOf, MAX_FLOORS } from "../client/mandate";
-import { factConfidence, moodDefault, needsOnboarding, tastesOf } from "../client/profileFacts";
+import { factConfidence, moodDefault, needsOnboarding, saidFacts, tastesOf } from "../client/profileFacts";
 import { chat, join } from "./intake";
 import { createJu, getState, mutateJu, vote } from "./ju";
 import { feedbackDue, feedbackStatus, submitFeedback } from "./feedback";
@@ -84,7 +84,7 @@ describe("首次建档「认识你的分身」", () => {
     avatarName: "小橘",
     places: [{ kind: "home" as const, place: XJH }],
     transport: "metro" as const,
-    floors: ["homeBy" as const, "清真" as const, "膝盖不好" as const],
+    floors: ["homeBy" as const, "清真" as const, "剧烈运动" as const],
     homeBy: "22:30",
     budget: 120,
     swipes: { hotpot: "love" as const, ktv: "pass" as const, climbing: "like" as const },
@@ -366,7 +366,7 @@ describe("隐私：v6 字段只在本人视图", () => {
     const log = vi.spyOn(console, "log");
     const warn = vi.spyOn(console, "warn");
     const { id, token } = await one("pid-priv-1");
-    await chat(id, token, chatBody.parse({ onboarding: { avatarName: "秘密小橘", floors: ["膝盖不好"] } }));
+    await chat(id, token, chatBody.parse({ onboarding: { avatarName: "秘密小橘", floors: ["剧烈运动"], customFloors: ["对芒果过敏"] } }));
     const secret = "我膝盖不好这周好累只想躺着";
     await chat(id, token, chatBody.parse({ text: secret, preferencesChat: true }));
     await chat(id, token, chatBody.parse({
@@ -374,7 +374,7 @@ describe("隐私：v6 字段只在本人视图", () => {
       mood: "lazy", tags: ["quiet"], mandate: { style: "firm", floors: [] }, preferenceAction: "finish",
     }));
     const pub = JSON.stringify(getState(id, {}));
-    for (const s of ["秘密小橘", "lazy", "mandate", "膝盖", "清真", "quiet", "firm", "avatarLog", "activityOpen"]) expect(pub).not.toContain(s);
+    for (const s of ["秘密小橘", "lazy", "mandate", "膝盖", "剧烈运动", "芒果", "清真", "quiet", "firm", "avatarLog", "activityOpen"]) expect(pub).not.toContain(s);
     // 预算按完整数字查：公开数据里随机的 id / 时间戳可能碰巧含有同样的几个数字
     expect(pub).not.toMatch(/(?<!\d)4271(?!\d)/);
     const self = stateOf(id, token);
@@ -383,5 +383,45 @@ describe("隐私：v6 字段只在本人视图", () => {
     const logged = [...log.mock.calls, ...warn.mock.calls].flat().map(String).join("\n");
     expect(logged).not.toContain(secret);
     expect(logged).not.toContain("秘密小橘");
+  });
+});
+
+// ---------------------------------------------------------------- 自己写的底线 / 想要、交通多选
+
+describe("自己写的底线 / 想要", () => {
+  it("建档：交通可多选；选的底线要写清楚（过敏写对什么、路程写几分钟），自己写的照原话进档案，入局时变成这次的硬需求", async () => {
+    const { id, token, mid } = await one("pid-own-1");
+    await chat(id, token, chatBody.parse({ onboarding: { transports: ["metro", "taxi"], floors: ["过敏", "commute"], allergy: "海鲜", commuteMax: 40, customFloors: ["不去酒吧"] } }));
+    const prof = getProfile("pid-own-1")!;
+    expect(prof.transports).toEqual(["metro", "taxi"]);
+    expect(saidFacts(prof).map((f) => f.text)).toEqual(expect.arrayContaining(["对海鲜过敏", "路上最多 40 分钟", "不去酒吧"]));
+    const p = meOf(mid).private!;
+    const hard = (p.needs ?? []).filter((n) => n.kind === "hard");
+    expect(hard.map((n) => n.rule.t)).toEqual(expect.arrayContaining(["avoidCategory", "maxCommute"]));
+    expect(p.dietTags).toContain("不吃海鲜");
+    expect(mandateOf(meOf(mid)).floors.map((f) => f.text)).toEqual(expect.arrayContaining(["对海鲜过敏", "路上最多 40 分钟", "不去酒吧"]));
+  });
+
+  it("过敏不写对什么就不记；选的加自己写的超过 3 条直接拒绝", () => {
+    expect(() => onboardingBody.parse({ floors: ["homeBy", "不喝酒"], customFloors: ["a", "b"] })).toThrow(/最多 3 条/);
+  });
+
+  it("授权书上自己写：底线进选中的底线、想要是软的；两条算不了的不会合并；满 3 条底线再加会被拦下；可以删", async () => {
+    const { id, token, mid } = await one("pid-own-2");
+    await chat(id, token, chatBody.parse({ rsvp: "yes", location: XJH, budgetMax: 100, dietTags: [], availability: { [dates[0]]: { from: "18:00", pref: "ok" } }, preferenceAction: "review" }));
+    await chat(id, token, chatBody.parse({ addNeed: { text: "花生过敏", kind: "hard" }, preferenceAction: "review" }));
+    await chat(id, token, chatBody.parse({ addNeed: { text: "芒果过敏", kind: "hard" }, preferenceAction: "review" }));
+    await chat(id, token, chatBody.parse({ addNeed: { text: "想吃日料", kind: "soft" }, preferenceAction: "review" }));
+    let p = meOf(mid).private!;
+    const allergies = (p.needs ?? []).filter((n) => n.rule.t === "custom");
+    expect(allergies.map((n) => n.text)).toEqual(["花生过敏", "芒果过敏"]);
+    expect(p.mandate?.floors).toEqual(expect.arrayContaining(allergies.map((n) => n.id)));
+    expect((p.needs ?? []).find((n) => n.text === "想吃日料")).toMatchObject({ kind: "soft", rule: { t: "preferCategory" } });
+    await chat(id, token, chatBody.parse({ addNeed: { text: "十点前必须到家", kind: "hard" }, preferenceAction: "review" }));
+    await expect(chat(id, token, chatBody.parse({ addNeed: { text: "不去酒吧", kind: "hard" }, preferenceAction: "review" }))).rejects.toThrow(/最多 3 条/);
+    await chat(id, token, chatBody.parse({ removeNeed: allergies[0].id, preferenceAction: "review" }));
+    p = meOf(mid).private!;
+    expect((p.needs ?? []).some((n) => n.text === "花生过敏")).toBe(false);
+    expect(p.mandate?.floors).not.toContain(allergies[0].id);
   });
 });
