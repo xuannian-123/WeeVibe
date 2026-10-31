@@ -369,3 +369,13 @@ export function errMsg(e: unknown): string {
   if (e instanceof Error && /[一-龥]/.test(e.message)) return e.message;
   return "出了点小状况，再试一次";
 }
+
+/* ───────── v6 分身（线 D 追加；路由由线 B 实现：docs/AVATAR.md 第 4.4 节） ───────── */
+
+/** 撤回分身的一次自动让步（30 分钟内）：这一维的 give 视为 0，服务端重算。返回值以线 B 为准，前端只依赖成功与否，之后再刷新 */
+export function revokeAvatarConcession(id: string, entryId: string) {
+  return request<unknown>(`${J(id)}/avatar`, { body: { entryId }, ju: id, auth: "member", timeoutMs: 60000 });
+}
+
+/** 分身相关的动作。JuActions 还没有 revokeAvatar 时，组件退回到 revokeAvatarConcession + refresh */
+export type AvatarActions = { revokeAvatar?: (entryId: string) => Promise<void> };

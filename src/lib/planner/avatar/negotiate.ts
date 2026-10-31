@@ -132,8 +132,8 @@ function tradePhrase(dims: (keyof Give)[], c: Candidate, i: number): string {
 const dimsOf = (u: GiveUse) => GIVE_DIMS.filter((k) => (u.used[k] ?? 0) > 0);
 
 function whereText(c: Candidate, p?: Proposal): string {
-  const segs = p?.segments;
-  if (segs && segs.length >= 2) {
+  const segs = p?.segments ?? c.segments;
+  if (segs && segs.length >= 1 && (segs.length >= 2 || c.program)) {
     return segs.map((s, k) => `${k === 0 ? slotLabel(s.start) : minToHm(slotTimes({ id: "", start: s.start, end: s.end }).start)} ${s.activityName}（${s.poi.name}）`).join(" → ");
   }
   return `${slotLabel(c.slot.start)} 在${c.poi.name}`;
@@ -190,7 +190,8 @@ export type NegotiateInput = {
   asks: AskDraft[];
   diagnosis?: Diagnosis;
   why: string[];
-  counts: { slots: number; pois: number };
+  /** programs：v6 活动层的节目数（有节目时按"节目 × 开始时间"说） */
+  counts: { slots: number; pois: number; programs?: number };
   now: Date;
 };
 
@@ -250,7 +251,7 @@ export function negotiate(input: NegotiateInput): NegotiateResult {
     boss(
       1,
       "propose",
-      `算了 ${counts.slots} 个时段 × ${counts.pois} 家店 × ${n} 个人。先不让步，最好的是${slotLabel(baseRec.slot.start)} 在${baseRec.poi.name}：${caredText(baseRec.cared, n)}。`,
+      `算了 ${counts.programs ? `${counts.programs} 个节目 × ${counts.slots} 个开始时间` : `${counts.slots} 个时段 × ${counts.pois} 家店`} × ${n} 个人。先不让步，最好的是${whereText(baseRec)}：${caredText(baseRec.cared, n)}。`,
     ),
   );
   const baseBlocked = planMembers.map((_, i) => i).filter((i) => !baseRec.mines[i].cared);

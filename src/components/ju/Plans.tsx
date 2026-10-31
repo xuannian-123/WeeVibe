@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import type { Experience, JuState, Member, Proposal } from "@/lib/types";
-import { slotText, voteTally } from "@/lib/client/format";
+import { dayLabel, slotDate, slotText, voteTally } from "@/lib/client/format";
 import { errMsg, type VerifyResult } from "@/lib/client/api";
 import type { JuActions } from "@/lib/client/useJu";
 import { Avatar, AvatarStack, Button, LockNote, Meter, Sheet, Spinner } from "../ui";
 import { toast } from "../toast";
-import { NeedsChecklist, RisksList } from "./Decision";
+import { NeedsChecklist, RisksList, SegmentsTimeline } from "./Decision";
+import { AvatarLog } from "./AvatarLog";
+import { NegotiationCard } from "./Negotiation";
 
 const STATUS_TEXT: Record<Experience["status"], string> = {
   full: "全程",
@@ -184,6 +186,7 @@ function Matrix({ p, members, meId }: { p: Proposal; members: Map<string, Member
 
 function ProposalDetail({ p, state, me, members }: { p: Proposal; state: JuState; me: Member | null; members: Map<string, Member> }) {
   const { poi } = p;
+  const twoPart = (p.segments?.length ?? 0) >= 2;
   return (
     <article className="sticker animate-rise overflow-hidden" key={p.id}>
       <div className="border-b-2 border-ink bg-ink p-4 text-paper">
@@ -191,16 +194,28 @@ function ProposalDetail({ p, state, me, members }: { p: Proposal; state: JuState
           <span className="rounded-md bg-mustard px-2 py-0.5 text-[13px] font-black text-ink">{p.labelText}</span>
           {p.recommended && <span className="rounded-md border-2 border-cinnabar px-1.5 text-[12px] font-black text-cinnabar">★ 局长推荐</span>}
         </div>
-        <div className="font-num text-[24px] font-bold text-mustard">{slotText(p.slot)}</div>
-        <h3 className="mt-1 text-[21px] font-black leading-snug break-words">{poi.name}</h3>
-        <div className="font-num mt-1 flex flex-wrap gap-x-3 text-[13.5px] font-semibold text-cream-faint">
-          {poi.rating != null && <span>★ {poi.rating.toFixed(1)}</span>}
-          {poi.costPerPerson != null && <span>¥{poi.costPerPerson}/人</span>}
-          <span>
-            {p.attendCount} 人能到
-          </span>
-        </div>
-        <p className="mt-1 truncate text-[12.5px] text-cream-faint">📍 {poi.address}</p>
+        {twoPart ? (
+          <>
+            <div className="font-num text-[15px] font-bold text-cream-faint">{dayLabel(slotDate(p.slot))} · 两段式</div>
+            <SegmentsTimeline p={p} dark />
+            <div className="font-num mt-1 flex flex-wrap gap-x-3 text-[13.5px] font-semibold text-cream-faint">
+              <span>{p.attendCount} 人能到</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="font-num text-[24px] font-bold text-mustard">{slotText(p.slot)}</div>
+            <h3 className="mt-1 text-[21px] font-black leading-snug break-words">{poi.name}</h3>
+            <div className="font-num mt-1 flex flex-wrap gap-x-3 text-[13.5px] font-semibold text-cream-faint">
+              {poi.rating != null && <span>★ {poi.rating.toFixed(1)}</span>}
+              {poi.costPerPerson != null && <span>¥{poi.costPerPerson}/人</span>}
+              <span>
+                {p.attendCount} 人能到
+              </span>
+            </div>
+            <p className="mt-1 truncate text-[12.5px] text-cream-faint">📍 {poi.address}</p>
+          </>
+        )}
       </div>
 
       <div className="space-y-4 p-4">
@@ -309,6 +324,10 @@ export function PlansView({ state, me, actions }: { state: JuState; me: Member |
           算了 {plan.audit.candidates} 个候选 × {state.counts.in} 个人 = {plan.audit.evaluations} 次体验，挑出 {proposals.length} 个真不一样的方案
         </p>
       </section>
+
+      {/* v6：你的分身替你做了什么（只给本人）+ 公开的谈判记录 */}
+      {me && <AvatarLog state={state} me={me} actions={actions} />}
+      <NegotiationCard state={state} me={me} />
 
       <div role="tablist" data-tour="plan-tabs" className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {proposals.map((p) => {

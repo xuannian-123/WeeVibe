@@ -20,6 +20,9 @@ export const juSpecSchema = z
     city: z.string().trim().min(1).max(20),
     cityFrom: z.enum(["said", "ip", "location", "default"]).optional(),
     notes: z.string().max(200).optional(),
+    // v6 活动层：干什么交给局长 / 候选活动池（ActivityDef.key）
+    open: z.boolean().optional(),
+    activities: z.array(z.string().trim().min(1).max(30)).max(30).optional(),
   })
   .refine((s) => s.earliest <= s.latest, { message: "earliest 不能晚于 latest" });
 

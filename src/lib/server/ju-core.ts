@@ -3,6 +3,7 @@
 import { pushNotice, pushNoticeOnce } from "./after/inbox";
 import { autofillFromProfile, planJu } from "../planner";
 import type { AskDraft } from "../planner/repair";
+import type { ActivityProfile } from "../planner/activities";
 import type { JuPrivate, PlanSnapshot } from "../db";
 import type {
   AvatarLogEntry,
@@ -254,6 +255,8 @@ export type PlanDeps = {
   polish?: (facts: PublicFacts, plan: Plan) => Promise<Plan>;
   /** 是否发群公告（反事实检验里也发，因为公告是公开输出的一部分） */
   announce?: boolean;
+  /** v6 活动层：档案（profileId -> Profile），出方案时取每人的活动口味 / 身体限制（不传 = 只看本次说的） */
+  profiles?: Record<string, Profile | undefined>;
   /** v6 让步账：谈判里自动让了步的人（DB 层记进档案的 concessions；不传 = 不记，反事实检验里就是这样） */
   onConcede?: (m: Member, juId: string, now: Date) => void;
 };
@@ -319,6 +322,7 @@ export async function runPlanner(
   ledgers: Record<string, LedgerEntry[]>,
   now: Date,
   concessions: Record<string, number> = {},
+  profiles: Record<string, ActivityProfile> = {},
 ) {
   if (!ju.admin?.auditSecret) throw new HttpError(500, "局缺少审计密钥");
   return planJu(ju, inOnly(members), map, {
@@ -327,7 +331,19 @@ export async function runPlanner(
     ledgers,
     now,
     concessions,
+    profiles,
   });
+}
+
+/** memberId -> 档案里的活动口味 / 身体限制（只取活动层要用的两项；没有档案的人不出现） */
+export function activityProfilesOf(members: Member[], profiles: Record<string, Profile | undefined> | undefined): Record<string, ActivityProfile> {
+  const out: Record<string, ActivityProfile> = {};
+  for (const m of members) {
+    const p = m.profileId ? profiles?.[m.profileId] : undefined;
+    if (!p || (!p.activityTastes && !p.body)) continue;
+    out[m.id] = { ...(p.activityTastes ? { activityTastes: { ...p.activityTastes } } : {}), ...(p.body ? { body: [...p.body] } : {}) };
+  }
+  return out;
 }
 
 /**
@@ -350,10 +366,11 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
   const snapJu = structuredClone(ju);
   const snapMembers = structuredClone(ins);
   const mapLog: MapLog = {};
+  const activityProfiles = activityProfilesOf(ins, deps.profiles);
 
   let result: Awaited<ReturnType<typeof planJu>>;
   try {
-    result = await runPlanner(ju, ins, recordingMap(deps.map, mapLog), deps.ledgers, now, deps.concessions ?? {});
+    result = await runPlanner(ju, ins, recordingMap(deps.map, mapLog), deps.ledgers, now, deps.concessions ?? {}, activityProfiles);
   } catch (e) {
     if (e instanceof HttpError) throw e;
     throw new HttpError(422, (e as Error)?.message || "出方案失败");
@@ -390,6 +407,7 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
     now: now.toISOString(),
     mapLog,
     ...(deps.concessions && Object.keys(deps.concessions).length ? { concessions: deps.concessions } : {}),
+    ...(Object.keys(activityProfiles).length ? { profiles: activityProfiles } : {}),
   };
   priv.snapshot = snapshot;
   priv.pendingMembers = [];

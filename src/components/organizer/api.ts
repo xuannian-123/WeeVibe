@@ -128,6 +128,19 @@ export type OrganizerApi = {
   verifySeating: (id: string) => Promise<VerifyResult>;
   /** v5 天气变坏：一键切到备案（同一时间换成室内的店） */
   switchFallback: (id: string, admin: string) => Promise<JuState>;
+  /** v6 分身谈判演示局（线 B 的 seed；见 AVATAR_DEMO）。可选：gallery 的假后端不实现时按钮不出现 */
+  devSeedAvatar?: (id: string, admin: string) => Promise<JuState>;
+};
+
+/**
+ * v6 分身谈判演示的路由（线 B 实现 server/seed.ts 的谈判演示局；路由名未定，定了只改这里）。
+ * 默认沿用现有演示 seed 的写法：POST /api/dev/seed/:id { scene: "avatar" }。
+ * plan = true 时 seed 完再调一次出方案（如果 B 的 seed 已经直接出方案，改成 false）。
+ */
+export const AVATAR_DEMO = {
+  path: (id: string) => `/api/dev/seed/${encodeURIComponent(id)}`,
+  body: { scene: "avatar" } as Record<string, unknown>,
+  plan: true,
 };
 
 export const api = {
@@ -163,6 +176,11 @@ export const organizerApi: OrganizerApi = {
   verifySeating: (id) => request<VerifyResult>(ju(id, "/seating/verify"), { timeoutMs: 30000 }),
   switchFallback: (id, admin) => request<JuState>(ju(id, "/fallback"), { body: {}, admin, timeoutMs: 45000 }),
   devAnswer: (id, admin) => request<JuState>(`/api/dev/answer/${enc(id)}`, { body: {}, admin, timeoutMs: 60000 }),
+  devSeedAvatar: async (id, admin) => {
+    const s = await request<JuState>(AVATAR_DEMO.path(id), { body: AVATAR_DEMO.body, admin, timeoutMs: 45000 });
+    if (!AVATAR_DEMO.plan || s.ju.plan) return s;
+    return request<JuState>(ju(id, "/plan"), { body: {}, admin, timeoutMs: 60000 });
+  },
 };
 
 /** 邀请链接里携带圈层 token 的查询参数名（A1 的局页读它，入局时作为 tierToken 提交） */

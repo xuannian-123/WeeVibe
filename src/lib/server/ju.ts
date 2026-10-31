@@ -376,6 +376,7 @@ export async function verifyPlan(id: string): Promise<{ ok: boolean; inputHash: 
     snap.ledgers,
     new Date(snap.now),
     snap.concessions ?? {},
+    snap.profiles ?? {},
   );
   const a = ju.plan.audit;
   return {

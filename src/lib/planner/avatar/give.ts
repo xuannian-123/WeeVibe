@@ -4,11 +4,14 @@
 // 用到 give 的人算"被照顾到"（这一步是他预先批准的），但他的满意度仍按他真实的要求算（超了的预算 / 多走的路照常扣分，
 // 本人看到的也是真实的那一份），再记一笔让步代价进第二、三级准则——所以三级准则自然会"能不让就不让、要让就让得最少的人"；
 // 最近让过步的人代价更高（让步账）。时间上的让步不一样：晚到 / 少待本来就是他在现场的真实体验，公开体验照常显示。
+// v6 活动层（A）的节目候选（一段 / 两段）按 programExperience 重算本人那一行，其余人的行原样保留。
 // 确定性：枚举顺序固定（GIVE_DIMS），不依赖成员 id。
 import type { Give, Member } from "../../types";
+import { activityByKey, type ActivityProfile } from "../activities";
 import { CARE_FLOOR, MIN_STAY_MIN, ABSENT_LATE_MIN, experienceDetail, slotTimes, timeFit, type PlanContext } from "../experience";
 import { weatherEffects } from "../external";
-import { SCORE_WEIGHTS, evaluateCandidate, type Candidate } from "../plan";
+import { SCORE_WEIGHTS, type Candidate } from "../plan";
+import { programExperience, type ProgramRow, type SegRun } from "../program";
 import { GIVE_DIMS, giveInEffect, hasGive, withGive } from "./mandate";
 
 /** 某人在某个候选里用了多少 give（每一维实际用掉的量） */
@@ -34,11 +37,27 @@ export function concedePenalty(used: Partial<Give>, concessions = 0): number {
   return Math.round(p * (1 + 0.5 * Math.max(0, concessions)) * 10) / 10;
 }
 
-type One = ReturnType<typeof experienceDetail>;
+type One = Pick<ProgramRow, "pub" | "mine" | "flags" | "soft"> & { part?: ProgramRow["part"] };
 
-/** 单人单候选的体验（含天气扣分，和 evaluateCandidate 一致） */
-function evalOne(m: Member, c: Candidate, i: number, ctx: PlanContext): One {
-  const d = experienceDetail(m, c.slot, c.poi, c.pubs[i].commuteMin, ctx);
+/** 节目候选的每一段（从候选上的 segments 还原；活动库里找不到就返回 undefined，这个候选不启用 give） */
+function runsOf(c: Candidate): SegRun[] | undefined {
+  if (!c.program || !c.segments?.length) return undefined;
+  const runs: SegRun[] = [];
+  for (const sg of c.segments) {
+    const act = activityByKey(sg.activity);
+    if (!act) return undefined;
+    runs.push({ act, poi: sg.poi, slot: { id: c.slot.id, start: sg.start, end: sg.end }, eff: weatherEffects(c.wx, sg.poi) });
+  }
+  return runs;
+}
+
+/** 单人单候选的体验（含天气扣分，和 evaluateCandidate / 节目计算一致） */
+function evalOne(m: Member, c: Candidate, i: number, ctx: PlanContext, profile?: ActivityProfile): One {
+  if (c.program) {
+    const runs = runsOf(c);
+    if (runs) return programExperience(m, runs, c.pubs[i].commuteMin, ctx, profile);
+  }
+  const d: One = experienceDetail(m, c.slot, c.poi, c.pubs[i].commuteMin, ctx);
   const eff = weatherEffects(c.wx, c.poi);
   if (eff.penalty && d.pub.status !== "absent") {
     const u = Math.max(0, d.mine.utility - eff.penalty);
@@ -109,30 +128,40 @@ const TIME_DIMS: (keyof Give)[] = ["lateMin", "stayCutMin"];
  * 某人在某候选里让得最少的那组让步；让了也照顾不到 → undefined。
  * member = 套上这组 give 的成员；truth = 只放宽时间门槛（人到了现场）、预算 / 通勤仍按本人原话算的真实体验。
  */
-export function cheapestGive(m: Member, c: Candidate, i: number, ctx: PlanContext, concessions = 0): { member: Member; use: GiveUse; truth: One } | undefined {
+export function cheapestGive(
+  m: Member,
+  c: Candidate,
+  i: number,
+  ctx: PlanContext,
+  concessions = 0,
+  profile?: ActivityProfile,
+): { member: Member; use: GiveUse; truth: One; row: One } | undefined {
   if (c.mines[i].cared || c.flags[i].hard) return undefined;
+  if (c.program && !runsOf(c)) return undefined;
   const give = giveInEffect(m);
   if (!hasGive(give)) return undefined;
   const dims = relevantDims(m, c, i, give);
-  let best: { member: Member; use: GiveUse; sub: (keyof Give)[] } | undefined;
+  let best: { member: Member; use: GiveUse; sub: (keyof Give)[]; row: One } | undefined;
   for (const sub of subsets(dims)) {
     const trial = withGive(m, give, sub);
-    const d = evalOne(trial, c, i, ctx);
+    const d = evalOne(trial, c, i, ctx, profile);
     if (d.pub.status === "absent" || !d.mine.cared) continue;
     const used = usedOf(m, c, i, d, sub, give);
     // 子集里有没用上的维度 = 不是最小的让步（更小的子集已经试过）
     if (sub.some((k) => !(used[k]! > 0))) continue;
     const penalty = concedePenalty(used, concessions);
-    if (!best || penalty < best.use.penalty - 1e-9) best = { member: trial, use: { i, memberId: m.id, used, penalty }, sub };
+    if (!best || penalty < best.use.penalty - 1e-9) best = { member: trial, use: { i, memberId: m.id, used, penalty }, sub, row: d };
   }
   if (!best) return undefined;
-  const truth = evalOne(withGive(m, give, best.sub.filter((k) => TIME_DIMS.includes(k))), c, i, ctx);
-  return { member: best.member, use: best.use, truth };
+  const truth = evalOne(withGive(m, give, best.sub.filter((k) => TIME_DIMS.includes(k))), c, i, ctx, profile);
+  return { member: best.member, use: best.use, truth, row: best.row };
 }
 
 /** 重算三级准则用到的数：真实满意度减让步代价进第二级（加权损失）和第三级（纳什福利）；和 evaluateCandidate 的口径一致 */
-function aggregate(c: Candidate, uses: GiveUse[], weights: number[]): Candidate {
+function aggregate(c: Candidate, uses: GiveUse[], weights: number[], members: Member[]): Candidate {
   const pen = new Map(uses.map((u) => [u.i, u.penalty]));
+  const attend = c.pubs.filter((e) => e.status !== "absent").length;
+  const vetoed = attend === 0 || members.some((m, i) => m.role === "must" && c.pubs[i].status === "absent");
   const u = (i: number) => (c.pubs[i].status === "absent" ? 0 : Math.max(0, c.mines[i].utility - (pen.get(i) ?? 0)));
   const idx = c.pubs.map((_, i) => i);
   const caredIdx = idx.filter((i) => c.mines[i].cared);
@@ -143,9 +172,11 @@ function aggregate(c: Candidate, uses: GiveUse[], weights: number[]): Candidate 
   const here = idx.filter((i) => c.pubs[i].status !== "absent");
   const wMin = here.length ? Math.round(100 - Math.max(...here.map((i) => weights[i] * (100 - u(i))))) : 0;
   const n = Math.max(1, c.pubs.length);
-  const raw = SCORE_WEIGHTS.fairMin * Math.max(0, wMin) + SCORE_WEIGHTS.avg * avgU + SCORE_WEIGHTS.attend * 100 * (c.attend / n);
+  const raw = SCORE_WEIGHTS.fairMin * Math.max(0, wMin) + SCORE_WEIGHTS.avg * avgU + SCORE_WEIGHTS.attend * 100 * (attend / n);
   return {
     ...c,
+    attend,
+    vetoed,
     cared: caredIdx.length,
     caredW: Math.round(caredIdx.reduce((s, i) => s + weights[i], 0) * 100) / 100,
     minU: us.length ? Math.min(...us) : 0,
@@ -153,7 +184,7 @@ function aggregate(c: Candidate, uses: GiveUse[], weights: number[]): Candidate 
     losses: losses.map((l) => Math.round(l * 10) / 10),
     nash: Math.round(nash * 1000) / 1000,
     wMin,
-    score: c.attend ? Math.round(Math.max(0, Math.min(100, raw))) : 0,
+    score: attend ? Math.round(Math.max(0, Math.min(100, raw))) : 0,
   };
 }
 
@@ -169,7 +200,14 @@ export type Given = {
  * 对所有候选启用"需要时才用"的 give：返回新的候选（原候选不改）。
  * members 是规划用的有效成员（planMember），与候选里的 pubs / mines 一一对应。
  */
-export function applyGive(members: Member[], cands: Candidate[], weights: number[], ctx: PlanContext, concessions: Record<string, number> = {}): Given {
+export function applyGive(
+  members: Member[],
+  cands: Candidate[],
+  weights: number[],
+  ctx: PlanContext,
+  concessions: Record<string, number> = {},
+  profiles: Record<string, ActivityProfile> = {},
+): Given {
   const uses = new Map<Candidate, GiveUse[]>();
   const variants = new Map<Candidate, Member[]>();
   if (!members.some((m) => hasGive(giveInEffect(m)))) {
@@ -183,25 +221,29 @@ export function applyGive(members: Member[], cands: Candidate[], weights: number
     const vs = [...members];
     const us: GiveUse[] = [];
     const truths = new Map<number, One>();
+    const rows = new Map<number, One>();
     members.forEach((m, i) => {
-      const g = cheapestGive(m, c, i, ctx, concessions[m.id] ?? 0);
+      const g = cheapestGive(m, c, i, ctx, concessions[m.id] ?? 0, profiles[m.id]);
       if (!g) return;
       vs[i] = g.member;
       us.push(g.use);
       truths.set(i, g.truth);
+      rows.set(i, g.row);
     });
     if (!us.length) {
       uses.set(c, us);
       variants.set(c, members);
       return c;
     }
-    const re = evaluateCandidate(vs, c.slot, c.poi, c.pubs.map((e) => e.commuteMin), weights, ctx, c.idx, c.cost, weatherEffects(c.wx, c.poi));
-    // 用了 give 的人：被照顾到，但私密体验（满意度、逐条需求、扣分）用真实的那一份
-    const mines = re.mines.map((x, i) => (truths.has(i) ? { ...truths.get(i)!.mine, cared: true } : x));
-    const flags = re.flags.map((x, i) => (truths.has(i) ? truths.get(i)!.flags : x));
-    const softs = re.softs.map((x, i) => (truths.has(i) ? truths.get(i)!.soft : x));
-    // 保留候选上别的字段（风险、天气、不成立原因，以及以后加的字段），只换掉体验和三级准则用到的数
-    const next = aggregate({ ...c, pubs: re.pubs, mines, flags, softs, attend: re.attend, vetoed: re.vetoed }, us, weights);
+    // 用了 give 的人：公开体验（到没到、晚到多久）按让步后的算；被照顾到，但私密体验（满意度、逐条需求、扣分）用真实的那一份。
+    // 其余人的行原样保留
+    const pubs = c.pubs.map((x, i) => rows.get(i)?.pub ?? x);
+    const mines = c.mines.map((x, i) => (truths.has(i) ? { ...truths.get(i)!.mine, cared: true } : x));
+    const flags = c.flags.map((x, i) => (truths.has(i) ? truths.get(i)!.flags : x));
+    const softs = c.softs.map((x, i) => (truths.has(i) ? truths.get(i)!.soft : x));
+    const parts = c.parts ? c.parts.map((x, i) => rows.get(i)?.part ?? x) : undefined;
+    // 保留候选上别的字段（风险、天气、不成立原因、节目分段，以及以后加的字段），只换掉体验和三级准则用到的数
+    const next = aggregate({ ...c, pubs, mines, flags, softs, ...(parts ? { parts } : {}) }, us, weights, members);
     uses.set(next, us);
     variants.set(next, vs);
     return next;

@@ -53,8 +53,18 @@ export function specFromLlm(
     city: out.city?.trim() || rule.spec.city,
     ...(out.notes?.trim() ? { notes: out.notes.trim().slice(0, 200) } : {}),
   };
+  // v6：干什么交给局长 / 候选池以规则为准（确定性）；大模型给的品类只在 v5 单品类时用
+  if (rule.spec.open || rule.spec.activities?.length) {
+    spec.category = rule.spec.category;
+    spec.poiKeywords = rule.spec.poiKeywords;
+    spec.durationMinutes = rule.spec.durationMinutes;
+  }
   const checked = juSpecSchema.safeParse(spec);
   if (!checked.success) throw new Error(`spec 校验失败：${checked.error.issues[0]?.message}`);
-  const title = charLen(out.title) <= 12 ? out.title : rule.title;
-  return { title, spec: checked.data as JuSpec };
+  const v6: Pick<JuSpec, "open" | "activities"> = {
+    ...(rule.spec.open ? { open: true } : {}),
+    ...(rule.spec.activities?.length ? { activities: rule.spec.activities } : {}),
+  };
+  const title = rule.spec.open || rule.spec.activities?.length ? rule.title : charLen(out.title) <= 12 ? out.title : rule.title;
+  return { title, spec: { ...(checked.data as JuSpec), ...v6 } };
 }
