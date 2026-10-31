@@ -3,7 +3,7 @@
 // LLM / 课表解析 / 地图都是慢操作：放在锁外跑，锁里只做"读 → 改 → 存"。
 import { nanoid } from "nanoid";
 import { chatTurn, parseSchedule } from "../llm";
-import { ruleChatTurn } from "../llm/chat";
+import { ruleChatTurn, type IntakePatch } from "../llm/chat";
 import { getMapProvider } from "../map";
 import { availabilityFromBusy, buildSwipeDeck, predictSwipes } from "../planner";
 import type {
@@ -11,11 +11,16 @@ import type {
   ChatReply,
   DayAvailability,
   DietTag,
+  Mandate,
   Member,
+  MemberPrivate,
+  Need,
   Poi,
   Profile,
   SwipeVerdict,
 } from "../types";
+import { activityKeyOfWord } from "../client/activities";
+import { activityNeed, CARE_TAGS, careTag, floorCandidates, GIVE_BY_STYLE, HARD_DIET, MOOD_LABEL } from "../client/mandate";
 import { findByToken, quorumHidden, safeEqual, selfMember, visibleMembers } from "./firewall";
 import { HttpError } from "./http";
 import { AVATARS, isAdminToken, loadJu, loadMembers, mutateJu, type MutateCtx, type Viewer } from "./ju";
@@ -31,7 +36,7 @@ import {
   setMemberStatus,
 } from "./ju-core";
 import { materializeNeeds } from "../planner/needs";
-import { getProfile, learnFromMember, saveProfile } from "./profile";
+import { applyOnboarding, commuteLimitOf, getProfile, learnedFacts, learnFromMember, saidFacts, saveProfile } from "./profile";
 import type { ChatBody, JoinInput } from "./schemas";
 import { prefillKnow } from "./social";
 
@@ -61,7 +66,7 @@ function profileOf(m: Member): Profile | undefined {
  * - rsvp=no → status out（#5，公开视图里直接消失），空出的名额给候补
  * - 方案出来之后，已完成入局的人改了东西 → 只记 pendingChanges，不立即重算（#4）
  */
-export function applyPatch(ctx: MutateCtx, me: Member, patch: ChatPatch, profile: Profile | undefined): void {
+export function applyPatch(ctx: MutateCtx, me: Member, patch: IntakePatch, profile: Profile | undefined): void {
   const { ju, members, now, priv } = ctx;
   const p = (me.private ??= emptyPrivate());
   let planInputChanged = false;
@@ -111,6 +116,22 @@ export function applyPatch(ctx: MutateCtx, me: Member, patch: ChatPatch, profile
     planInputChanged = true;
   }
   if (patch.wantsAutofill) planInputChanged = autofillMember(ju, me, profile) || planInputChanged;
+  // v6 这次的状态 / 想干什么 / 风格（话里听出来的；想干什么的需求已经在 needs 里）
+  if (patch.mood && patch.mood !== p.mood) {
+    p.mood = patch.mood;
+    planInputChanged = true;
+  }
+  if (patch.activities?.length && p.activityOpen) {
+    p.activityOpen = false;
+    planInputChanged = true;
+  } else if (patch.activityOpen && !p.activityOpen && !wantedKeys(p).length) {
+    p.activityOpen = true;
+    planInputChanged = true;
+  }
+  if (patch.style && patch.style !== p.mandate?.style) {
+    p.mandate = { ...draftMandate(p), style: patch.style, give: { ...GIVE_BY_STYLE[patch.style] } };
+    planInputChanged = true;
+  }
 
   if (patch.rsvp) {
     p.rsvp = patch.rsvp;
@@ -124,6 +145,114 @@ export function applyPatch(ctx: MutateCtx, me: Member, patch: ChatPatch, profile
     evalQuorum(ju, members, now);
   }
   if (planInputChanged && me.intake === "done" && me.status === "in") markChanged(ju, priv, me.id);
+}
+
+// ---------------------------------------------------------------- v6 授权书（docs/AVATAR.md 第 2、5 节）
+
+/** 还没有授权书时的草稿：风格按档案，give 按风格默认 */
+function draftMandate(p: MemberPrivate, profile?: Profile): Mandate {
+  if (p.mandate) return { ...p.mandate, give: { ...p.mandate.give }, floors: [...p.mandate.floors] };
+  const style = profile?.style ?? "balanced";
+  return { status: "draft", style, give: { ...GIVE_BY_STYLE[style] }, floors: [] };
+}
+
+/** 想干什么里认得出的活动 key */
+function wantedKeys(p: MemberPrivate): string[] {
+  return (p.needs ?? []).flatMap((n) => (n.rule.t === "preferCategory" ? n.rule.words.map(activityKeyOfWord).filter((k): k is string => !!k) : []));
+}
+
+const careNeed = (key: string, kind: Need["kind"] = "soft") => {
+  const n = careTag(key)?.need;
+  return n ? { ...n, kind } : undefined;
+};
+
+/**
+ * 按档案把 v6 的东西预填进这次（入局 / 建档完成时）：
+ * - 本人说过的底线（建档第 3 屏）：门禁、清真 / 素食 → 记为已确认；膝盖不好 / 不喝酒 / 过敏 → 硬需求（已确认）
+ * - 分身猜的（怕吵、通勤容忍）→ 只预填成软需求，永远不当底线
+ * - 授权书草稿：风格按档案
+ * 只补空的，不覆盖本人这次已经说过的。
+ */
+export function prefillAvatar(m: Member, profile: Profile | undefined, now: Date): void {
+  if (!profile) return;
+  const p = (m.private ??= emptyPrivate());
+  const at = now.toISOString();
+  const said = new Set(saidFacts(profile).map((f) => f.key));
+  const confirm = (k: string) => {
+    if (!(p.confirmed ?? []).includes(k)) p.confirmed = [...(p.confirmed ?? []), k];
+  };
+  if (said.has("homeBy") && Object.values(p.availability).some((a) => a.homeBy)) confirm("homeBy");
+  for (const t of HARD_DIET) if (said.has(`diet:${t}`) && p.dietTags.includes(t)) confirm(`diet:${t}`);
+  const hard: Omit<Need, "id" | "at" | "source">[] = [];
+  if (said.has("body:膝盖不好")) hard.push(careNeed("knee", "hard")!);
+  if (said.has("noAlcohol")) {
+    hard.push(careNeed("noalcohol", "hard")!);
+    p.billFacts = { ...p.billFacts, noAlcohol: true };
+  }
+  const allergy = saidFacts(profile).find((f) => f.key === "allergy");
+  if (allergy) hard.push({ dim: "food", kind: "hard", strength: 3, rule: { t: "custom" }, text: allergy.text });
+  const soft: Omit<Need, "id" | "at" | "source">[] = [];
+  if (learnedFacts(profile, now).some((f) => f.key === "quiet" && f.confidence >= 0.3)) soft.push(careNeed("quiet")!);
+  const commute = commuteLimitOf(profile, now);
+  if (commute) soft.push({ dim: "travel", kind: "soft", strength: 2, rule: { t: "maxCommute", minutes: commute }, text: `单程尽量别超过 ${commute} 分钟` });
+  const before = new Set((p.needs ?? []).map((n) => n.id));
+  if (hard.length || soft.length) p.needs = materializeNeeds(p.needs ?? [], [...hard, ...soft], "profile", at);
+  for (const n of p.needs ?? []) if (!before.has(n.id) && n.kind === "hard") confirm(n.id);
+  if (!p.mandate) p.mandate = draftMandate(p, profile);
+}
+
+/** 授权书卡片提交的 v6 字段（完整选择：没出现的标签 / 活动 = 取消）。返回是否改了排方案的输入 */
+function applyCard(ctx: MutateCtx, me: Member, body: ChatBody, profile: Profile | undefined): boolean {
+  const p = me.private!;
+  const at = ctx.now.toISOString();
+  let changed = false;
+  if (body.mood !== undefined && body.mood !== p.mood) {
+    if (body.mood) p.mood = body.mood;
+    else delete p.mood;
+    changed = true;
+  }
+  if (body.activityOpen !== undefined && body.activityOpen !== !!p.activityOpen) {
+    p.activityOpen = body.activityOpen;
+    changed = true;
+  }
+  if (body.activities) {
+    // 认得出的活动偏好整组替换；认不出的（"想吃川菜"）原样保留
+    const keep = (p.needs ?? []).filter((n) => n.rule.t !== "preferCategory" || !n.rule.words.some((w) => activityKeyOfWord(w)));
+    const n = p.activityOpen ? undefined : activityNeed(body.activities);
+    p.needs = n ? materializeNeeds(keep, [n], "widget", at) : keep;
+    changed = true;
+  }
+  // 卡片上亲手点的硬忌口（清真 / 素食）= 本人确认过
+  for (const t of body.dietTags ?? []) if (HARD_DIET.includes(t)) p.confirmed = [...new Set([...(p.confirmed ?? []), `diet:${t}`])];
+  if (body.tags) {
+    const on = new Set(body.tags);
+    for (const t of CARE_TAGS) {
+      if (t.diet || !t.need || !t.match) continue;
+      const has = (p.needs ?? []).some((n) => t.match!(n));
+      if (on.has(t.key) && !has) p.needs = materializeNeeds(p.needs ?? [], [t.need], "widget", at);
+      if (!on.has(t.key) && has) p.needs = (p.needs ?? []).filter((n) => !t.match!(n));
+      if (t.key === "noalcohol") p.billFacts = { ...p.billFacts, noAlcohol: on.has(t.key) || undefined };
+      if (on.has(t.key) !== has) changed = true;
+    }
+    if (!p.billFacts.noAlcohol) delete p.billFacts.noAlcohol;
+  }
+  if (body.mandate) {
+    const m = draftMandate(p, profile);
+    m.style = body.mandate.style;
+    m.give = body.mandate.give ? { ...body.mandate.give } : { ...GIVE_BY_STYLE[body.mandate.style] };
+    // 本人在授权书上把一条软需求设成底线：升成硬需求，算本人确认过
+    for (const k of body.mandate.floors) {
+      const n = (p.needs ?? []).find((x) => x.id === k);
+      if (n && n.kind === "soft") p.needs = (p.needs ?? []).map((x) => (x.id === k ? { ...x, kind: "hard" as const, strength: 3 as const } : x));
+    }
+    // 只认能当底线的 key（档案里猜的东西不在候选里，进不来）
+    const cands = new Set(floorCandidates({ ...p, mandate: { ...m, floors: body.mandate.floors } }).map((c) => c.key));
+    m.floors = body.mandate.floors.filter((k) => cands.has(k));
+    p.confirmed = [...new Set([...(p.confirmed ?? []), ...m.floors])];
+    p.mandate = m;
+    changed = true;
+  }
+  return changed;
 }
 
 /** 组件提交 → 写进私聊记录的一句话（只在本人私聊里，不出去） */
@@ -205,7 +334,10 @@ export async function join(
       m.seedId = seed.id;
     }
     members.push(m);
-    if (profile) autofillMember(ju, m, profile);
+    if (profile) {
+      autofillMember(ju, m, profile);
+      prefillAvatar(m, profile, now);
+    }
     // #21 同一拨人再约：局长记得上次谁和谁同桌、谁和谁聊得来（各自档案里的记忆，双向预填）
     prefillKnow(members, m);
     if (m.status === "in" && ju.status === "confirmed") ctx.afterConfirm = "有朋友加入了";
@@ -249,7 +381,6 @@ export async function join(
 
 const CONFIRM_YES_RE = /^(对|是|嗯|必须|一定|是的|没错|对的|确定|yes|ok|好)/i;
 const CONFIRM_NO_RE = /^(不是|不用|没那么|尽量|最好|不一定|也不一定|不算|晚点也行|可以晚|不必)/;
-const HARD_DIET: DietTag[] = ["清真", "素食"];
 
 /** 这一轮从自然语言里新冒出来的硬约束（只取第一条，一次只问一件事） */
 function hardToConfirm(me: Member, patch: ChatPatch): { key: string; text: string } | undefined {
@@ -325,27 +456,58 @@ async function savePreferences(juId: string, token: string, body: ChatBody): Pro
       ...(body.dietTags ? { dietTags: body.dietTags } : {}),
       ...(body.budgetMax !== undefined ? { budgetMax: body.budgetMax } : {}),
     };
-    applyPatch(ctx, me, patch, profileOf(me));
+    const profile = profileOf(me);
+    applyPatch(ctx, me, patch, profile);
     // 卡片中的日期代表完整选择，取消勾选必须删除旧日期。
     if (availability) {
       p.availability = availability;
       p.autoFilled = p.autoFilled.filter((k) => k !== "availability");
     }
+    // v6 授权书：状态 / 想干什么 / 讲究 / 风格 / 可以让 / 底线
+    if (applyCard(ctx, me, body, profile) && me.intake === "done" && me.status === "in") markChanged(ctx.ju, ctx.priv, me.id);
     if (city && !ctx.ju.plan && ctx.ju.spec.cityFrom !== "said" && ctx.ju.spec.cityFrom !== "location")
       ctx.ju.spec = { ...ctx.ju.spec, city, cityFrom: "location" };
     const declined = p.rsvp === "no";
+    // 「就这样」= 授权书生效（finish / swipe 都算本人确认过授权书）
+    if (!declined && body.preferenceAction !== "review") p.mandate = { ...draftMandate(p, profile), status: "confirmed", confirmedAt: ctx.now.toISOString() };
     if (!declined && body.preferenceAction === "finish") finishIntake(ctx, me);
     if (!declined && body.preferenceAction === "swipe" && me.intake !== "done") me.intake = "swiping";
+    const name = profile?.avatarName ? `你的${profile.avatarName}` : "你的分身";
     const reply = declined ? "收到，这次不来只有局长知道，群里不会显示原因。" : body.preferenceAction === "finish"
-      ? "偏好已记下，等大家确认后我来安排。有变化随时可以改。" : body.preferenceAction === "swipe"
-        ? "偏好已记下，可以继续看看想去哪家店。" : "卡片已记下，还有什么想悄悄告诉我？";
-    p.chat.push({ role: "me", text: describeWidget(patch), at: ctx.now.toISOString() }, { role: "juzhang", text: reply, at: ctx.now.toISOString() });
+      ? `授权书收好了，${name}会按它去谈。有变化随时可以改。` : body.preferenceAction === "swipe"
+        ? "授权书收好了，可以继续看看想去哪家店。" : "";
+    // 草稿保存（边说边填时的自动保存）不写进私聊记录，免得刷屏
+    if (body.preferenceAction !== "review") {
+      const said = [describeWidget(patch), body.mood ? `这次${MOOD_LABEL[body.mood].text}` : ""].filter(Boolean).join("，");
+      p.chat.push({ role: "me", text: said || "就这样", at: ctx.now.toISOString() }, { role: "juzhang", text: reply, at: ctx.now.toISOString() });
+    }
     if (p.chat.length > 200) p.chat.splice(0, p.chat.length - 200);
     return { reply, widget: body.preferenceAction === "swipe" && !declined ? "swipe" : null, quickReplies: [], done: body.preferenceAction !== "review", me: selfMember(me) };
   });
 }
 
+/**
+ * 首次建档「认识你的分身」：写进本人档案（设备级），再按新档案把这次的卡片预填一遍。
+ * 每屏都能跳过——没填的字段不动；走到最后就算完成（写 onboardedAt）。整个跳过 = 不调这个接口。
+ */
+async function onboard(juId: string, token: string, body: ChatBody): Promise<ChatReply & { me: Member }> {
+  return mutateJu(juId, (ctx) => {
+    const me = requireMe(ctx, token);
+    if (!me.profileId) throw new HttpError(409, "这台设备还没有档案，刷新一下再试");
+    const next = applyOnboarding(getProfile(me.profileId), me.profileId, body.onboarding!, ctx.now);
+    saveProfile(next);
+    autofillMember(ctx.ju, me, next);
+    prefillAvatar(me, next, ctx.now);
+    if (me.intake === "done" && me.status === "in") markChanged(ctx.ju, ctx.priv, me.id);
+    const reply = `好，我大概认识你了${next.avatarName ? `，以后我就是「${next.avatarName}」` : ""}。这次的授权书先按你说的填好了，看看对不对。`;
+    me.private!.chat.push({ role: "juzhang", text: reply, at: ctx.now.toISOString() });
+    if (me.private!.chat.length > 200) me.private!.chat.splice(0, me.private!.chat.length - 200);
+    return { reply, widget: null, quickReplies: [], done: false, me: selfMember(me) };
+  });
+}
+
 export async function chat(juId: string, token: string, body: ChatBody): Promise<ChatReply & { me: Member }> {
+  if (body.onboarding) return onboard(juId, token, body);
   if (body.preferenceAction) return savePreferences(juId, token, body);
   // 0) 课表截图 → 忙碌时段 → 每天的可出发时间（#7），锁外做
   let scheduleAvail: Record<string, DayAvailability> | undefined;
@@ -410,7 +572,7 @@ export async function chat(juId: string, token: string, body: ChatBody): Promise
   // 3) 锁内：应用抽取结果（组件已经给了的字段以组件为准），记下局长的回复，推进入局阶段
   return mutateJu(juId, (ctx) => {
     const me = requireMe(ctx, token);
-    const patch: ChatPatch = { ...(r.patch ?? {}) };
+    const patch: IntakePatch = { ...(r.patch ?? {}) };
     for (const k of WIDGET_KEYS) if (widget[k] !== undefined) delete patch[k];
     applyPatch(ctx, me, patch, s1.profile);
     if (cityFix && ctx.ju.spec.cityFrom !== "said" && ctx.ju.spec.cityFrom !== "location" && !ctx.ju.plan) {
@@ -478,7 +640,7 @@ export function finishIntake(ctx: MutateCtx, me: Member): void {
   if (me.private && !me.private.rsvp && !ctx.ju.quorum) me.private.rsvp = "yes";
   if (me.profileId) {
     const deck = ctx.priv.decks[me.id] ?? [];
-    const next = learnFromMember(getProfile(me.profileId), me, deck);
+    const next = learnFromMember(getProfile(me.profileId), me, deck, ctx.now);
     if (next) saveProfile(next);
   }
   if (me.status === "in") markChanged(ctx.ju, ctx.priv, me.id);

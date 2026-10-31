@@ -18,6 +18,7 @@ import { PlansView } from "./Plans";
 import { ConfirmedView } from "./Confirmed";
 import { InboxBanner, InboxBell, InboxDrawer, useInbox } from "./Inbox";
 import { AskCard } from "./Ask";
+import { FeedbackCard } from "./Feedback";
 
 export function TopBar({ status, offline, right }: { status?: string; offline?: boolean; right?: ReactNode }) {
   return (
@@ -189,6 +190,8 @@ export function JuView({
         <div className="mb-10 mt-4">{panel}</div>
       ) : (
         <>
+          {/* v6 局后一键反馈：第二天出现在定局页最上面 */}
+          {me && me.status === "in" && view === "confirmed" && <FeedbackCard juId={ju.id} />}
           <div className="mt-4">{body}</div>
           {me && me.status === "in" && (view === "waiting" || view === "plans") && (
             <LeaveLink actions={actions} planned={ju.status !== "collecting"} />

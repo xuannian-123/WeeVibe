@@ -10,6 +10,7 @@ import { store } from "@/lib/client/storage";
 import { confirmedProposal, dayLabel, slotText, yuan } from "@/lib/client/format";
 import { Button, SealLogo, Spinner, StatusBadge } from "@/components/ui";
 import { categoryEmoji } from "@/components/ju/JuHeader";
+import { AvatarProfile } from "./AvatarProfile";
 
 type Row =
   | { id: string; admin: boolean; kind: "ok"; state: JuState }
@@ -25,7 +26,7 @@ function nextFor(state: JuState, admin: boolean): Next {
   if (ju.status === "cancelled") return { text: ju.quorum?.state === "failed" ? "这次没凑齐，悄悄散了" : "这个局散了", urgent: false };
   if (me?.status === "out") return { text: "你私下说了这次不来", urgent: false };
   if (me?.status === "waitlist") return { text: "局长正在确认名额", urgent: false };
-  if (me && me.intake === "chatting") return { text: "去和局长私聊", urgent: true };
+  if (me && me.intake === "chatting") return { text: "去确认授权书", urgent: true };
   if (me && me.intake === "swiping") return { text: "还差刷几家店", urgent: true };
 
   if (ju.status === "collecting") {
@@ -109,7 +110,12 @@ export function MyJuList() {
         </Link>
       </div>
 
-      <h1 className="mt-4 text-[28px] font-black">我的局</h1>
+      {/* v6：/me 先是「分身眼中的你」，再是我的局 */}
+      <h1 className="mt-4 text-[28px] font-black">分身眼中的你</h1>
+      <p className="mt-1 text-[13px] leading-relaxed text-ink-faint">分身替你去谈判时，记得的就是这些。哪条不对，改掉或者让它忘掉。</p>
+      <AvatarProfile />
+
+      <h2 className="mt-8 text-[24px] font-black">我的局</h2>
       <p className="mt-1 text-[13px] leading-relaxed text-ink-faint">
         在这台手机上发起过、加入过的局都在这里。局记在这个浏览器里，换手机或清了浏览器数据就看不到了——用原来的链接重新打开就行。
       </p>

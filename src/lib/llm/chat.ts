@@ -10,6 +10,8 @@ import { budgetStrengthOf, extractNeeds, type ExtractedNeed } from "../planner/n
 import { llmChatJsonSchema, llmChatSchema, type llmNeedSchema } from "./schemas";
 import type { z } from "zod";
 import { addDays, dowLabel, fromMinutes, isoDowOf, pad, shanghaiNow, toMinutes } from "./time";
+import { ruleIntent, type Intent } from "./intent";
+import { activityNeed, MOOD_LABEL } from "../client/mandate";
 
 export type ChatCtx = {
   ju: Ju;
@@ -50,7 +52,9 @@ const PLACE_LIKE_RE =
 
 export type ChatStep = ChatAsk;
 /** ask = 局长这一轮问的是哪一项（存进聊天记录，下一轮据此判断"问过什么"） */
-export type ChatResult = ChatReply & { patch: ChatPatch; ask?: ChatStep };
+export type ChatResult = ChatReply & { patch: IntakePatch; ask?: ChatStep };
+/** v6：一轮抽取结果 = v5 的 ChatPatch + 这次的状态 / 想干什么 / 谈判风格（types.ts 的 ChatPatch 还没有这几项，先在这里扩展） */
+export type IntakePatch = ChatPatch & Intent;
 
 // ================================================================ 地点（无 key 也能用的小词典，GCJ-02 近似坐标）
 
@@ -286,8 +290,24 @@ function ruleSkipItems(text: string): string[] {
   return Array.from(new Set(out)).slice(0, 10);
 }
 
-/** 从一句话里抽出能确定的东西。pending = 上一轮局长问的是哪一步 */
-export function ruleExtract(text: string, ctx: ChatCtx, pending: ChatStep | undefined): ChatPatch {
+/**
+ * 从一句话里抽出能确定的东西。pending = 上一轮局长问的是哪一步。
+ * v6：再听一遍"这次的状态 / 想干什么 / 风格"（"这周好累"→ lazy，"想唱歌"→ KTV，"我都行"→ 随和）。
+ */
+export function ruleExtract(text: string, ctx: ChatCtx, pending: ChatStep | undefined): IntakePatch {
+  const patch: IntakePatch = ruleExtractV5(text, ctx, pending);
+  if (patch.rsvp === "no") return patch;
+  const intent = ruleIntent(text);
+  Object.assign(patch, intent);
+  // 想干什么 → 一条 preferCategory 需求（v5 的需求抽取已经听出来的就不重复）
+  if (intent.activities?.length && !patch.needs?.some((n) => n.rule.t === "preferCategory")) {
+    const n = activityNeed(intent.activities, intent.style === "firm" ? 3 : 2);
+    if (n) patch.needs = [...(patch.needs ?? []), n];
+  }
+  return patch;
+}
+
+function ruleExtractV5(text: string, ctx: ChatCtx, pending: ChatStep | undefined): ChatPatch {
   const t = text.trim();
   const s = strip(t);
   const patch: ChatPatch = {};
@@ -480,7 +500,7 @@ function availabilityLabel(a: Record<string, DayAvailability>, ju: Ju): string {
   return `${dayPart}${first.from} 后能出发${first.homeBy ? `、${first.homeBy} 前要回` : ""}`;
 }
 
-function ackFor(patch: ChatPatch, ctx: ChatCtx): string[] {
+function ackFor(patch: IntakePatch, ctx: ChatCtx): string[] {
   const out: string[] = [];
   if (patch.rsvp === "yes") out.push("太好了！");
   if (patch.wantsAutofill) {
@@ -506,10 +526,22 @@ function ackFor(patch: ChatPatch, ctx: ChatCtx): string[] {
   else if (patch.note && !patch.billFacts?.noAlcohol && !patch.budgetMax) {
     out.push(POOR_RE.test(patch.note) ? "懂，月底谁不紧呢，这个我心里有数。" : "这个我记着，排方案时会考虑，对外不会说是谁。");
   }
+  // v6 这次的状态 / 想干什么 / 风格
+  if (patch.mood) out.push(MOOD_ACK[patch.mood]);
+  if (patch.activityOpen) out.push("干什么交给局长定，我按大家的状态来挑。");
+  if (patch.style === "easy") out.push("你说都行，那小事上我替你多让一点。");
+  else if (patch.style === "firm") out.push("看得出这次很想要，我替你多争取。");
   return out;
 }
 
-type Ask = { text: string; widget: ChatWidget; quickReplies: string[]; done: boolean };
+const MOOD_ACK: Record<NonNullable<IntakePatch["mood"]>, string> = {
+  hype: `${MOOD_LABEL.hype.text}，那就找个热闹的。`,
+  chill: `${MOOD_LABEL.chill.text}，记下了，太吵的地方往后放。`,
+  active: `${MOOD_LABEL.active.text}，能出汗的节目我往前排。`,
+  lazy: "累了就不折腾，找个能舒服坐着的。",
+};
+
+type Ask ={ text: string; widget: ChatWidget; quickReplies: string[]; done: boolean };
 
 function askFor(step: ChatStep, ctx: ChatCtx, pending: ChatStep | undefined, v: View): Ask {
   const p = ctx.profile;
@@ -613,7 +645,7 @@ export function ruleChatTurn(ctx: ChatCtx): ChatResult {
   return composeRule(ctx, patch, h);
 }
 
-function composeRule(ctx: ChatCtx, patch: ChatPatch, h: ReturnType<typeof history>): ChatResult {
+function composeRule(ctx: ChatCtx, patch: IntakePatch, h: ReturnType<typeof history>): ChatResult {
   const v = viewOf(ctx.me, patch);
   if (v.rsvp === "no") {
     return { reply: DECLINE_TEXT, widget: null, quickReplies: patch.rsvp === "no" ? [] : ["其实我能来"], done: true, patch };
@@ -734,8 +766,8 @@ export function toNeed(x: z.infer<typeof llmNeedSchema> | null): ExtractedNeed |
 }
 
 /** 合并 LLM 抽取结果：规则抽到的优先，LLM 补规则没抽到的；全部做合法性校验 */
-function mergePatch(rule: ChatPatch, llm: ReturnType<typeof llmChatSchema.parse>, ctx: ChatCtx, text: string): ChatPatch {
-  const out: ChatPatch = { ...rule };
+function mergePatch(rule: IntakePatch, llm: ReturnType<typeof llmChatSchema.parse>, ctx: ChatCtx, text: string): IntakePatch {
+  const out: IntakePatch = { ...rule };
   if (!out.rsvp && llm.rsvp) {
     // LLM 说不来时要有否定词撑着，避免把“周五不行”当成整局不来
     if (llm.rsvp === "yes" || (/不|没|算了|下次|鸽/.test(text) && !CONDITIONAL_RE.test(strip(text)))) out.rsvp = llm.rsvp;

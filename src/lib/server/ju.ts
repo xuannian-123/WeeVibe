@@ -44,7 +44,7 @@ import {
   type AdvanceDeps,
 } from "./ju-core";
 import { createdText, ruleGroupMessages } from "./ju-text";
-import { getProfile } from "./profile";
+import { getProfile, rememberVote } from "./profile";
 import type { CreateJuInput, PatchJuInput, PatchMemberInput } from "./schemas";
 
 export { nowFor };
@@ -383,6 +383,8 @@ export function vote(id: string, token: string, proposalId: string, viewer: View
     if (!token) throw new HttpError(401, "需要成员身份（x-member-token）");
     if (!me) throw new HttpError(403, "成员身份不对");
     castVote(ctx.ju, ctx.members, me, proposalId, ctx.now);
+    // v6：投了哪个方案 → 分身猜一点口味（只写本人档案）
+    rememberVote(me, ctx.ju, proposalId, ctx.now);
     return publicState(ctx.ju, ctx.members, viewer, { mine: ctx.priv.mine });
   });
 }

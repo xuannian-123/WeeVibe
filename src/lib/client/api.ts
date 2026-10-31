@@ -1,6 +1,11 @@
 // 前端 API client —— 形状以 docs/CONTRACT.md 第五节、第十节与 src/lib/types.ts（v4）为准。
 // 自动带 token：x-member-token / x-admin-token 按局 id 从 localStorage 取（见 storage.ts）。
 import type {
+  AvatarStyle,
+  FeedbackVerdict,
+  Give,
+  Mood,
+  Transport,
   BillSplit,
   ChatReply,
   ChatScreenshotParse,
@@ -159,8 +164,43 @@ export type ChatBody =
       autofill?: true;
       preferenceAction?: "review" | "finish" | "swipe";
       preferencesChat?: true;
+      /* v6 授权书卡片 */
+      mood?: Mood | null;
+      activityOpen?: boolean;
+      activities?: string[];
+      tags?: string[];
+      mandate?: { style: AvatarStyle; give?: Give; floors: string[] };
+      onboarding?: OnboardingBody;
     };
 export type ChatResult = ChatReply & { me: Member };
+
+/** v6 首次建档（每项都可以不填） */
+export type OnboardingBody = {
+  avatarName?: string;
+  places?: NonNullable<Profile["places"]>;
+  transport?: Transport;
+  floors?: string[];
+  homeBy?: string;
+  allergy?: string;
+  /** 0 = 不太在意 */
+  budget?: number;
+  swipes?: Record<string, SwipeVerdict>;
+};
+/** v6 /me 改档案：null = 删掉这一项 */
+export type ProfileEditBody = {
+  avatarName?: string | null;
+  style?: AvatarStyle | null;
+  places?: NonNullable<Profile["places"]> | null;
+  transport?: Transport | null;
+  usualHomeBy?: string | null;
+  dietTags?: DietTag[];
+  body?: string[];
+  typicalBudget?: number | null;
+  activityTastes?: Record<string, number>;
+  forget?: string[];
+  forgetLearned?: true;
+};
+export type FeedbackStatus = { due: boolean; verdict?: FeedbackVerdict; title: string };
 
 export type DeckResult = { deck: Poi[]; predicted?: Record<string, SwipeVerdict> };
 /** v4 私下标记：只有 interests 会给别人看 */
@@ -279,6 +319,15 @@ export const api = {
   icsUrl: (id: string) => `${J(id)}/ics`,
 
   profile: (pid: string) => request<Profile | null>(`/api/profile/${enc(pid)}`, { timeoutMs: 8000 }),
+
+  /** v6 /me「分身眼中的你」：改 / 删 / 忘掉 */
+  editProfile: (pid: string, body: ProfileEditBody) =>
+    request<Profile>(`/api/profile/${enc(pid)}`, { method: "PATCH", body, timeoutMs: 8000 }),
+
+  /** v6 局后一键反馈 */
+  feedbackStatus: (id: string) => request<FeedbackStatus>(`${J(id)}/feedback`, { ju: id, auth: "member", timeoutMs: 8000 }),
+  feedback: (id: string, verdict: FeedbackVerdict) =>
+    request<{ verdict: FeedbackVerdict; reply: string; profile: Profile }>(`${J(id)}/feedback`, { body: { verdict }, ju: id, auth: "member" }),
 
   geoSearch: (q: string, city?: string) =>
     request<Place[]>(`/api/geo/search?q=${enc(q)}${city ? `&city=${enc(city)}` : ""}`, { timeoutMs: 8000 }),
