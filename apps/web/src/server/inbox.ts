@@ -50,13 +50,13 @@ export async function inboxSnapshot(tx: Tx, actor: string, now = new Date()) {
   for(const notice of gatheringNotices){
     if(notice.event.gathering.kind!=='friend')continue;
     const updated=notice.event.action==='updated';
-    if(!['submitted','updated','plans_ready','selection_updated','confirmation_requested','confirmation_declined','completed'].includes(notice.event.action))throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'筹备消息暂时无法核对');
+    if(!['submitted','updated','plans_ready','selection_updated','confirmation_requested','confirmation_declined','completed','arrangement_published','attendance_updated','feedback_added'].includes(notice.event.action))throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'筹备消息暂时无法核对');
     const details=gatheringDetailsSchema.safeParse(notice.event.gathering.details);if(!details.success)throw new ServiceError('UPSTREAM_UNAVAILABLE',503,'筹备消息标题暂时无法核对');const visible=details.data;
     const workflow=gatheringWorkflowStateSchema.safeParse(notice.event.gathering.workflow?.state);
     const state=workflow.success?workflow.data:undefined;
     const actionable=!taskShown.has(notice.event.gatheringId);taskShown.add(notice.event.gatheringId);
-    const pending=!!state&&actionable&&(state.phase==='selecting'&&(!state.selections[actor]||notice.event.gathering.ownerUserId===actor)||state.phase==='confirming'&&state.confirmations[actor]?.proposal_version!==state.proposal_version||state.phase==='adjusting'&&notice.event.gathering.ownerUserId===actor);
-    const lifecycle:Record<string,string>={plans_ready:'推荐方案已生成，请查看安排。',selection_updated:'有成员更新了方案选择，请查看协调进度。',confirmation_requested:'有一份协调后的安排等待确认，请查看当前版本。',confirmation_declined:'有成员希望调整安排，请查看反馈后重新协调。',completed:'本次安排已确认完成，点击查看最终方案。'};
+    const pending=!!state&&actionable&&(state.phase==='selecting'&&(!state.selections[actor]||notice.event.gathering.ownerUserId===actor)||state.phase==='confirming'&&state.confirmations[actor]?.proposal_version!==state.proposal_version||state.phase==='adjusting'&&notice.event.gathering.ownerUserId===actor)||notice.event.action==='arrangement_published'&&notice.event.gathering.ownerUserId!==actor||notice.event.action==='feedback_added'&&notice.event.gathering.ownerUserId===actor;
+    const lifecycle:Record<string,string>={plans_ready:'推荐方案已生成，请查看安排。',selection_updated:'有成员更新了方案选择，请查看协调进度。',confirmation_requested:'有一份协调后的安排等待确认，请查看当前版本。',confirmation_declined:'有成员希望调整安排，请查看反馈后重新协调。',completed:'本次安排已确认完成，点击查看最终方案。',arrangement_published:'局头发布了一版安排，请查看并表达参加意向。',attendance_updated:'有人更新了参加意向，请查看当前安排。',feedback_added:'收到一条安排反馈，请查看并处理。'};
     messages.push({id:`gathering-notice:${notice.id}`,activity_id:null,gathering_id:notice.event.gatheringId,title:visible.title||'朋友出游',summary:lifecycle[notice.event.action]||(updated?'有成员更新了填写，点击查看本次筹备。':'有成员提交了填写，点击查看本次筹备。'),created_at:notice.createdAt.toISOString(),read:false,pending,status:pending?'待你处理':notice.event.action==='completed'?'安排已完成':lifecycle[notice.event.action]?'方案有更新':updated?'填写已更新':'收到新填写',section:'gathering'});
   }
   const visible = [...new Map(messages.map(m => [m.id, m])).values()].sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id)).slice(0, 100);
