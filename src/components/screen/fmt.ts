@@ -85,12 +85,12 @@ export function shortHash(h?: string, n = 10) {
   return h.length > n ? `${h.slice(0, n)}…` : h;
 }
 
-/** 满意度 0-100 → 热力色（低：朱砂，中：芥末，高：翠绿），深色底用 */
+/** 满意度 0-100 → 热力色（低：淡紫，中：浅丁香，高：薄荷绿），深色底用 */
 export function heatColor(u: number): string {
   const v = Math.max(0, Math.min(100, u)) / 100;
   const stops: [number, [number, number, number]][] = [
-    [0, [226, 65, 46]],
-    [0.55, [242, 181, 48]],
+    [0, [173, 147, 224]],
+    [0.55, [201, 185, 241]],
     [1, [62, 207, 142]],
   ];
   let i = 0;

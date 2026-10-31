@@ -75,17 +75,17 @@ export function seatCodes(events: NegotiationEvent[], seats = 0): string[] {
 /** 代号配色：深底（大屏）用 fg 发光，浅底（手机）用 bg 色块 + ink 字。同一代号永远同一色 */
 const PALETTE: { fg: string; bg: string }[] = [
   { fg: "#7cc4ff", bg: "#cfe8ff" },
-  { fg: "#f2b530", bg: "#fde9b8" },
+  { fg: "#c9b9f1", bg: "#e5e9ff" },
   { fg: "#3ecf8e", bg: "#c9f0dc" },
   { fg: "#c79bff", bg: "#eadcff" },
-  { fg: "#ff8a78", bg: "#fbe0da" },
+  { fg: "#ff8a78", bg: "#f2f2ff" },
   { fg: "#5ee0d8", bg: "#c8f3f0" },
   { fg: "#ffb86b", bg: "#ffe2c2" },
   { fg: "#f58bc8", bg: "#fbd9ec" },
   { fg: "#a8d86b", bg: "#e2f3c8" },
   { fg: "#9fb3ff", bg: "#dde3ff" },
 ];
-const JUZHANG_TONE = { fg: "#e2412e", bg: "#e2412e" };
+const JUZHANG_TONE = { fg: "#ad93e0", bg: "#ad93e0" };
 
 export function speakerTone(speaker: string): { fg: string; bg: string; letter: string } {
   const l = speakerLetter(speaker);
@@ -98,15 +98,15 @@ export type KindStyle = { icon: string; label: string; color: string; soft: stri
 
 /** 让步 / 交换 / 补偿各有自己的颜色和图标；color 深浅底都可读，soft 是浅底色块 */
 export const KIND_STYLE: Record<NegotiationEvent["kind"], KindStyle> = {
-  open: { icon: "📜", label: "交底", color: "#a89a88", soft: "#f3e8d6" },
-  propose: { icon: "🧭", label: "方案", color: "#f2b530", soft: "#fde9b8" },
+  open: { icon: "📜", label: "交底", color: "#b4c6be", soft: "#dff4e9" },
+  propose: { icon: "🧭", label: "方案", color: "#c9b9f1", soft: "#e5e9ff" },
   argue: { icon: "💬", label: "表态", color: "#ffd166", soft: "#fff1c9" },
-  block: { icon: "⛔", label: "卡点", color: "#ff6b57", soft: "#fbe0da" },
+  block: { icon: "⛔", label: "卡点", color: "#ff6b57", soft: "#f2f2ff" },
   concede: { icon: "🤝", label: "让步", color: "#7cc4ff", soft: "#cfe8ff" },
   trade: { icon: "⇄", label: "交换", color: "#c79bff", soft: "#eadcff" },
   compensate: { icon: "🎁", label: "补偿", color: "#3ecf8e", soft: "#c9f0dc" },
-  ask: { icon: "✉️", label: "私下问", color: "#f3e7d3", soft: "#f3e8d6" },
-  decide: { icon: "⚖️", label: "拍板", color: "#e2412e", soft: "#fbe0da" },
+  ask: { icon: "✉️", label: "私下问", color: "#effbf5", soft: "#dff4e9" },
+  decide: { icon: "⚖️", label: "拍板", color: "#ad93e0", soft: "#f2f2ff" },
 };
 
 /** 事件文字里点到的其他代号（交换时画两人之间的连线），不含说话人自己 */

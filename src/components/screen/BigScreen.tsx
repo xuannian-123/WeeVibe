@@ -45,26 +45,26 @@ function QuorumRing({ have, need }: { have: number; need: number }) {
   const pct = need > 0 ? Math.min(1, have / need) : 0;
   return (
     <svg viewBox="0 0 200 200" className="size-[180px] shrink-0" role="img" aria-label={`${have}/${need}`}>
-      <circle cx="100" cy="100" r={r} fill="none" stroke="#2a231f" strokeWidth="18" />
+      <circle cx="100" cy="100" r={r} fill="none" stroke="var(--color-night-3)" strokeWidth="18" />
       <circle
         cx="100"
         cy="100"
         r={r}
         fill="none"
-        stroke="#e2412e"
+        stroke="var(--color-cinnabar)"
         strokeWidth="18"
         strokeLinecap="round"
         strokeDasharray={`${c * pct} ${c}`}
         transform="rotate(-90 100 100)"
-        style={{ transition: "stroke-dasharray .8s cubic-bezier(.2,.9,.25,1.1)", filter: "drop-shadow(0 0 10px rgb(226 65 46 / .6))" }}
+        style={{ transition: "stroke-dasharray .8s cubic-bezier(.2,.9,.25,1.1)", filter: "drop-shadow(0 0 10px rgb(99 80 162 / .6))" }}
       />
-      <text x="100" y="108" textAnchor="middle" fill="#f3e7d3" fontSize="58" fontWeight="800" style={{ fontFamily: "var(--font-num)" }}>
+      <text x="100" y="108" textAnchor="middle" fill="var(--color-cream)" fontSize="58" fontWeight="800" style={{ fontFamily: "var(--font-num)" }}>
         {have}
-        <tspan fill="#a89a88" fontSize="30">
+        <tspan fill="var(--color-cream-faint)" fontSize="30">
           /{need}
         </tspan>
       </text>
-      <text x="100" y="140" textAnchor="middle" fill="#a89a88" fontSize="16" fontWeight="700">
+      <text x="100" y="140" textAnchor="middle" fill="var(--color-cream-faint)" fontSize="16" fontWeight="700">
         人说了来
       </text>
     </svg>
@@ -412,8 +412,8 @@ export function BigScreen({
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-night text-cream">
-      <div aria-hidden className="pointer-events-none absolute -left-40 -top-40 size-[700px] rounded-full" style={{ background: "radial-gradient(circle, rgb(226 65 46 / .16), transparent 65%)" }} />
-      <div aria-hidden className="pointer-events-none absolute -bottom-60 right-20 size-[800px] rounded-full" style={{ background: "radial-gradient(circle, rgb(242 181 48 / .09), transparent 65%)" }} />
+      <div aria-hidden className="pointer-events-none absolute -left-40 -top-40 size-[700px] rounded-full" style={{ background: "radial-gradient(circle, rgb(99 80 162 / .16), transparent 65%)" }} />
+      <div aria-hidden className="pointer-events-none absolute -bottom-60 right-20 size-[800px] rounded-full" style={{ background: "radial-gradient(circle, rgb(201 185 241 / .09), transparent 65%)" }} />
 
       {/* 头部 */}
       <header className="relative flex h-[140px] items-center gap-6 px-12">
@@ -463,7 +463,7 @@ export function BigScreen({
       ) : collecting ? (
         <div className="relative grid h-[900px] grid-cols-[420px_minmax(0,1fr)_600px] gap-7 px-12 pb-10">
           <div className="flex min-h-0 flex-col gap-6">
-            <div className="rounded-[28px] bg-cream p-6 shadow-[0_0_60px_rgb(242_181_48/.18)]">
+            <div className="rounded-[28px] bg-cream p-6 shadow-[0_0_60px_rgb(201_185_241/.18)]">
               <QrSvg text={joinUrl} className="aspect-square w-full" />
               <div className="mt-4 flex items-center justify-between">
                 <span className="text-[36px] font-black text-night">扫码入局</span>

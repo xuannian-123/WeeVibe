@@ -58,8 +58,8 @@ function RoundBar({ round, done }: { round: number | null; done: boolean }) {
                 className="absolute inset-y-0 left-0 rounded-full"
                 style={{
                   width: past ? "100%" : now ? "62%" : "0%",
-                  background: past ? "#3ecf8e" : "#f2b530",
-                  boxShadow: now ? "0 0 14px rgb(242 181 48 / .7)" : undefined,
+                  background: past ? "#3ecf8e" : "var(--color-mustard)",
+                  boxShadow: now ? "0 0 14px rgb(201 185 241 / .7)" : undefined,
                   transition: "width 700ms cubic-bezier(.45,0,.2,1)",
                 }}
               />
@@ -122,7 +122,7 @@ function Transcript({ events, step, phase, typed, reduced }: { events: Negotiati
               )}
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex items-center gap-2">
-                  <span className="text-[16px] font-black" style={{ color: jz ? "#ff8a78" : tone.fg }}>
+                  <span className="text-[16px] font-black" style={{ color: jz ? "#bda5f2" : tone.fg }}>
                     {e.speaker}
                   </span>
                   <span className="rounded-full px-2 py-px text-[13px] font-black" style={{ background: `${ks.color}26`, color: ks.color }}>
@@ -162,7 +162,7 @@ function ResultCard({ state, reduced }: { state: JuState; reduced: boolean }) {
   )
     .filter(([n]) => n > 0)
     .map(([n, l, c]): [string, string, string] => [String(n), l, c])
-    .concat([[String(s.asked), s.asked ? "人被私下问" : "人被打扰", "#f3e7d3"]]);
+    .concat([[String(s.asked), s.asked ? "人被私下问" : "人被打扰", "var(--color-cream)"]]);
   return (
     <div className="flex h-full flex-col justify-center">
       <div

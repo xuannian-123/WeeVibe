@@ -147,7 +147,7 @@ export function SpecPreview({ draft, onChange }: { draft: Draft; onChange: (d: D
 }
 
 const SAID: Record<SeedMember["said"], [string, string]> = {
-  yes: ["说了去", "bg-[#2e8b6a] text-white"],
+  yes: ["说了去", "bg-[var(--color-jade)] text-white"],
   maybe: ["还在犹豫", "bg-mustard text-ink"],
   no: ["说了不去", "bg-line text-ink-soft"],
 };

@@ -44,7 +44,7 @@ export function QrSvg({ text, className = "" }: { text: string; className?: stri
       type: "svg",
       margin: 0,
       errorCorrectionLevel: "M",
-      color: { dark: "#1f1a17", light: "#00000000" },
+      color: { dark: "#222321", light: "#00000000" },
     })
       .then((s) => alive && setSvg(s))
       .catch(() => alive && setSvg(""));

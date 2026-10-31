@@ -2,28 +2,29 @@
 
 /* ───────────── AI 局长 · 设计令牌 ───────────── */
 @theme {
-  /* 日间 · 纸感 */
-  --color-paper: #fbf5ec;
-  --color-paper-deep: #f3e8d6;
-  --color-card: #fffdf8;
-  --color-ink: #1f1a17;
-  --color-ink-soft: #5e534a;
-  --color-ink-faint: #9a8e82;
-  --color-line: #e6d9c6;
-  --color-cinnabar: #e2412e;
-  --color-cinnabar-deep: #b92e1e;
-  --color-cinnabar-soft: #fbe0da;
-  --color-mustard: #f2b530;
-  --color-mustard-soft: #fde9b8;
-  --color-jade: #2e8b6a;
+  /* 日间 · WeeVibe 暖白、青柠绿与辅助紫 */
+  --color-paper: #f8f7f1;
+  --color-paper-deep: #edf3df;
+  --color-card: #ffffff;
+  --color-ink: #222321;
+  --color-ink-soft: #6d7065;
+  --color-ink-faint: #76796f;
+  --color-line: #dce3ce;
+  --color-cinnabar: #665188;
+  --color-cinnabar-deep: #503b70;
+  --color-cinnabar-soft: #f0eaf8;
+  --color-mustard: #c9b5e8;
+  --color-mustard-soft: #e8dff2;
+  --color-lime: #84d638;
+  --color-jade: #496632;
 
-  /* 夜间 · 夜宵局 */
-  --color-night: #14110f;
-  --color-night-2: #1d1815;
-  --color-night-3: #2a231f;
-  --color-night-line: #3a302a;
-  --color-cream: #f3e7d3;
-  --color-cream-faint: #a89a88;
+  /* 夜间 · 同品牌深色大屏 */
+  --color-night: #191c17;
+  --color-night-2: #23281f;
+  --color-night-3: #30382a;
+  --color-night-line: #46513e;
+  --color-cream: #f4f6eb;
+  --color-cream-faint: #bec8ae;
 
   /* 字体：Space Grotesk 只覆盖拉丁字符和数字，中文自动回落到系统字体 */
   --font-sans:
@@ -31,15 +32,15 @@
     "Microsoft YaHei", "Hiragino Sans GB", "Noto Sans CJK SC", system-ui, sans-serif;
   --font-num: "Space Grotesk Variable", "PingFang SC", "Microsoft YaHei", sans-serif;
 
-  /* 贴纸硬投影 */
-  --shadow-sticker: 4px 4px 0 0 var(--color-ink);
-  --shadow-sticker-sm: 2px 2px 0 0 var(--color-ink);
-  --shadow-sticker-lg: 6px 6px 0 0 var(--color-ink);
-  --shadow-glow-red: 0 0 24px 2px rgb(226 65 46 / 0.45);
-  --shadow-glow-gold: 0 0 24px 2px rgb(242 181 48 / 0.4);
+  /* 轻贴纸投影，保留原有按压反馈 */
+  --shadow-sticker: 0 6px 20px rgb(37 43 53 / 0.08);
+  --shadow-sticker-sm: 0 2px 6px rgb(37 43 53 / 0.08);
+  --shadow-sticker-lg: 0 10px 32px rgb(37 43 53 / 0.12);
+  --shadow-glow-red: 0 0 24px 2px rgb(99 80 162 / 0.45);
+  --shadow-glow-gold: 0 0 24px 2px rgb(201 185 241 / 0.4);
 
-  --radius-card: 16px;
-  --radius-btn: 14px;
+  --radius-card: 24px;
+  --radius-btn: 18px;
 
   --animate-stamp-slam: stamp-slam 720ms cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
   --animate-impact-shake: impact-shake 420ms ease-out 400ms both;
@@ -208,10 +209,10 @@
   @keyframes glow-pulse {
     0%,
     100% {
-      box-shadow: 0 0 0 0 rgb(242 181 48 / 0.7);
+      box-shadow: 0 0 0 0 rgb(201 185 241 / 0.7);
     }
     50% {
-      box-shadow: 0 0 0 6px rgb(242 181 48 / 0);
+      box-shadow: 0 0 0 6px rgb(201 185 241 / 0);
     }
   }
   @keyframes fade-in {
@@ -236,16 +237,7 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   overflow-x: hidden;
-  /* 微弱的纸纹 */
-  background-image:
-    radial-gradient(rgb(31 26 23 / 0.035) 1px, transparent 1px),
-    radial-gradient(rgb(31 26 23 / 0.025) 1px, transparent 1px);
-  background-size:
-    22px 22px,
-    37px 37px;
-  background-position:
-    0 0,
-    11px 7px;
+
 }
 
 .font-num {
@@ -257,7 +249,7 @@ body {
 /* 贴纸卡片 */
 .sticker {
   background: var(--color-card);
-  border: 2px solid var(--color-ink);
+  border: 1px solid var(--color-line);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-sticker);
 }
@@ -287,9 +279,9 @@ body {
 .field {
   width: 100%;
   min-height: 48px;
-  border: 2px solid var(--color-ink);
-  border-radius: 12px;
-  background: #fff;
+  border: 1px solid var(--color-line);
+  border-radius: 16px;
+  background: #f4f6eb;
   padding: 10px 14px;
   font-size: 16px; /* 16px 防止 iOS 聚焦缩放 */
   color: var(--color-ink);
@@ -362,7 +354,7 @@ body {
 
 /* 斜线底纹：局长预填 / 占位 */
 .hatch {
-  background-image: repeating-linear-gradient(-45deg, rgb(31 26 23 / 0.06) 0 6px, transparent 6px 12px);
+  background-image: repeating-linear-gradient(-45deg, rgb(37 43 53 / 0.06) 0 6px, transparent 6px 12px);
 }
 
 .no-scrollbar {
@@ -374,7 +366,7 @@ body {
 
 /* 大屏点阵 */
 .dot-grid-night {
-  background-image: radial-gradient(rgb(243 231 211 / 0.09) 1.4px, transparent 1.4px);
+  background-image: radial-gradient(rgb(239 251 245 / 0.09) 1.4px, transparent 1.4px);
   background-size: 28px 28px;
 }
 }
@@ -390,3 +382,26 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* Shared keyboard focus and narrow-screen wrapping across existing flows. */
+:focus-visible {
+  outline: 3px solid var(--color-cinnabar);
+  outline-offset: 3px;
+}
+button, a, h1, h2, h3 { overflow-wrap: anywhere; }
+@media (max-width: 360px) {
+  .field { padding-inline: 10px; }
+}
+
+/* The stage uses a brighter purple for legibility on its deep green surface. */
+.bg-night { --color-cinnabar: #bda5f2; }
+
+/* Reference brand: bold editorial type, warm canvas and citrus-green panels. */
+.wv-wordmark { font-family: Arial, "PingFang SC", sans-serif; font-weight: 900; letter-spacing: -2px; }
+.wv-lime { color: #84d638; }
+.wv-home-hero { padding: 34px 0 30px; }
+.wv-home-title { font-family: Arial, "PingFang SC", sans-serif; font-size: clamp(38px, 11vw, 60px); line-height: 1.02; font-weight: 900; letter-spacing: -2.5px; }
+.wv-launch { background: #edf3df; border-color: #d9e3c8; }
+.wv-launch .field { background: #f8faf1; }
+.wv-launch-tabs { border: 1px solid #d0d9bf; }
+.wv-launch button[role="tab"][aria-selected="true"] { background: #dfecc4; box-shadow: none; outline: none; --tw-ring-color: transparent; }

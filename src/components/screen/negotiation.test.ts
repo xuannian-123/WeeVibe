@@ -60,7 +60,7 @@ describe("代号与配色", () => {
   it("同一代号永远同一色，不同代号不同色，局长是朱砂", () => {
     expect(speakerTone("分身 A")).toEqual(speakerTone("分身 A"));
     expect(speakerTone("分身 A").fg).not.toBe(speakerTone("分身 B").fg);
-    expect(speakerTone("局长")).toMatchObject({ fg: "#e2412e", letter: "局" });
+    expect(speakerTone("局长")).toMatchObject({ fg: "#ad93e0", letter: "局" });
   });
   it("座位补齐到人数，事件里的代号超出时自动扩展", () => {
     expect(seatCodes(EVENTS, 8)).toEqual(["分身 A", "分身 B", "分身 C", "分身 D", "分身 E", "分身 F", "分身 G", "分身 H"]);

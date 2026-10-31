@@ -175,7 +175,7 @@ export function SimCall({
             挂断
           </button>
         ) : (
-          <button onClick={start} className="pressable min-h-11 flex-1 rounded-[var(--radius-btn)] border-2 border-cream bg-[#2e8b6a] font-bold text-white">
+          <button onClick={start} className="pressable min-h-11 flex-1 rounded-[var(--radius-btn)] border-2 border-cream bg-[var(--color-jade)] font-bold text-white">
             {ended ? "再听一遍" : "▶ 播放模拟通话"}
           </button>
         )}

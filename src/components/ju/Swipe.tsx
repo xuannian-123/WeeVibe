@@ -13,7 +13,7 @@ const THRESH = 90;
 
 /** 每家店一个稳定的底色 */
 function tint(id: string): string {
-  const palette = ["#f2b530", "#e2412e", "#2e8b6a", "#f3e8d6", "#1f1a17", "#fde9b8"];
+  const palette = ["var(--color-mustard)", "var(--color-cinnabar)", "var(--color-jade)", "var(--color-paper-deep)", "var(--color-ink)", "var(--color-mustard-soft)"];
   let h = 0;
   for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return palette[h % palette.length];
@@ -21,7 +21,7 @@ function tint(id: string): string {
 
 function PoiCard({ poi, guess, category }: { poi: Poi; guess?: SwipeVerdict; category: string }) {
   const bg = tint(poi.id);
-  const dark = bg === "#1f1a17" || bg === "#e2412e" || bg === "#2e8b6a";
+  const dark = bg === "var(--color-ink)" || bg === "var(--color-cinnabar)" || bg === "var(--color-jade)";
   return (
     <div className="sticker flex h-full flex-col overflow-hidden">
       <div className="relative flex h-[46%] shrink-0 items-center justify-center border-b-2 border-ink" style={{ background: bg }}>

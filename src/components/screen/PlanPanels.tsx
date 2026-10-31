@@ -96,10 +96,10 @@ export function ExperienceMatrix({ state }: { state: JuState }) {
                   key={p.id}
                   className="animate-fade-in font-num flex h-full items-center justify-between rounded-lg px-3"
                   style={{
-                    background: absent ? "#2a231f" : heatColor(e.utility),
-                    color: absent ? "#a89a88" : "#14110f",
+                    background: absent ? "var(--color-night-3)" : heatColor(e.utility),
+                    color: absent ? "var(--color-cream-faint)" : "var(--color-night)",
                     animationDelay: `${200 + r * 60}ms`,
-                    outline: marked(p.id) ? "2px solid rgb(226 65 46 / .6)" : undefined,
+                    outline: marked(p.id) ? "2px solid rgb(99 80 162 / .6)" : undefined,
                   }}
                   title={e.notes.join("，")}
                 >

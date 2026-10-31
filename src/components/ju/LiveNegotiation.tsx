@@ -42,7 +42,7 @@ function Bubbles({ events, step, phase, typed, reduced }: { events: NegotiationE
             )}
             <div className="min-w-0 flex-1">
               <div className="mb-0.5 flex items-center gap-1.5">
-                <span className="text-[12.5px] font-black" style={{ color: jz ? "#ff8a78" : tone.fg }}>{e.speaker}</span>
+                <span className="text-[12.5px] font-black" style={{ color: jz ? "#bda5f2" : tone.fg }}>{e.speaker}</span>
                 <span className="rounded-full px-1.5 text-[11px] font-black" style={{ background: `${ks.color}26`, color: ks.color }}>{ks.icon} {ks.label}</span>
               </div>
               <p className="rounded-2xl rounded-tl-sm border-2 bg-night-3 px-3 py-2 text-[15px] font-semibold leading-snug text-cream" style={{ borderColor: last ? `${ks.color}99` : "transparent" }}>
@@ -64,7 +64,7 @@ function Result({ state, me, reduced }: { state: JuState; me: Member | null; red
   const mine = (me?.private?.avatarLog ?? []).filter((e) => e.kind === "concede" || e.kind === "held" || e.kind === "compensated").slice(0, 3);
   const chips = ([[s.autoConcessions, "次自动让步", KIND_STYLE.concede.color], [s.trades, "次交换", KIND_STYLE.trade.color], [s.compensations, "次补偿", KIND_STYLE.compensate.color]] as [number, string, string][])
     .filter(([n]) => n > 0)
-    .concat([[s.asked, s.asked ? "人被私下问" : "人被打扰", "#f3e7d3"]]);
+    .concat([[s.asked, s.asked ? "人被私下问" : "人被打扰", "var(--color-cream)"]]);
   return (
     <div className="rounded-3xl border-2 border-[#3ecf8e] bg-night p-4" style={{ animation: reduced ? undefined : "ln-card 640ms cubic-bezier(.2,.8,.2,1) both" }} role="status">
       <div className="flex items-end gap-2">

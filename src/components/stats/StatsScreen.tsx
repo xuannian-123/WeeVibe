@@ -107,8 +107,8 @@ function HourlyChart({ hourly }: { hourly: Stats["hourly"] }) {
   if (rows.length < 2 || total === 0) {
     return (
       <svg viewBox={`0 0 ${CW} ${CH}`} className="block h-full w-full" role="img" aria-label="72 小时入局曲线：暂无数据">
-        <line x1={ML} x2={CW - MR} y1={MT + ph} y2={MT + ph} stroke="#3a302a" strokeWidth="2" strokeDasharray="6 8" />
-        <text x={CW / 2} y={MT + ph / 2} textAnchor="middle" fill="#a89a88" fontSize="26" fontWeight="700">
+        <line x1={ML} x2={CW - MR} y1={MT + ph} y2={MT + ph} stroke="var(--color-night-line)" strokeWidth="2" strokeDasharray="6 8" />
+        <text x={CW / 2} y={MT + ph / 2} textAnchor="middle" fill="var(--color-cream-faint)" fontSize="26" fontWeight="700">
           曲线会在第一位朋友入局后长出来 🌱
         </text>
       </svg>
@@ -130,8 +130,8 @@ function HourlyChart({ hourly }: { hourly: Stats["hourly"] }) {
     <svg viewBox={`0 0 ${CW} ${CH}`} className="block h-full w-full" role="img" aria-label={`72 小时入局曲线，共 ${total} 人次`}>
       <defs>
         <linearGradient id={`area-${uid}`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor="#f2b530" stopOpacity="0.38" />
-          <stop offset="1" stopColor="#f2b530" stopOpacity="0" />
+          <stop offset="0" stopColor="var(--color-mustard)" stopOpacity="0.38" />
+          <stop offset="1" stopColor="var(--color-mustard)" stopOpacity="0" />
         </linearGradient>
         <filter id={`glow-${uid}`} x="-10%" y="-30%" width="120%" height="160%">
           <feGaussianBlur stdDeviation="5" result="b" />
@@ -145,8 +145,8 @@ function HourlyChart({ hourly }: { hourly: Stats["hourly"] }) {
       {/* 网格：低调 */}
       {[0, 0.5, 1].map((k) => (
         <g key={k}>
-          <line x1={ML} x2={CW - MR} y1={y(max * k)} y2={y(max * k)} stroke="#f3e7d3" strokeOpacity={k === 0 ? 0.25 : 0.08} strokeWidth="1.5" />
-          <text x={ML - 14} y={y(max * k) + 6} textAnchor="end" fill="#a89a88" fontSize="17" style={{ fontFamily: "var(--font-num)" }}>
+          <line x1={ML} x2={CW - MR} y1={y(max * k)} y2={y(max * k)} stroke="var(--color-cream)" strokeOpacity={k === 0 ? 0.25 : 0.08} strokeWidth="1.5" />
+          <text x={ML - 14} y={y(max * k) + 6} textAnchor="end" fill="var(--color-cream-faint)" fontSize="17" style={{ fontFamily: "var(--font-num)" }}>
             {Math.round(max * k)}
           </text>
         </g>
@@ -156,29 +156,29 @@ function HourlyChart({ hourly }: { hourly: Stats["hourly"] }) {
         if (i !== n - 1 && n - 1 - i < step * 0.6) return null; // 避免和最后一个标签挤在一起
         const { md, h } = bj(r.d);
         return (
-          <text key={i} x={x(i)} y={CH - 12} textAnchor="middle" fill="#a89a88" fontSize="16" style={{ fontFamily: "var(--font-num)" }}>
+          <text key={i} x={x(i)} y={CH - 12} textAnchor="middle" fill="var(--color-cream-faint)" fontSize="16" style={{ fontFamily: "var(--font-num)" }}>
             {md} {String(h).padStart(2, "0")}:00
           </text>
         );
       })}
 
       <path d={area} fill={`url(#area-${uid})`} />
-      <path d={line} fill="none" stroke="#f2b530" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" filter={`url(#glow-${uid})`} />
+      <path d={line} fill="none" stroke="var(--color-mustard)" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" filter={`url(#glow-${uid})`} />
 
       {/* 峰值 */}
       {peakIdx !== n - 1 && (
         <g transform={`translate(${x(peakIdx)} ${y(rows[peakIdx].joins)})`}>
-          <circle r="7" fill="#f2b530" stroke="#1d1815" strokeWidth="3" />
-          <text y="-18" textAnchor="middle" fill="#f3e7d3" fontSize="18" fontWeight="700" stroke="#1d1815" strokeWidth="6" paintOrder="stroke">
+          <circle r="7" fill="var(--color-mustard)" stroke="var(--color-night-2)" strokeWidth="3" />
+          <text y="-18" textAnchor="middle" fill="var(--color-cream)" fontSize="18" fontWeight="700" stroke="var(--color-night-2)" strokeWidth="6" paintOrder="stroke">
             峰值 <tspan style={{ fontFamily: "var(--font-num)" }}>{rows[peakIdx].joins}</tspan>
           </text>
         </g>
       )}
       {/* 最新一小时 */}
       <g transform={`translate(${x(n - 1)} ${y(last.joins)})`}>
-        <circle r="10" fill="none" stroke="#e2412e" strokeWidth="3" className="svg-origin animate-pulse-ring" />
-        <circle r="7" fill="#e2412e" stroke="#1d1815" strokeWidth="3" />
-        <text x="-14" y="-22" textAnchor="end" fill="#f3e7d3" fontSize="18" fontWeight="700" stroke="#1d1815" strokeWidth="6" paintOrder="stroke">
+        <circle r="10" fill="none" stroke="var(--color-cinnabar)" strokeWidth="3" className="svg-origin animate-pulse-ring" />
+        <circle r="7" fill="var(--color-cinnabar)" stroke="var(--color-night-2)" strokeWidth="3" />
+        <text x="-14" y="-22" textAnchor="end" fill="var(--color-cream)" fontSize="18" fontWeight="700" stroke="var(--color-night-2)" strokeWidth="6" paintOrder="stroke">
           这一小时 <tspan style={{ fontFamily: "var(--font-num)" }}>{last.joins}</tspan>
         </text>
       </g>
@@ -216,7 +216,7 @@ function BigStat({
   return (
     <section
       className={`relative overflow-hidden rounded-[28px] border-2 p-8 ${
-        accent ? "border-mustard bg-mustard text-night shadow-[0_0_60px_rgb(242_181_48/.22)]" : "border-night-line bg-night-2 text-cream"
+        accent ? "border-mustard bg-mustard text-night shadow-[0_0_60px_rgb(201_185_241/.22)]" : "border-night-line bg-night-2 text-cream"
       }`}
     >
       {children}
@@ -298,12 +298,12 @@ export function StatsScreen({ stats, error }: { stats: Stats | null; error?: boo
       <div
         aria-hidden
         className="pointer-events-none absolute -right-40 -top-60 size-[800px] rounded-full"
-        style={{ background: "radial-gradient(circle, rgb(226 65 46 / .14), transparent 65%)" }}
+        style={{ background: "radial-gradient(circle, rgb(99 80 162 / .14), transparent 65%)" }}
       />
       <div
         aria-hidden
         className="pointer-events-none absolute -bottom-72 -left-40 size-[900px] rounded-full"
-        style={{ background: "radial-gradient(circle, rgb(242 181 48 / .08), transparent 65%)" }}
+        style={{ background: "radial-gradient(circle, rgb(201 185 241 / .08), transparent 65%)" }}
       />
 
       <header className="relative flex h-[150px] items-center gap-7 px-12">
@@ -328,7 +328,7 @@ export function StatsScreen({ stats, error }: { stats: Stats | null; error?: boo
           unit="个"
           sub={juCount > 0 ? <>共 <b className="font-num text-cream">{juCount}</b> 个真实局，盖章率 <b className="font-num text-cream">{rate}%</b></> : "两人以上的真局才算数"}
         >
-          <div className="pointer-events-none absolute -right-8 -top-6 rotate-[-12deg] opacity-80" style={{ filter: "drop-shadow(0 0 18px rgb(226 65 46 / .45))" }}>
+          <div className="pointer-events-none absolute -right-8 -top-6 rotate-[-12deg] opacity-80" style={{ filter: "drop-shadow(0 0 18px rgb(99 80 162 / .45))" }}>
             <Stamp size={140} />
           </div>
         </BigStat>

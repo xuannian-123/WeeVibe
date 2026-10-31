@@ -7,8 +7,8 @@ import type { Member } from "@/lib/types";
 type Variant = "primary" | "secondary" | "gold" | "ink" | "ghost";
 
 const VARIANT: Record<Variant, string> = {
-  primary: "bg-cinnabar text-white border-2 border-ink shadow-sticker",
-  secondary: "bg-card text-ink border-2 border-ink shadow-sticker",
+  primary: "bg-lime text-ink border border-transparent shadow-none",
+  secondary: "bg-cinnabar-soft text-cinnabar-deep border border-mustard-soft shadow-none",
   gold: "bg-mustard text-ink border-2 border-ink shadow-sticker",
   ink: "bg-ink text-paper border-2 border-ink shadow-[4px_4px_0_0_var(--color-mustard)]",
   ghost: "bg-transparent text-ink-soft underline underline-offset-4 decoration-ink-faint",
@@ -75,7 +75,7 @@ export function Chip({
       aria-label={ariaLabel}
       onClick={onClick}
       className={`pressable min-h-11 rounded-full border-2 border-ink px-3.5 text-[15px] font-semibold ${
-        selected ? "bg-mustard shadow-sticker-sm" : "bg-card text-ink-soft"
+        selected ? "bg-mustard text-ink shadow-sticker-sm" : "bg-card text-ink-soft"
       } ${className}`}
     >
       {children}
@@ -156,8 +156,8 @@ export function SealLogo({ size = 40, dark }: { size?: number; dark?: boolean })
         width: size,
         height: size,
         fontSize: size * 0.34,
-        boxShadow: dark ? "0 0 18px rgb(226 65 46 / .55)" : "2px 2px 0 0 var(--color-ink)",
-        border: `${Math.max(2, Math.round(size * 0.05))}px solid ${dark ? "#f3e7d3" : "var(--color-ink)"}`,
+        boxShadow: dark ? "0 0 18px rgb(99 80 162 / .55)" : "2px 2px 0 0 var(--color-ink)",
+        border: `${Math.max(2, Math.round(size * 0.05))}px solid ${dark ? "var(--color-cream)" : "var(--color-ink)"}`,
         transform: "rotate(-5deg)",
       }}
     >

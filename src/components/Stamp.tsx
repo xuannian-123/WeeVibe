@@ -22,7 +22,7 @@ export function Stamp({
   text = "成局",
   ring = "AI 局长 · 组局专用章",
   sub,
-  color = "#e2412e",
+  color = "var(--color-cinnabar)",
   className = "",
 }: {
   size?: number;
@@ -136,7 +136,7 @@ export function StampSlam({
   text,
   sub,
   play = true,
-  color = "#e2412e",
+  color = "var(--color-cinnabar)",
   onDark,
   className = "",
 }: {
@@ -161,7 +161,7 @@ export function StampSlam({
         style={{
           transform: play ? undefined : "rotate(-12deg)",
           mixBlendMode: onDark ? undefined : "multiply",
-          filter: onDark ? "drop-shadow(0 0 22px rgb(226 65 46 / .55))" : undefined,
+          filter: onDark ? "drop-shadow(0 0 22px rgb(99 80 162 / .55))" : undefined,
         }}
       >
         <Stamp size={size} text={text} sub={sub} color={color} />

@@ -271,15 +271,15 @@ export function AbstractMap({ state }: { state: JuState }) {
           </feMerge>
         </filter>
         <linearGradient id={`line-${uid}`} x1="0" x2="1">
-          <stop offset="0" stopColor="#f2b530" />
-          <stop offset="1" stopColor="#e2412e" />
+          <stop offset="0" stopColor="var(--color-mustard)" />
+          <stop offset="1" stopColor="var(--color-cinnabar)" />
         </linearGradient>
         <radialGradient id={`vig-${uid}`} cx="50%" cy="50%" r="65%">
-          <stop offset="0.55" stopColor="#14110f" stopOpacity="0" />
-          <stop offset="1" stopColor="#14110f" stopOpacity="0.85" />
+          <stop offset="0.55" stopColor="var(--color-night)" stopOpacity="0" />
+          <stop offset="1" stopColor="var(--color-night)" stopOpacity="0.85" />
         </radialGradient>
         <pattern id={`dots-${uid}`} width="26" height="26" patternUnits="userSpaceOnUse">
-          <circle cx="13" cy="13" r="1.5" fill="#f3e7d3" opacity="0.13" />
+          <circle cx="13" cy="13" r="1.5" fill="var(--color-cream)" opacity="0.13" />
         </pattern>
       </defs>
 
@@ -289,15 +289,15 @@ export function AbstractMap({ state }: { state: JuState }) {
       {(() => {
         const c = center ?? { x: W / 2, y: H / 2 - 10 };
         return [110, 220, 330, 440].map((r) => (
-          <circle key={r} cx={c.x} cy={c.y} r={r} fill="none" stroke="#f3e7d3" strokeOpacity="0.06" strokeWidth="1.5" strokeDasharray="4 8" />
+          <circle key={r} cx={c.x} cy={c.y} r={r} fill="none" stroke="var(--color-cream)" strokeOpacity="0.06" strokeWidth="1.5" strokeDasharray="4 8" />
         ));
       })()}
 
       {members.length === 0 && (
         <g>
-          <circle cx={W / 2} cy={H / 2 - 10} r="14" fill="#f2b530" className="svg-origin animate-pulse-ring" />
-          <circle cx={W / 2} cy={H / 2 - 10} r="7" fill="#f2b530" />
-          <text x={W / 2} y={H / 2 + 50} textAnchor="middle" fill="#a89a88" fontSize="24" fontWeight="700">
+          <circle cx={W / 2} cy={H / 2 - 10} r="14" fill="var(--color-mustard)" className="svg-origin animate-pulse-ring" />
+          <circle cx={W / 2} cy={H / 2 - 10} r="7" fill="var(--color-mustard)" />
+          <text x={W / 2} y={H / 2 + 50} textAnchor="middle" fill="var(--color-cream-faint)" fontSize="24" fontWeight="700">
             等第一个人扫码入局…
           </text>
         </g>
@@ -328,19 +328,19 @@ export function AbstractMap({ state }: { state: JuState }) {
       {/* 公平中心 */}
       {center && (
         <g>
-          <circle cx={center.x} cy={center.y} r="26" fill="none" stroke="#f2b530" strokeWidth="3" className="svg-origin animate-pulse-ring" />
+          <circle cx={center.x} cy={center.y} r="26" fill="none" stroke="var(--color-mustard)" strokeWidth="3" className="svg-origin animate-pulse-ring" />
           <circle
             cx={center.x}
             cy={center.y}
             r="26"
             fill="none"
-            stroke="#f2b530"
+            stroke="var(--color-mustard)"
             strokeWidth="3"
             className="svg-origin animate-pulse-ring"
             style={{ animationDelay: "1.2s" }}
           />
-          <circle cx={center.x} cy={center.y} r="9" fill="#f2b530" filter={`url(#glow-${uid})`} />
-          <text x={center.x} y={center.y + 32} textAnchor="middle" fill="#f2b530" fontSize="16" fontWeight="800" stroke="#14110f" strokeWidth="5" paintOrder="stroke">
+          <circle cx={center.x} cy={center.y} r="9" fill="var(--color-mustard)" filter={`url(#glow-${uid})`} />
+          <text x={center.x} y={center.y + 32} textAnchor="middle" fill="var(--color-mustard)" fontSize="16" fontWeight="800" stroke="var(--color-night)" strokeWidth="5" paintOrder="stroke">
             公平中心
           </text>
         </g>
@@ -362,13 +362,13 @@ export function AbstractMap({ state }: { state: JuState }) {
                   width={s}
                   height={s}
                   rx="8"
-                  fill={isTarget ? "#e2412e" : "#2a231f"}
-                  stroke={isTarget ? "#f3e7d3" : "#e2412e"}
+                  fill={isTarget ? "var(--color-cinnabar)" : "var(--color-night-3)"}
+                  stroke={isTarget ? "var(--color-cream)" : "var(--color-cinnabar)"}
                   strokeWidth="3"
                   filter={isTarget ? `url(#glow-${uid})` : undefined}
                 />
               </g>
-              <text y="8" textAnchor="middle" fill="#f3e7d3" fontSize={isTarget ? 24 : 19} fontWeight="800" style={{ fontFamily: "var(--font-num)" }}>
+              <text y="8" textAnchor="middle" fill="var(--color-cream)" fontSize={isTarget ? 24 : 19} fontWeight="800" style={{ fontFamily: "var(--font-num)" }}>
                 {i + 1}
               </text>
             </g>
@@ -385,9 +385,9 @@ export function AbstractMap({ state }: { state: JuState }) {
             width={targetLabel.x1 - targetLabel.x0}
             height={targetLabel.y1 - targetLabel.y0}
             rx="9"
-            fill="#14110f"
+            fill="var(--color-night)"
             fillOpacity="0.86"
-            stroke="#e2412e"
+            stroke="var(--color-cinnabar)"
             strokeOpacity="0.6"
             strokeWidth="1.5"
           />
@@ -395,7 +395,7 @@ export function AbstractMap({ state }: { state: JuState }) {
             x={(targetLabel.x0 + targetLabel.x1) / 2}
             y={targetLabel.y0 + 23}
             textAnchor="middle"
-            fill="#f3e7d3"
+            fill="var(--color-cream)"
             fontSize="20"
             fontWeight="800"
           >
@@ -411,17 +411,17 @@ export function AbstractMap({ state }: { state: JuState }) {
         return (
           <g key={m.id} transform={`translate(${p.x} ${p.y})`} opacity={off ? 0.35 : 1}>
             <g className="svg-origin animate-pop-in">
-              <circle r="31" fill="#2a231f" stroke={m.isOrganizer ? "#e2412e" : "#f2b530"} strokeWidth="3" filter={`url(#glow-${uid})`} />
+              <circle r="31" fill="var(--color-night-3)" stroke={m.isOrganizer ? "var(--color-cinnabar)" : "var(--color-mustard)"} strokeWidth="3" filter={`url(#glow-${uid})`} />
               <text y="11" textAnchor="middle" fontSize="32">
                 {m.avatar}
               </text>
               <text
                 y="54"
                 textAnchor="middle"
-                fill="#f3e7d3"
+                fill="var(--color-cream)"
                 fontSize="17"
                 fontWeight="700"
-                stroke="#14110f"
+                stroke="var(--color-night)"
                 strokeWidth="5"
                 paintOrder="stroke"
               >
@@ -438,7 +438,7 @@ export function AbstractMap({ state }: { state: JuState }) {
         if (!b) return null;
         return (
           <g key={`pill-${m.id}`} className="animate-fade-in" style={{ animationDelay: "500ms" }}>
-            <rect x={b.x0} y={b.y0} width={b.x1 - b.x0} height={b.y1 - b.y0} rx="13" fill="#e2412e" stroke="#14110f" strokeWidth="2" />
+            <rect x={b.x0} y={b.y0} width={b.x1 - b.x0} height={b.y1 - b.y0} rx="13" fill="var(--color-cinnabar)" stroke="var(--color-night)" strokeWidth="2" />
             <text
               x={(b.x0 + b.x1) / 2}
               y={b.y0 + 19}
@@ -458,9 +458,9 @@ export function AbstractMap({ state }: { state: JuState }) {
 
       {/* 指北针 */}
       <g transform={`translate(${W - 50} 52)`} opacity="0.5">
-        <circle r="20" fill="none" stroke="#f3e7d3" strokeWidth="1.5" />
-        <path d="M0 -14 L6 4 L0 0 L-6 4 Z" fill="#f3e7d3" />
-        <text y="-26" textAnchor="middle" fill="#f3e7d3" fontSize="13" fontWeight="700" style={{ fontFamily: "var(--font-num)" }}>
+        <circle r="20" fill="none" stroke="var(--color-cream)" strokeWidth="1.5" />
+        <path d="M0 -14 L6 4 L0 0 L-6 4 Z" fill="var(--color-cream)" />
+        <text y="-26" textAnchor="middle" fill="var(--color-cream)" fontSize="13" fontWeight="700" style={{ fontFamily: "var(--font-num)" }}>
           N
         </text>
       </g>

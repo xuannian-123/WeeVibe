@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { compressImage } from "@/lib/client/image";
 import { store } from "@/lib/client/storage";
-import { Button, RotatingText, SealLogo } from "@/components/ui";
-import { Stamp, StampSlam } from "@/components/Stamp";
+import { Button, RotatingText } from "@/components/ui";
+import { StampSlam } from "@/components/Stamp";
 import { toast } from "@/components/toast";
 import { api, errMsg, type CreateResult } from "@/components/organizer/api";
 import { SeedList, SpecPreview, type Draft } from "@/components/launch/SpecPreview";
@@ -26,16 +26,15 @@ function TopBar() {
   useEffect(() => setMine(store.myJu().length), []);
   const guide = useTour("home", HOME_TOUR);
   return (
-    <div className="flex h-14 items-center gap-2.5">
-      <SealLogo size={34} />
-      <span className="text-[17px] font-black tracking-tight">AI 局长</span>
-      <Link href="/firewall" className="ml-auto text-[13px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4">
+    <div className="flex min-h-16 flex-wrap items-center gap-2 py-3">
+      <Link href="/" aria-label="WeeVibe 首页" className="wv-wordmark mr-auto text-[30px] leading-none">wee<span className="wv-lime">vibe</span><sup className="ml-0.5 text-[18px]">✳</sup></Link>
+      <Link href="/firewall" className="text-[12px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4">
         怎么保密
       </Link>
       <Link
         href="/me"
         data-tour="my-ju"
-        className="pressable min-h-9 rounded-full border-2 border-ink bg-card px-3 py-1.5 text-[13px] font-black shadow-sticker-sm"
+        className="pressable min-h-9 rounded-full border border-line bg-transparent px-2 py-1.5 text-[12px] font-black shadow-sticker-sm"
       >
         我的局{mine > 0 ? ` · ${mine}` : ""}
       </Link>
@@ -175,7 +174,7 @@ export default function Home() {
             {created.tierLinks.length > 1 ? "先把核心圈的链接发到群里，其余几圈等有空位再发。" : "把下面这段话发到群里，剩下的交给局长。"}
           </p>
         </section>
-        <section className="sticker p-4">
+        <section className="sticker wv-launch overflow-hidden p-4">
           <InviteLinks
             id={created.id}
             title={created.title}
@@ -210,23 +209,19 @@ export default function Home() {
     <main className="mx-auto w-full max-w-[480px] overflow-x-clip px-4 pb-16">
       <TopBar />
 
-      <section className="relative pb-6 pt-6">
-        <div className="pointer-events-none absolute -right-2 top-2 rotate-12 opacity-90" aria-hidden>
-          <Stamp size={108} text="成局" />
-        </div>
-        <h1 className="text-[40px] font-black leading-[1.1] tracking-tight">
-          组局里的尴尬事，
-          <br />
-          都交给
-          <span className="mx-1 inline-block -rotate-6 rounded-lg border-[3px] border-ink bg-cinnabar px-1.5 leading-[1.1] text-white shadow-sticker-sm">局长</span>
+      <section className="wv-home-hero relative">
+        <h1 className="wv-home-title">
+          Less planning.<br />More <span className="wv-lime">living.</span>
         </h1>
-        <p className="mt-3 max-w-[320px] text-[15px] leading-relaxed text-ink-soft">
-          新社团、新班级、刚认识的同事 —— 预算紧、门禁早、不想去、和谁还不熟，私下告诉局长就行。局长对外只说结论，到了现场还帮你们排好座，一局比一局熟。
-        </p>
+        <p className="mt-5 text-[18px] leading-relaxed text-ink-soft">少些筹划，多些生活。</p>
+        <span aria-hidden className="pointer-events-none absolute bottom-10 right-1 rotate-12 text-[48px] leading-none text-lime">✳</span>
       </section>
 
-      <section className="sticker p-4">
-        <div data-tour="launch-mode" className="mb-3 grid grid-cols-2 gap-1 rounded-xl border-2 border-ink bg-paper-deep p-1" role="tablist">
+      <section className="sticker wv-launch overflow-hidden p-4">
+        <p className="mb-2 text-[12px] font-bold tracking-wide text-ink-soft">下一次相聚，从这里开始</p>
+        <h2 className="mb-2 text-[26px] font-black tracking-tight">朋友组局<span aria-hidden className="ml-1 text-lime">✳</span></h2>
+        <p className="mb-5 text-[14px] leading-relaxed text-ink-soft">有个想法，就说出来。AI 局长起草安排，你来确认。</p>
+        <div data-tour="launch-mode" className="wv-launch-tabs mb-3 grid grid-cols-2 gap-1 rounded-xl bg-paper p-1" role="tablist">
           {(
             [
               ["text", "💬 说一句话"],
@@ -264,7 +259,7 @@ export default function Home() {
                   type="button"
                   onClick={() => parseText(ex)}
                   disabled={parsing}
-                  className="pressable min-h-11 rounded-full border-2 border-dashed border-ink bg-paper px-3 text-left text-[14px] font-semibold text-ink-soft"
+                  className="pressable min-h-11 rounded-full border border-line bg-paper px-3 text-left text-[14px] font-semibold text-ink-soft"
                 >
                   “{ex}”
                 </button>
@@ -384,7 +379,7 @@ export default function Home() {
             ["💺", "局长排座", "每桌留个熟人，也介绍新朋友"],
             ["🌱", "越约越熟", "聊得来的，下次还坐一起"],
           ].map(([icon, t, d], i) => (
-            <li key={t} className="sticker p-3" style={{ transform: `rotate(${[-1.5, 1.2, 1, -1.2, -1, 1.4][i]}deg)` }}>
+            <li key={t} className={`sticker p-4 ${i % 3 === 0 ? "bg-paper-deep" : i % 3 === 1 ? "bg-cinnabar-soft" : "bg-card"}`}>
               <div className="text-2xl">{icon}</div>
               <div className="mt-1 text-[15px] font-black">{t}</div>
               <div className="mt-0.5 text-[12px] leading-snug text-ink-soft">{d}</div>

@@ -5,12 +5,12 @@ import type { TraceEvent } from "@/lib/types";
 import { hhmm } from "./fmt";
 
 const KIND: Record<TraceEvent["kind"], [string, string]> = {
-  listen: ["👂", "#a89a88"],
-  search: ["🔍", "#f2b530"],
-  filter: ["🧹", "#f2b530"],
+  listen: ["👂", "var(--color-cream-faint)"],
+  search: ["🔍", "var(--color-mustard)"],
+  filter: ["🧹", "var(--color-mustard)"],
   compute: ["🧮", "#7cc4ff"],
-  decide: ["⚖️", "#e2412e"],
-  warn: ["⚠️", "#e2412e"],
+  decide: ["⚖️", "var(--color-cinnabar)"],
+  warn: ["⚠️", "var(--color-cinnabar)"],
   done: ["✅", "#3ecf8e"],
 };
 
@@ -77,7 +77,7 @@ export function TraceStream({ trace, max = 9, size = "lg" }: { trace: TraceEvent
           <li key={t.id} className={`flex items-start gap-3 ${last ? "" : "opacity-75"}`}>
             <span className={`${big ? "text-[24px]" : "text-[19px]"} leading-[1.35]`}>{icon}</span>
             <div className="min-w-0 flex-1">
-              <p className={`${big ? "text-[22px]" : "text-[18px]"} font-semibold leading-[1.35]`} style={{ color: last ? "#f3e7d3" : undefined }}>
+              <p className={`${big ? "text-[22px]" : "text-[18px]"} font-semibold leading-[1.35]`} style={{ color: last ? "var(--color-cream)" : undefined }}>
                 {text}
                 {typing && <span className="ml-0.5 inline-block h-[1em] w-[3px] translate-y-[3px] animate-pulse" style={{ background: color }} />}
               </p>

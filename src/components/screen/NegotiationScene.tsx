@@ -44,7 +44,7 @@ export function AvatarFigure({ variant, shirt, mood, reduced, chief = false }: {
         <path d="M24 47 L32 56 L40 47" fill="none" stroke="rgb(255 255 255 / .55)" strokeWidth="2" strokeLinecap="round" />
         {chief && (
           <g transform="translate(37 58)">
-            <rect x="-6" y="-6" width="12" height="12" rx="2.5" fill="#e2412e" stroke="#fff" strokeWidth="1.2" />
+            <rect x="-6" y="-6" width="12" height="12" rx="2.5" fill="var(--color-cinnabar)" stroke="#fff" strokeWidth="1.2" />
             <text x="0" y="2.6" textAnchor="middle" fontSize="6.5" fontWeight="900" fill="#fff">局</text>
           </g>
         )}
