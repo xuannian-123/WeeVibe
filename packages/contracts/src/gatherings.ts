@@ -90,8 +90,41 @@ export const gatheringItinerarySchema = z.object({
 });
 export type GatheringItinerary = z.infer<typeof gatheringItinerarySchema>;
 export const gatheringGenerateSchema = z.object({expected_source:z.string().regex(/^[a-f0-9]{64}$/),idempotency_key:idempotencyKeySchema}).strict();
+// A post-publication adjustment always starts from one immutable arrangement
+// version. The server reads the open feedback for that version; the client
+// never submits feedback text as trusted generation input.
+export const gatheringAdjustmentSchema = z.object({
+  expected_source:z.string().regex(/^[a-f0-9]{64}$/),
+  base_arrangement_version:z.number().int().positive(),
+  idempotency_key:idempotencyKeySchema,
+}).strict();
 export const gatheringFinalizeSchema = z.object({expected_source:z.string().regex(/^[a-f0-9]{64}$/),generation_id:id,plan_id:key}).strict();
+// A published arrangement is a versioned organizer decision. It is separate
+// from member attendance and feedback: publishing never implies agreement.
+export const gatheringPublishSchema = z.object({
+  expected_source:z.string().regex(/^[a-f0-9]{64}$/), generation_id:id, plan_id:key,
+  expected_published_version:z.number().int().nonnegative(), idempotency_key:idempotencyKeySchema,
+}).strict();
+export const gatheringAttendanceSchema = z.object({
+  arrangement_version:z.number().int().positive(), decision:z.enum(['going','unsure','not_going']),
+  expected_version:z.number().int().nonnegative(), idempotency_key:idempotencyKeySchema,
+}).strict();
+export const gatheringFeedbackSchema = z.object({
+  arrangement_version:z.number().int().positive(), body:text(1000).min(1), idempotency_key:idempotencyKeySchema,
+}).strict();
+export const gatheringPublishedSchema = z.object({
+  version:z.number().int().positive(), generation_id:id, plan_id:key, source_hash:z.string().regex(/^[a-f0-9]{64}$/),
+  published_at:z.iso.datetime(), plan:gatheringItinerarySchema.shape.plans.element,
+}).strict();
+export const gatheringAttendanceViewSchema = z.object({
+  version:z.number().int().nonnegative(), arrangement_version:z.number().int().positive(),
+  decision:z.enum(['going','unsure','not_going']), updated_at:z.iso.datetime(),
+}).strict();
 export const gatheringPersonSchema = z.object({user_id:id,nickname:text(32),avatar:avatarAssetSchema.nullable(),animal_id:gatheringAnimalIdSchema.optional(),avatar_key:gatheringAvatarKeySchema.optional()}).strict();
+export const gatheringFeedbackViewSchema = z.object({
+  id, arrangement_version:z.number().int().positive(), author:gatheringPersonSchema, body:text(1000),
+  created_at:z.iso.datetime(), status:z.enum(['open','applied','dismissed']),
+}).strict();
 export const gatheringMemberPublicSchema = z.object({person:gatheringPersonSchema,blocks:z.array(gatheringBlockSchema).max(100),submitted:z.boolean()}).strict();
 export const gatheringSummarySchema = z.object({id,kind:gatheringKindSchema,title:text(100),date:optionalDate,stage:z.enum(['collecting','arranged']),is_owner:z.boolean(),has_responded:z.boolean(),member_count:z.number().int().positive(),updated_at:z.iso.datetime()}).strict();
 export type GatheringSummary = z.infer<typeof gatheringSummarySchema>;
@@ -104,6 +137,10 @@ export const gatheringSnapshotSchema = z.object({
   itinerary:gatheringItinerarySchema.extend({generation_id:id,generated_at:z.iso.datetime(),stale:z.boolean()}).nullable(),
   final_choice:z.object({generation_id:id,plan_id:key,finalized_at:z.iso.datetime()}).strict().nullable(),
   generation:z.object({id,status:z.enum(['processing','ready','failed']),error:text(100).nullable()}).strict().nullable(),
+  published:gatheringPublishedSchema.nullable().optional(),
+  own_attendance:gatheringAttendanceViewSchema.nullable().optional(),
+  own_feedback:z.array(gatheringFeedbackViewSchema).max(20).optional(),
+  feedback:z.array(gatheringFeedbackViewSchema).max(100).optional(),
   workflow:z.object({version:z.number().int().positive(),generation_id:id,phase:z.enum(['selecting','confirming','adjusting','completed']),stale:z.boolean(),proposal_plan_id:key.nullable(),proposal_version:z.number().int().nonnegative(),coordination_note:text(300),total:z.number().int().nonnegative(),selected_count:z.number().int().nonnegative(),accepted_count:z.number().int().nonnegative(),rejected_count:z.number().int().nonnegative(),own_selection:z.object({version:z.number().int().nonnegative(),plan_ids:z.array(key),note:text(300)}).nullable(),own_confirmation:z.object({version:z.number().int().nonnegative(),proposal_version:z.number().int().nonnegative(),decision:z.enum(['accept','reject']),note:text(300)}).nullable(),people:z.array(z.object({person:gatheringPersonSchema,plan_ids:z.array(key),note:text(300),decision:z.enum(['accept','reject']).nullable()})),final_plan:gatheringItinerarySchema.shape.plans.element.nullable()}).optional(),
   server_time:z.iso.datetime(),
 }).strict().superRefine((value,ctx)=>{

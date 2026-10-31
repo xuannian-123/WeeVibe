@@ -1,5 +1,6 @@
 import {GatheringPublicDetails} from './public-details';
-import {Text,View} from '@tarojs/components';
+import {useState} from 'react';
+import {Text,Textarea,View} from '@tarojs/components';
 import type {GatheringSnapshot} from '@weevibe/contracts';
 import {CAction} from '../design-c/ui';
 import {GatheringFlowHeader} from './flow-header';
@@ -53,5 +54,25 @@ export function GatheringFinalResult({snapshot,busy,pending=false,retryBlocked=f
     {hasOwn&&<CAction className="gw-full" disabled={busy||pending} onClick={viewOwn}>查看我的填写</CAction>}
     <CAction className="gw-full" openType="share" disabled={busy}>分享给朋友</CAction>
     <Text className="gp-caption">分享后可查看定案安排，不开放新的填写。地点、营业与费用仍需核实，不代表已预订或付款。</Text>
+  </View>;
+}
+
+export function GatheringPublishedArrangement({snapshot,busy,notice,publishPending,retryPublish,attendancePending,retryAttendance,saveAttendance,saveFeedback,adjust,adjustmentPending,retryAdjustment,regenerate,back,refresh}:{snapshot:GatheringSnapshot;busy:boolean;notice:string;publishPending:boolean;retryPublish:()=>void;attendancePending:boolean;retryAttendance:()=>void;saveAttendance:(decision:'going'|'unsure'|'not_going')=>void;saveFeedback:(body:string)=>void;adjust?:()=>void;adjustmentPending?:boolean;retryAdjustment?:()=>void;regenerate?:()=>void;back:()=>void;refresh:()=>void}){
+  useGatheringFormChrome();
+  const [feedback,setFeedback]=useState('');
+  const published=snapshot.published,plan=published?.plan;
+  const decision=snapshot.own_attendance?.decision;
+  if(!published||!plan)return <View className="c-ui gf-start gw-flow"><GatheringFlowHeader back={back} disabled={busy}/><Text className="gp-caption">已发布安排暂时无法读取。</Text><CAction onClick={refresh}>重新读取</CAction></View>;
+  return <View className="c-ui gf-start gw-flow">
+    <GatheringFlowHeader back={back} disabled={busy} label="返回出游内容"/>
+    <View className="gf-heading"><Text className="gf-eyebrow">朋友出游 / 第 {published.version} 版安排</Text><Text className="gf-title">安排已经发布</Text><View className="gf-marker"/></View>
+    <View className="gp-panel gw-lilac"><Text className="gp-section-title">{plan.title}</Text><Text className="gp-caption">{plan.summary}</Text>{plan.segments.map((segment,index)=><View className="gw-stop" key={segment.id}><Text className="gw-tag">{index+1} · {segment.date||'日期待定'} · {segment.start_time||'时间待核实'}</Text><Text className="gw-stop-title">{segment.title}</Text><Text className="gp-caption">{segment.place||'地点待核实'} · {segment.fee_note||'费用待核实'}</Text><Text className="gp-caption">{segment.description}</Text></View>)}</View>
+    <Text className="gp-caption">发布代表局头确定当前安排，不代表你已答应参加。参加意向和反馈分别记录。</Text>
+    {snapshot.viewer.is_member&&<View className="gp-panel"><Text className="gp-section-title">我的参加意向</Text><Text className="gp-caption">{decision==='going'?'准备参加':decision==='unsure'?'暂不确定':decision==='not_going'?'不参加':'尚未回复'}</Text><View className="gw-choice-tabs"><CAction variant={decision==='going'?'primary':'secondary'} disabled={busy||attendancePending} onClick={()=>saveAttendance('going')}>准备参加</CAction><CAction variant={decision==='unsure'?'primary':'secondary'} disabled={busy||attendancePending} onClick={()=>saveAttendance('unsure')}>暂不确定</CAction><CAction variant={decision==='not_going'?'primary':'secondary'} disabled={busy||attendancePending} onClick={()=>saveAttendance('not_going')}>不参加</CAction></View>{attendancePending&&<CAction className="gw-full" disabled={busy} onClick={retryAttendance}>核对上次意向</CAction>}</View>}
+    {snapshot.viewer.is_member&&<View className="gp-panel"><Text className="gp-section-title">给局头的反馈</Text><Textarea className="gw-area" maxlength={1000} value={feedback} disabled={busy} placeholder="想调整的地方、替代建议或需要核实的事项" onInput={e=>setFeedback(e.detail.value)}/><CAction className="gw-full" variant="primary" disabled={busy||!feedback.trim()} onClick={()=>{saveFeedback(feedback.trim());setFeedback('');}}>提交反馈</CAction>{snapshot.own_feedback?.map(item=><Text className="gp-caption" key={item.id}>已提交：{item.body}</Text>)}</View>}
+    {snapshot.viewer.is_owner&&<View className="gp-panel"><Text className="gp-section-title">成员反馈</Text>{snapshot.feedback?.length?snapshot.feedback.map(item=><View className="gw-stop" key={item.id}><Text>{item.author.nickname}：{item.body}</Text><Text className="gp-caption">第 {item.arrangement_version} 版 · {item.status==='open'?'待处理':'已处理'}</Text></View>):<Text className="gp-caption">暂时没有成员反馈。</Text>}</View>}
+    {snapshot.viewer.is_owner&&adjust&&<View className="gp-panel gw-lilac"><Text className="gp-section-title">AI 调整草案</Text><Text className="gp-caption">结合当前成员反馈生成一套新的候选安排；生成后仍需局头核对，发布才会形成下一版。</Text><CAction className="gw-full" variant="primary" disabled={busy||adjustmentPending||!snapshot.feedback?.some(item=>item.status==='open')} onClick={adjust}>根据反馈生成调整草案</CAction>{adjustmentPending&&retryAdjustment&&<CAction className="gw-full" disabled={busy} onClick={retryAdjustment}>核对上次调整请求</CAction>}</View>}
+    {notice&&<View className="gw-alert" role="alert"><Text>{notice}</Text></View>}{publishPending&&<CAction className="gw-full" disabled={busy} onClick={retryPublish}>核对上次发布</CAction>}
+    {regenerate&&<CAction className="gw-full" disabled={busy} onClick={regenerate}>生成新的候选安排</CAction>}<CAction className="gw-full" disabled={busy} onClick={refresh}>刷新安排</CAction><Text className="gp-caption">地点、营业、费用和预订仍需实际核实；这不是付款或预订成功。</Text>
   </View>;
 }

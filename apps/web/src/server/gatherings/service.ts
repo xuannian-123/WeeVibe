@@ -83,11 +83,24 @@ export async function gatheringSnapshotTx(tx:Tx,id:string,actor:string):Promise<
   const ownIntake=own?gatheringIntakeSchema.parse({public:own.publicIntake,private:own.privateIntake,answers:own.answers}):null;
   const source=gatheringSourceFingerprint(details,rows,row.kind);
   const finalChoice=row.finalGenerationId&&row.finalPlanId&&row.finalizedAt?{generation_id:row.finalGenerationId,plan_id:row.finalPlanId,finalized_at:row.finalizedAt.toISOString()}:null;
-  const currentId=row.finalGenerationId||row.currentGenerationId;
-  const current=currentId&&(isMember||finalChoice)?await tx.gatheringGeneration.findFirst({where:{id:currentId,gatheringId:id,status:'ready'},select:{id:true,result:true,createdAt:true,sourceHash:true}}):null;
+  // Older unit-test transaction doubles and staged deployments may not expose
+  // the new publication models yet; retain the legacy projection until the
+  // migration is present.
+  const publishedModel=tx.gatheringArrangementVersion as {findFirst?:Function}|undefined;
+  const published=publishedModel&&typeof publishedModel.findFirst==='function'?await publishedModel.findFirst({where:{gatheringId:id},orderBy:{version:'desc'}}):null;
+  // Owners may be reviewing a feedback adjustment generation which is newer
+  // than the last published snapshot. Members continue to see the immutable
+  // published arrangement until the owner publishes the new version.
+  const currentId=isOwner&&row.currentGenerationId?row.currentGenerationId:published?.generationId||row.finalGenerationId||row.currentGenerationId;
+  const current=currentId&&(isMember||finalChoice||published)?await tx.gatheringGeneration.findFirst({where:{id:currentId,gatheringId:id,status:'ready'},select:{id:true,result:true,createdAt:true,sourceHash:true}}):null;
   const latest=isOwner?await tx.gatheringGeneration.findFirst({where:{gatheringId:id},orderBy:{createdAt:'desc'},select:{id:true,status:true,error:true,createdAt:true}}):null;
   const workflow=await gatheringWorkflowView(tx,row,actor,rows,person);
   const expired=latest?.status==='processing'&&Date.now()-latest.createdAt.getTime()>90000;
+  const attendanceModel=tx.gatheringAttendance as {findUnique?:Function}|undefined,feedbackModel=tx.gatheringFeedback as {findMany?:Function}|undefined;
+  const ownAttendance=published&&isMember&&attendanceModel&&typeof attendanceModel.findUnique==='function'?await attendanceModel.findUnique({where:{gatheringId_memberUserId_arrangementId:{gatheringId:id,memberUserId:actor,arrangementId:published.id}}}):null;
+  const feedbackRows=published&&feedbackModel&&typeof feedbackModel.findMany==='function'?await feedbackModel.findMany({where:{gatheringId:id,...(isOwner?{}:{authorUserId:actor})},orderBy:{createdAt:'asc'},take:100,include:{author:{select:{id:true}}}}):[];
+  const ownFeedback=published&&isMember?feedbackRows.filter((entry:{authorUserId:string})=>entry.authorUserId===actor).slice(-20):[];
+  const planFromPublished=published?gatheringItinerarySchema.shape.plans.element.parse(published.snapshot):null;
   return {gathering:{...summary(row,actor,details,rows.length,!!own&&own.responseVersion>0),details:details,owner:person(row.ownerUserId),revision:row.revision},
     viewer:{is_owner:isOwner,is_member:isMember,can_respond:mayRespond(row,details,new Date()),can_generate:isOwner&&!row.finalizedAt},
     own:own&&ownIntake?{version:own.responseVersion,intake:ownIntake,blocks:gatheringOwnBlocks(ownIntake)}:null,
@@ -96,6 +109,10 @@ export async function gatheringSnapshotTx(tx:Tx,id:string,actor:string):Promise<
     stats:null,
     source_fingerprint:isOwner?source:null,
     itinerary:current?{...gatheringItinerarySchema.parse(current.result),generation_id:current.id,generated_at:current.createdAt.toISOString(),stale:current.sourceHash!==source}:null,
+    published:published&&planFromPublished?{version:published.version,generation_id:published.generationId,plan_id:published.planId,source_hash:published.sourceHash,published_at:published.publishedAt.toISOString(),plan:planFromPublished}:null,
+    own_attendance:ownAttendance?{version:ownAttendance.responseVersion,arrangement_version:published!.version,decision:ownAttendance.decision as 'going'|'unsure'|'not_going',updated_at:ownAttendance.updatedAt.toISOString()}:null,
+    own_feedback:ownFeedback.map((item:{id:string;authorUserId:string;body:string;createdAt:Date;status:string})=>({id:item.id,arrangement_version:published!.version,author:person(item.authorUserId),body:item.body,created_at:item.createdAt.toISOString(),status:item.status as 'open'|'applied'|'dismissed'})),
+    feedback:feedbackRows.map((item:{id:string;authorUserId:string;body:string;createdAt:Date;status:string})=>({id:item.id,arrangement_version:published!.version,author:person(item.authorUserId),body:item.body,created_at:item.createdAt.toISOString(),status:item.status as 'open'|'applied'|'dismissed'})),
     ...(workflow?{workflow}:{}),
     final_choice:finalChoice,
     generation:latest?{id:latest.id,status:expired?'failed':latest.status as 'processing'|'ready'|'failed',error:expired?'生成未完成，可以重新核对后重试':latest.error}:null,server_time:new Date().toISOString()};

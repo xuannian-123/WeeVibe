@@ -23,7 +23,7 @@ export async function enqueueGatheringSubmission(tx:Tx,row:Pick<Gathering,'id'|'
 }
 
 /** Lifecycle events share the durable per-recipient outbox; no direct provider send in a mutation. */
-export async function enqueueGatheringLifecycle(tx:Tx,row:Pick<Gathering,'id'|'kind'|'ownerUserId'>,actor:string,action:'plans_ready'|'selection_updated'|'confirmation_requested'|'confirmation_declined'|'completed'){
+export async function enqueueGatheringLifecycle(tx:Tx,row:Pick<Gathering,'id'|'kind'|'ownerUserId'>,actor:string,action:'plans_ready'|'selection_updated'|'confirmation_requested'|'confirmation_declined'|'completed'|'arrangement_published'|'attendance_updated'|'feedback_added'){
  if(row.kind!=='friend')return;
  const next=await tx.gathering.update({where:{id:row.id},data:{submissionSequence:{increment:1}}});
  const event=await tx.gatheringSubmissionEvent.create({data:{gatheringId:row.id,actorUserId:actor,actorVersion:Math.max(1,next.revision),sequence:next.submissionSequence,action},select:{id:true}});

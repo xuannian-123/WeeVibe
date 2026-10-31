@@ -37,6 +37,9 @@ model User {
   gatheringNotifications GatheringNotificationRecipient[]
   gatheringSubscriptionGrants GatheringSubscriptionGrant[]
   gatheringWorkflowCommands GatheringWorkflowCommand[]
+  publishedGatheringArrangements GatheringArrangementVersion[] @relation("GatheringArrangementPublisher")
+  gatheringAttendances GatheringAttendance[]
+  gatheringFeedbacks GatheringFeedback[]
 }
 
 model WechatIdentity {
@@ -388,6 +391,9 @@ model Gathering {
   generations GatheringGeneration[]
   submissionEvents GatheringSubmissionEvent[]
   subscriptionGrants GatheringSubscriptionGrant[]
+  publishedArrangements GatheringArrangementVersion[]
+  attendances GatheringAttendance[]
+  feedback GatheringFeedback[]
   @@unique([ownerUserId, creationKey])
   @@index([ownerUserId, updatedAt])
 }
@@ -421,11 +427,17 @@ model GatheringGeneration {
   creator User @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
   idempotencyKey String
   sourceHash String
+  // Set only for a post-publication feedback adjustment. The original
+  // source hash remains the activity snapshot hash used by publication.
+  baseArrangementId String? @db.Uuid
+  baseArrangement GatheringArrangementVersion? @relation("GatheringGenerationAdjustmentBase", fields: [baseArrangementId], references: [id], onDelete: Restrict)
+  adjustmentHash String?
   status String
   result Json?
   error String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  publishedArrangements GatheringArrangementVersion[]
   @@unique([gatheringId, idempotencyKey])
   @@index([gatheringId, createdAt])
 }
@@ -540,4 +552,62 @@ model GatheringWorkflowCommand {
   hash String
   createdAt DateTime @default(now())
   @@id([gatheringId, actorId, key])
+}
+
+// Published arrangements are immutable snapshots. Attendance and feedback
+// reference this version and never mutate the snapshot itself.
+model GatheringArrangementVersion {
+  id String @id @default(uuid()) @db.Uuid
+  gatheringId String @db.Uuid
+  gathering Gathering @relation(fields: [gatheringId], references: [id], onDelete: Cascade)
+  version Int
+  generationId String @db.Uuid
+  generation GatheringGeneration @relation(fields: [generationId], references: [id], onDelete: Restrict)
+  adjustmentGenerations GatheringGeneration[] @relation("GatheringGenerationAdjustmentBase")
+  planId String
+  sourceHash String
+  snapshot Json
+  publishedByUserId String @db.Uuid
+  publishedBy User @relation("GatheringArrangementPublisher", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  idempotencyKey String
+  publishedAt DateTime @default(now())
+  attendances GatheringAttendance[]
+  feedback GatheringFeedback[]
+  @@unique([gatheringId, version])
+  @@unique([gatheringId, idempotencyKey])
+  @@index([gatheringId, publishedAt])
+}
+
+model GatheringAttendance {
+  id String @id @default(uuid()) @db.Uuid
+  gatheringId String @db.Uuid
+  gathering Gathering @relation(fields: [gatheringId], references: [id], onDelete: Cascade)
+  memberUserId String @db.Uuid
+  member User @relation(fields: [memberUserId], references: [id], onDelete: Restrict)
+  arrangementId String @db.Uuid
+  arrangement GatheringArrangementVersion @relation(fields: [arrangementId], references: [id], onDelete: Cascade)
+  decision String
+  responseVersion Int @default(1)
+  idempotencyKey String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([gatheringId, memberUserId, arrangementId])
+  @@unique([gatheringId, memberUserId, idempotencyKey])
+  @@index([arrangementId, decision])
+}
+
+model GatheringFeedback {
+  id String @id @default(uuid()) @db.Uuid
+  gatheringId String @db.Uuid
+  gathering Gathering @relation(fields: [gatheringId], references: [id], onDelete: Cascade)
+  authorUserId String @db.Uuid
+  author User @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+  arrangementId String @db.Uuid
+  arrangement GatheringArrangementVersion @relation(fields: [arrangementId], references: [id], onDelete: Cascade)
+  body String
+  status String @default("open")
+  idempotencyKey String
+  createdAt DateTime @default(now())
+  @@unique([gatheringId, authorUserId, idempotencyKey])
+  @@index([arrangementId, createdAt])
 }
