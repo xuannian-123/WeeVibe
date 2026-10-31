@@ -298,6 +298,10 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
   const ownWants = (me.private?.needs ?? []).filter((n) => ownIds.has(n.id) && n.kind === "soft" && !customActs.includes(n));
   // 算不了的（"芒果过敏"）：如实标出来
   const customKeys = new Set((me.private?.needs ?? []).filter((n) => n.rule.t === "custom").map((n) => n.id));
+  // 其中饮食类的会匿名写进点菜提醒（"有人不吃香菜"）
+  const remindKeys = new Set((me.private?.needs ?? []).filter((n) => n.rule.t === "custom" && n.dim === "food").map((n) => n.id));
+  const customNote = (id: string, text: string) =>
+    remindKeys.has(id) ? `挑店不看它；定下来后决定书上会写「有人${text.replace(/^(我|本人)/, "")}」提醒点菜，不会说是谁` : "局长没法按它挑店，记得自己留意";
 
   const toggleFloor = (key: string) => {
     setFloorsTouched(true);
@@ -437,7 +441,7 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
                           <input type="checkbox" className="size-4 shrink-0 accent-[var(--color-cinnabar)]" checked={on} onChange={() => toggleFloor(o.key)} />
                           <span className="min-w-0 flex-1 break-words">
                             {o.text}
-                            {customKeys.has(o.key) && <span className="block text-[11px] font-normal text-ink-faint">局长没法按它挑店，到店记得跟店家说一声</span>}
+                            {customKeys.has(o.key) && <span className="block text-[11px] font-normal text-ink-faint">{customNote(o.key, o.text)}</span>}
                           </span>
                           {!on && o.hard && <span className="shrink-0 text-[11px] text-ink-faint">降为想要</span>}
                           {!on && !o.hard && <span className="shrink-0 text-[11px] text-ink-faint">设为底线</span>}
@@ -514,7 +518,7 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
                 <ul className="mt-2 space-y-1">
                   {ownWants.map((n) => (
                     <li key={n.id} className="flex items-center gap-2 text-[13px]">
-                      <span className="min-w-0 flex-1 break-words">✏️ {n.text}{n.rule.t === "custom" ? <span className="ml-1 text-[11px] text-ink-faint">（局长记下了，但没法算进方案）</span> : null}</span>
+                      <span className="min-w-0 flex-1 break-words">✏️ {n.text}{n.rule.t === "custom" ? <span className="ml-1 text-[11px] text-ink-faint">（{customNote(n.id, n.text)}）</span> : null}</span>
                       <button type="button" aria-label={`删掉：${n.text}`} className="min-h-9 min-w-9 shrink-0 text-ink-soft" onClick={() => void removeOwn(n.id)}>✕</button>
                     </li>
                   ))}

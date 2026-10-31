@@ -425,3 +425,16 @@ describe("自己写的底线 / 想要", () => {
     expect(p.mandate?.floors).not.toContain(allergies[0].id);
   });
 });
+
+describe("点菜提醒进群公告和订位话术", () => {
+  it("定局文案带上「点菜注意」，订位话术说有朋友不吃香菜", async () => {
+    const { ruleGroupMessages, confirmedText } = await import("./ju-text");
+    const f = {
+      title: "测试局", category: "火锅", city: "上海", status: "confirmed" as const, members: [], counts: { in: 3, done: 3, waitlist: 0, matchPairs: 0 },
+      constraintSummaries: [], reminders: ["有人不吃香菜"],
+      confirmed: { slotLabel: "周六 18:00", poiName: "某火锅", address: "某路", headcount: 3 },
+    };
+    expect(confirmedText(f)).toContain("🍽 点菜注意：有人不吃香菜");
+    expect(ruleGroupMessages(f).reservationScript).toContain("有朋友不吃香菜");
+  });
+});

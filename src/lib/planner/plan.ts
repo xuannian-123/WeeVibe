@@ -540,6 +540,33 @@ export function whyLines(c: Candidate, members: Member[]): string[] {
   return out;
 }
 
+/**
+ * v6 点菜提醒：本人写的、挑店用不上的忌口（"不吃香菜""对芒果过敏"，规则是 custom 的饮食需求）。
+ * 挑店不看它，但定下来后写在决定书 / 群公告 / 订位话术里提醒点菜；只说人数（1 人 = "有人"），不说是谁。
+ * 只算在局里、说了来的人；同样的话合并计数；按文字排序（确定性，和谁写的无关）。
+ */
+export function remindersFor(members: Member[]): string[] {
+  const count = new Map<string, number>();
+  for (const m of members) {
+    if (m.status !== "in" || m.private?.rsvp === "no") continue;
+    const mine = new Set<string>();
+    for (const n of m.private?.needs ?? []) if (n.dim === "food" && n.rule.t === "custom") mine.add(reminderText(n.text));
+    for (const t of mine) if (t) count.set(t, (count.get(t) ?? 0) + 1);
+  }
+  return [...count.entries()]
+    .sort(([a], [b]) => cmpStr(a, b))
+    .map(([t, k]) => (k === 1 ? `有人${t}` : `${k} 人${t}`))
+    .slice(0, 6);
+}
+
+/** "我不吃香菜" → "不吃香菜"；"花生过敏" → "对花生过敏" */
+function reminderText(raw: string): string {
+  let t = raw.trim().replace(/[。！!，,\s]+$/u, "").replace(/^(我|本人|自己)/, "");
+  const allergy = /^对?(.+?)过敏$/.exec(t);
+  if (allergy) t = `对${allergy[1]}过敏`;
+  return t.slice(0, 20);
+}
+
 /** 约束的聚合说明：只有 1 人有某约束时只说"有人" */
 export function constraintSummariesFor(members: Member[], ju: Ju, maxCost: number | undefined): string[] {
   const out: string[] = [];
@@ -1108,6 +1135,8 @@ export async function planJu(
   const caredFor = caredCount ? `这次优先照顾了前几次跑得最远的 ${caredCount} 位朋友` : undefined;
   const maxCost = Math.max(0, ...pois.map((p) => p.costPerPerson ?? 0)) || undefined;
   const constraintSummaries = constraintSummariesFor(inMembers, ju, maxCost);
+  const reminders = remindersFor(inMembers);
+  if (reminders.length) trace("decide", `点菜提醒（挑店不看，定了以后写在决定书上）：${reminders.join("、")}`);
 
   const candidates = programs ? total : slots.length * pois.length;
   const audit = {
@@ -1156,6 +1185,7 @@ export async function planJu(
     ...(repair.diagnosis ? { diagnosis: repair.diagnosis } : {}),
     ...(coordination ? { coordination } : {}),
     negotiation: talk.negotiation,
+    ...(reminders.length ? { reminders } : {}),
   };
   audit.outputHash = outputHashOf({ ...body, audit });
   const plan: Plan = { ...body, audit, computedAt: (opts.now ?? new Date()).toISOString() };

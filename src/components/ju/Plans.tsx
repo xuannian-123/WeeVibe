@@ -320,6 +320,13 @@ export function PlansView({ state, me, actions }: { state: JuState; me: Member |
             ))}
           </ul>
         )}
+        {!!plan.reminders?.length && (
+          <p className="mt-2.5 rounded-lg border-2 border-dashed border-ink/30 px-3 py-2 text-[13.5px]">
+            🍽 <b>点菜注意：</b>
+            {plan.reminders.join("、")}
+            <span className="block text-[11.5px] text-ink-faint">挑店没看这几条，到店点菜时留意一下；不会说是谁</span>
+          </p>
+        )}
         <p className="font-num mt-3 border-t-2 border-dashed border-line pt-2 text-[12px] text-ink-faint">
           算了 {plan.audit.candidates} 个候选 × {state.counts.in} 个人 = {plan.audit.evaluations} 次体验，挑出 {proposals.length} 个真不一样的方案
         </p>

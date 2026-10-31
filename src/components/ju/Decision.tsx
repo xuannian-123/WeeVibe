@@ -200,6 +200,12 @@ export function DecisionCard({ state, me, actions }: { state: JuState; me: Membe
           {d.groupActions.join("；")}
         </p>
       )}
+      {!!state.ju.plan?.reminders?.length && (
+        <p className="rounded-lg border-2 border-dashed border-ink/30 px-3 py-2 text-[13.5px]">
+          🍽 <b>点菜注意：</b>
+          {state.ju.plan.reminders.join("、")}
+        </p>
+      )}
       {me && hasDeal && <MyDeal state={state} me={me} actions={actions} p={d.proposal} />}
       {mine?.needs?.length ? (
         <div className="border-t-2 border-dashed border-line pt-3">

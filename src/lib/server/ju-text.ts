@@ -28,6 +28,7 @@ export function planText(f: PublicFacts, replan = false): string {
   if (f.why?.length) lines.push(`局长推荐第一个：${f.why.join("；")}`);
   else if (f.recommendation) lines.push(`局长的理由：${f.recommendation}`);
   if (f.constraintSummaries.length) lines.push(`已考虑：${f.constraintSummaries.join("；")}`);
+  if (f.reminders?.length) lines.push(`🍽 点菜注意：${f.reminders.join("、")}`);
   lines.push("点链接投票，过半就定～");
   return lines.join("\n");
 }
@@ -43,6 +44,7 @@ export function confirmedText(f: PublicFacts): string {
     ...(c.why?.length ? [`为什么：${c.why.join("；")}`] : []),
     ...(c.risks?.length ? ["注意：", ...c.risks.map((r) => `· ${r.text} → ${r.mitigation}`)] : []),
     ...(c.fallback ? [`备案：如果${c.fallback.trigger}，改去「${c.fallback.poiName}」`] : []),
+    ...(f.reminders?.length ? [`🍽 点菜注意：${f.reminders.join("、")}`] : []),
     "每个人的出发时间和路线，局长已经私信给你了，点链接还能加日历。",
   ].join("\n");
 }
@@ -78,11 +80,12 @@ export function ruleGroupMessages(f: PublicFacts): GroupMessages {
   };
   const c = f.confirmed;
   if (c) {
-    out.reservationScript = `您好，想订 ${c.slotLabel}，${c.headcount} 位，${f.category}。麻烦帮忙留个位置，谢谢！`;
+    const note = f.reminders?.length ? `另外麻烦备注一下：${f.reminders.map((r) => r.replace(/^(有人|\d+ 人)/, "有朋友")).join("、")}。` : "";
+    out.reservationScript = `您好，想订 ${c.slotLabel}，${c.headcount} 位，${f.category}。${note}麻烦帮忙留个位置，谢谢！`;
     out.reservationDialog = [
       { who: "局长", text: `您好，请问是${c.poiName}吗？想订个位。` },
       { who: "店员", text: "您好，请问几位、什么时间？" },
-      { who: "局长", text: `${c.slotLabel}，${c.headcount} 位。` },
+      { who: "局长", text: `${c.slotLabel}，${c.headcount} 位。${f.reminders?.length ? `有朋友${f.reminders.map((r) => r.replace(/^(有人|\d+ 人)/, "")).join("、")}，麻烦备注一下。` : ""}` },
       { who: "店员", text: "好的，给您留好了，到店报手机尾号就行。" },
       { who: "局长", text: "好的，谢谢！" },
     ];

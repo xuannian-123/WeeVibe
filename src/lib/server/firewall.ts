@@ -284,6 +284,7 @@ export function publicFacts(ju: Ju, members: Member[]): PublicFacts {
     facts.recommendation = pj.plan.recommendation;
     if (pj.plan.caredFor) facts.caredFor = pj.plan.caredFor;
     if (pj.plan.why?.length) facts.why = [...pj.plan.why];
+    if (pj.plan.reminders?.length) facts.reminders = [...pj.plan.reminders];
     const c = pj.status === "confirmed" ? pj.plan.proposals.find((p) => p.id === pj.confirmedProposalId) : undefined;
     if (c) {
       const headcount = attendeesOf(c, visibleIds);
@@ -339,8 +340,10 @@ export function sensitiveOf(ju: Ju, members: Member[]): Sensitive {
   const notes = new Set<string>();
   const budgets = new Set<number>();
   const secrets = new Set<string>();
+  // 点菜提醒是本人写授权书时就知道会匿名写出来的（"有人不吃香菜"）：同样的话出现在私聊备注里不算泄露
+  const reminded = (ju.plan?.reminders ?? []).join("、");
   for (const m of members) {
-    for (const n of m.private?.notes ?? []) if (n.trim().length >= 2) notes.add(n.trim());
+    for (const n of m.private?.notes ?? []) if (n.trim().length >= 2 && !reminded.includes(n.trim())) notes.add(n.trim());
     // v5：局长私下问的问题原文（里面有本人的时间 / 预算细节），任何公开输出里都不能出现
     for (const a of m.private?.asks ?? []) if (a.text.trim().length >= 2) notes.add(a.text.trim());
     if (m.private?.budgetMax !== undefined) budgets.add(m.private.budgetMax);

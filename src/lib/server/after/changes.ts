@@ -3,6 +3,7 @@
 import * as db from "../../db";
 import { getMapProvider } from "../../map";
 import { replanStable } from "../../planner";
+import { remindersFor } from "../../planner/plan";
 import type { Ju, Member } from "../../types";
 import { announce, nowFor, withJuLock } from "../ju";
 import { promoteWaitlist } from "../ju-core";
@@ -28,6 +29,10 @@ export async function replanAfterChangeLocked(ju: Ju, members: Member[], reason:
   const idx = ju.plan.proposals.findIndex((p) => p.id === current.id);
   ju.plan.proposals[idx] = r.proposal;
   ju.confirmedProposalId = r.proposal.id;
+  // 点菜提醒跟着人走：有人退出 / 新加入后重新数
+  const reminders = remindersFor(attendees);
+  if (reminders.length) ju.plan.reminders = reminders;
+  else delete ju.plan.reminders;
 
   // C 的 changes 已经把转正的人算进"新加入 N 位朋友"了，不再另写一条"候补转正"（对外也不该区分是不是候补）
   const changes = [...r.changes];

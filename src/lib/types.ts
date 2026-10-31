@@ -450,6 +450,8 @@ export type Plan = {
   coordination?: string;
   /** v6：分身谈判记录（公开安全，大屏直播用；说话人只有"局长"和与身份解耦的分身代号） */
   negotiation?: Negotiation;
+  /** v6：点菜提醒（挑店用不上、但到店要注意的忌口，只说人数），如 ["有人不吃香菜", "2 人对花生过敏"] */
+  reminders?: string[];
   /** #10 跨局公平的公开说明（聚合），如 "这次优先照顾了前几次跑得最远的 1 位朋友" */
   caredFor?: string;
   /** 聚合后的约束说明，公开安全；只有 1 人有某约束时只说"有人"，不给能反推的细节 */
@@ -766,6 +768,8 @@ export type PublicFacts = {
   caredFor?: string;
   /** v5：推荐理由（三级准则各一句） */
   why?: string[];
+  /** v6：点菜提醒（只说人数） */
+  reminders?: string[];
   confirmed?: {
     slotLabel: string;
     poiName: string;
