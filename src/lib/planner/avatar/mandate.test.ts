@@ -43,9 +43,9 @@ describe("底线上限", () => {
   it("本人在授权书里选了哪几条就保留哪几条", () => {
     const m = fiveFloors({ confirmed: ["h2", "diet:素食", "homeBy"], mandate: { status: "confirmed", style: "balanced", give: STYLE_GIVE.balanced, floors: ["h1", "diet:清真"] } });
     const { floors, demoted } = splitFloors(m);
-    // 选了 2 条，不够 3 条按最早确认的补齐
-    expect(floors.map((f) => f.key).sort()).toEqual(["diet:清真", "h1", "h2"].sort());
-    expect(demoted.map((f) => f.key).sort()).toEqual(["diet:素食", "homeBy"].sort());
+    // 选了 2 条就是 2 条：没勾的是本人亲手降成"想要"的，不替他补回去
+    expect(floors.map((f) => f.key).sort()).toEqual(["diet:清真", "h1"].sort());
+    expect(demoted.map((f) => f.key).sort()).toEqual(["diet:素食", "h2", "homeBy"].sort());
   });
 
   it("不超过 3 条时全是底线，没有降级", () => {

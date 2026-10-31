@@ -4,7 +4,7 @@
 // - giveInEffect / withGive：分身真正能用的让步幅度（授权书确认过才生效，撤回过的那一维视为 0），以及把它套到成员身上
 // 确定性：只看成员自己的数据和固定规则；不依赖成员 id、加入顺序。
 import type { AvatarStyle, DietTag, Give, MandateView, Member, MemberPrivate, Mood, Need, NeedStrength } from "../../types";
-import { HARD_DIET } from "../experience";
+import { HARD_DIET } from "../diet";
 
 /** 底线每人最多 3 条："底线越少，分身越好谈；真正必须的事 3 条够用" */
 export const MAX_FLOORS = 3;
@@ -96,15 +96,15 @@ export function floorCandidates(m: Member): FloorItem[] {
   return items.sort((a, b) => rank(a) - rank(b)).map(({ key, text }) => ({ key, text }));
 }
 
-/** 底线 + 被降级的：超过 3 条时保留本人在授权书里选中的，不够 3 条按最早确认的补齐，其余降级 */
+/**
+ * 底线 + 被降级的：超过 3 条时按本人在授权书里选中的（选了几条就是几条，没勾的是本人亲手降成"想要"的）；
+ * 本人没选过才按最早确认的保留 3 条
+ */
 export function splitFloors(m: Member): { floors: FloorItem[]; demoted: FloorItem[] } {
   const all = floorCandidates(m);
   if (all.length <= MAX_FLOORS) return { floors: all, demoted: [] };
-  const chosen = new Set((m.private?.mandate?.floors ?? []).filter((k) => all.some((f) => f.key === k)).slice(0, MAX_FLOORS));
-  for (const f of all) {
-    if (chosen.size >= MAX_FLOORS) break;
-    chosen.add(f.key);
-  }
+  const picked = (m.private?.mandate?.floors ?? []).filter((k) => all.some((f) => f.key === k)).slice(0, MAX_FLOORS);
+  const chosen = new Set(picked.length ? picked : all.slice(0, MAX_FLOORS).map((f) => f.key));
   return { floors: all.filter((f) => chosen.has(f.key)), demoted: all.filter((f) => !chosen.has(f.key)) };
 }
 

@@ -1,7 +1,7 @@
 // 单人 × 单候选的体验：公开一份（只用公开因素），私密一份（叠加预算 / 忌口 / 刷卡 / 备注 / 排队）。
 // 隐私硬规则：publicExperience 的入参里根本没有 poi 和预算等私密字段，类型上就碰不到。
-import type { DayAvailability, DietTag, Experience, JuSpec, Member, NeedResult, Poi, Slot, SwipeVerdict } from "../types";
-import { dietConflictReason, isHotpot } from "./diet";
+import type { DayAvailability, Experience, JuSpec, Member, NeedResult, Poi, Slot, SwipeVerdict } from "../types";
+import { dietConflictReason, HARD_DIET, isHotpot } from "./diet";
 import { evaluateRule, softPenalty } from "./needs";
 import { bjParts, chainName, clamp, hmToMin, isFoodPoi, minToHm } from "./util";
 
@@ -134,8 +134,8 @@ export function budgetDegree(cost: number, budget: number): number {
 /** "被照顾到"的保底线（docs/DECISION.md 3.3） */
 export const CARE_FLOOR = 50;
 
-/** 忌口里的硬约束：吃不了就是吃不了；其余忌口是强度 2 的软偏好 */
-export const HARD_DIET: DietTag[] = ["清真", "素食"];
+// 忌口里的硬约束定义在 diet.ts（不依赖 node，授权书在浏览器里也要用）
+export { HARD_DIET };
 
 /** 找这家店（或同品牌分店）的刷卡表态 */
 export function swipeFor(member: Member, poi: Poi, ctx: PlanContext): { v: SwipeVerdict; sameShop: boolean } | undefined {

@@ -133,14 +133,13 @@ export type OrganizerApi = {
 };
 
 /**
- * v6 分身谈判演示的路由（线 B 实现 server/seed.ts 的谈判演示局；路由名未定，定了只改这里）。
- * 默认沿用现有演示 seed 的写法：POST /api/dev/seed/:id { scene: "avatar" }。
- * plan = true 时 seed 完再调一次出方案（如果 B 的 seed 已经直接出方案，改成 false）。
+ * v6 分身谈判演示的路由：POST /api/dev/seed/:id { scene: "avatar" }（server/seed.ts 的谈判演示局）。
+ * 这个 seed 同一次调用里就出了方案，所以 plan = false；换成不出方案的 seed 时改成 true，seed 完再调一次出方案。
  */
 export const AVATAR_DEMO = {
   path: (id: string) => `/api/dev/seed/${encodeURIComponent(id)}`,
   body: { scene: "avatar" } as Record<string, unknown>,
-  plan: true,
+  plan: false,
 };
 
 export const api = {

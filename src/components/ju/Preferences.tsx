@@ -93,12 +93,13 @@ const LIT_MS = 1800;
 
 type FloorOption = { key: string; text: string; hard: boolean };
 
-/** 授权书里能当底线的：硬的（门禁、清真 / 素食、硬需求）+ 本人可以亲手升级的软讲究 */
+/** 授权书里能当底线的：硬的（门禁、清真 / 素食、硬需求）+ 本人可以亲手升级的软需求（保存时升成硬需求） */
 function floorOptions(d: Draft, me: Member): FloorOption[] {
   const out: FloorOption[] = [];
   const homeBy = Object.values(d.days).find((x) => x.selected && x.homeBy)?.homeBy;
   if (homeBy) out.push({ key: "homeBy", text: `${homeBy} 前必须回去`, hard: true });
-  for (const t of d.diet) out.push(HARD_DIET.includes(t) ? { key: `diet:${t}`, text: `只能吃${t}`, hard: true } : { key: `diet:${t}`, text: `一点都${t}`, hard: false });
+  // 忌口里只有清真 / 素食能当底线（规划器只把这两样当硬约束；不吃辣这类是"想要"）
+  for (const t of d.diet) if (HARD_DIET.includes(t)) out.push({ key: `diet:${t}`, text: `只能吃${t}`, hard: true });
   const order = new Map((me.private?.confirmed ?? []).map((k, i) => [k, i]));
   for (const n of me.private?.needs ?? []) {
     const tag = CARE_TAGS.find((t) => t.match?.(n));

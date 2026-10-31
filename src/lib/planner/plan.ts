@@ -346,9 +346,9 @@ export function meaningfullyDifferent(a: Candidate, b: Candidate): boolean {
 }
 
 /** 推荐 = 三级准则的第一名（在全部候选里挑）；备选在前沿上挑 1–2 个标签不同、有实质差异的 */
-export function pickProposals(front: Candidate[], pool: Candidate[]): { c: Candidate; label: ProposalLabel }[] {
+export function pickProposals(front: Candidate[], pool: Candidate[], forced?: Candidate): { c: Candidate; label: ProposalLabel }[] {
   if (front.length === 0 && pool.length === 0) return [];
-  const rec = [...pool].sort(decisionCompare)[0] ?? [...front].sort(CRIT.balanced)[0];
+  const rec = forced ?? [...pool].sort(decisionCompare)[0] ?? [...front].sort(CRIT.balanced)[0];
   const chosen: { c: Candidate; label: ProposalLabel }[] = [{ c: rec, label: "balanced" }];
   for (const label of ["most-people", "cheapest", "most-comfortable"] as ProposalLabel[]) {
     if (chosen.length >= MAX_PROPOSALS) break;
@@ -953,6 +953,29 @@ export function whereText(p: Pick<Proposal, "slot" | "poi" | "segments">): strin
   return `${slotLabel(sg[0].start)} ${sg[0].activityName}（${sg[0].poi.name}）→ ${minToHm(slotTimes({ id: "", start: sg[1].start, end: sg[1].end }).start)} ${sg[1].activityName}（${sg[1].poi.name}）`;
 }
 
+/**
+ * v6 补偿（AVATAR.md 第 4 节第 3 轮）：推荐方案是两段式、又有人让了步时，在"同一时间、同一个第一段、照顾到的人一样多"的
+ * 候选里，挑让过步的人满意度之和最高的第二段（打平按三级准则）。不会为了补偿少照顾一个人。
+ * conceded：让过步的人在 members 里的下标。
+ */
+export function compensate(rec: Candidate, pool: Candidate[], conceded: number[]): Candidate {
+  if (rec.segments?.length !== 2 || !conceded.length) return rec;
+  const first = rec.segments[0];
+  const alts = pool.filter(
+    (c) =>
+      !c.vetoed &&
+      !c.infeasible &&
+      c.slot.id === rec.slot.id &&
+      c.segments?.length === 2 &&
+      c.segments[0].activity === first.activity &&
+      c.segments[0].poi.id === first.poi.id &&
+      c.cared === rec.cared &&
+      Math.abs(c.caredW - rec.caredW) <= 1e-9,
+  );
+  const gain = (c: Candidate) => conceded.reduce((s, i) => s + (c.mines[i]?.utility ?? 0), 0);
+  return [...alts].sort((a, b) => gain(b) - gain(a) || decisionCompare(a, b))[0] ?? rec;
+}
+
 /** v5 备案：户外方案碰上小雨 / 还没有预报时，挑同一时间最好的室内（或不是户外的）店 */
 export function fallbackFor(c: Candidate, pool: Candidate[]): Fallback | undefined {
   if (poiIndoor(c.poi) !== false || (c.wx.kind !== "light" && c.wx.kind !== "unknown")) return undefined;
@@ -1040,7 +1063,14 @@ export async function planJu(
   const front = paretoFront(pool);
   trace("compute", `帕累托前沿（到场人数 × 加权最低满意度 × 人均价）上剩 ${front.length} 个候选`);
 
-  const picked = pickProposals(front, pool);
+  // v6 补偿：让过步的人（自动让步 + 私下答应过的），两段式时第二段按他们的口味挑
+  const rec0 = [...pool].sort(decisionCompare)[0];
+  const conceded = rec0
+    ? [...new Set([...(given.uses.get(rec0) ?? []).map((u) => u.i), ...inMembers.flatMap((m, i) => ((m.private?.asks ?? []).some((a) => a.status === "yes") ? [i] : []))])]
+    : [];
+  const recC = rec0 && compensate(rec0, pool, conceded);
+  if (recC && recC !== rec0) trace("decide", `第二段换成「${recC.segments![1].activityName}」：照顾到的人一样多，更合让过步的朋友的口味`);
+  const picked = pickProposals(front, pool, recC);
   const rec = picked[0].c;
   const proposals = picked.map((p, i) => {
     const prop = toProposal(p.c, p.label, inMembers, weights, rec, { spec: ju.spec }, i === 0);

@@ -1,5 +1,8 @@
 import type { DietTag, Member, Poi } from "../types";
 
+/** 忌口里的硬约束：吃不了就是吃不了；其余忌口是强度 2 的软偏好 */
+export const HARD_DIET: DietTag[] = ["清真", "素食"];
+
 /** [关键词, 冲突原因]；长词在前，命中第一个即停 */
 const RULES: Record<Exclude<DietTag, "清真">, [string | RegExp, string][]> = {
   不吃辣: [
