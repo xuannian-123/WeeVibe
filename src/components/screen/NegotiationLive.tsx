@@ -7,18 +7,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JuState, NegotiationEvent } from "@/lib/types";
 import { SealLogo } from "../ui";
+import { NegotiationScene } from "./NegotiationScene";
 import { focusProposal } from "./fmt";
 import {
   JUZHANG,
   KIND_STYLE,
   ROUNDS,
   buildSchedule,
-  mentionedCodes,
   negotiationStats,
   playhead,
   roundLabel,
   seatCodes,
-  seatStates,
   speakerTone,
 } from "./negotiation";
 
@@ -43,16 +42,6 @@ const CSS = `
 @keyframes nl-beam { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
 @keyframes nl-float-up { 0% { transform: translate(-50%, 6px) scale(.6); opacity: 0 } 60% { transform: translate(-50%, -3px) scale(1.06); opacity: 1 } 100% { transform: translate(-50%, 0) scale(1); opacity: 1 } }
 `;
-
-const TABLE = 600;
-const RX = 228;
-const RY = 214;
-
-function seatPos(i: number, n: number) {
-  // 从正上方偏一点开始，顺时针均匀分布；局长在圆心
-  const a = -Math.PI / 2 + (Math.PI * 2 * (i + 0.5)) / Math.max(1, n);
-  return { x: TABLE / 2 + RX * Math.cos(a), y: TABLE / 2 + RY * Math.sin(a) };
-}
 
 /* ───────── 轮次进度条 ───────── */
 function RoundBar({ round, done }: { round: number | null; done: boolean }) {
@@ -86,164 +75,6 @@ function RoundBar({ round, done }: { round: number | null; done: boolean }) {
 }
 
 /* ───────── 谈判桌 ───────── */
-function Table({
-  codes,
-  events,
-  step,
-  phase,
-  reduced,
-}: {
-  codes: string[];
-  events: NegotiationEvent[];
-  step: number;
-  phase: string;
-  reduced: boolean;
-}) {
-  const cur = step >= 0 ? events[step] : undefined;
-  const speaking = cur && (phase === "anticipate" || phase === "typing" || phase === "hold") ? cur : undefined;
-  const states = useMemo(() => seatStates(events, phase === "anticipate" ? step - 1 : step), [events, step, phase]);
-  const done = phase === "done";
-  const pos = new Map(codes.map((c, i) => [c, seatPos(i, codes.length)]));
-  const center = { x: TABLE / 2, y: TABLE / 2 };
-  const kind = speaking ? KIND_STYLE[speaking.kind] : undefined;
-  const from = speaking && speaking.speaker !== JUZHANG ? pos.get(speaking.speaker) : undefined;
-  const linked = speaking ? mentionedCodes(speaking).filter((c) => pos.has(c)) : [];
-  // 光束：分身发言 → 指向局长；局长点名 → 指向被点到的分身；交换 → 两个分身之间
-  const beams: { a: { x: number; y: number }; b: { x: number; y: number } }[] = [];
-  if (speaking && phase !== "anticipate") {
-    if (from) beams.push({ a: from, b: center });
-    if (speaking.kind === "trade" && linked.length >= 2 && !from) beams.push({ a: pos.get(linked[0])!, b: pos.get(linked[1])! });
-    else for (const c of linked) beams.push({ a: center, b: pos.get(c)! });
-  }
-
-  return (
-    <div className="relative shrink-0" style={{ width: TABLE, height: TABLE }}>
-      {/* 桌面 */}
-      <div
-        aria-hidden
-        className="absolute rounded-[50%] border-2 border-night-line"
-        style={{
-          left: TABLE / 2 - RX + 58,
-          top: TABLE / 2 - RY + 58,
-          width: (RX - 58) * 2,
-          height: (RY - 58) * 2,
-          background: "radial-gradient(ellipse at 50% 40%, rgb(242 181 48 / .10), rgb(29 24 21 / .9) 70%)",
-          boxShadow: done ? "0 0 80px rgb(62 207 142 / .25), inset 0 0 40px rgb(62 207 142 / .12)" : "inset 0 0 40px rgb(0 0 0 / .5)",
-          transition: "box-shadow 900ms ease-in-out",
-        }}
-      />
-      <svg className="pointer-events-none absolute inset-0" width={TABLE} height={TABLE} aria-hidden>
-        {beams.map((bm, i) => (
-          <path
-            key={`${step}-${i}`}
-            // 交换：两人之间画一道向上拱起的弧，绕开居中的局长
-            d={
-              speaking?.kind === "trade" && !from
-                ? `M ${bm.a.x} ${bm.a.y} Q ${(bm.a.x + bm.b.x) / 2} ${Math.min(bm.a.y, bm.b.y) - 150} ${bm.b.x} ${bm.b.y}`
-                : `M ${bm.a.x} ${bm.a.y} L ${bm.b.x} ${bm.b.y}`
-            }
-            fill="none"
-            pathLength={1}
-            stroke={kind?.color ?? "#f2b530"}
-            strokeWidth={speaking?.kind === "trade" ? 4 : 3}
-            strokeLinecap="round"
-            strokeDasharray={speaking?.kind === "trade" ? "0.04 0.03" : "1"}
-            opacity={0.85}
-            style={reduced || speaking?.kind === "trade" ? undefined : { strokeDasharray: 1, animation: "nl-beam 420ms cubic-bezier(.45,0,.2,1) both" }}
-          />
-        ))}
-      </svg>
-
-      {/* 局长居中 */}
-      <div className="absolute flex flex-col items-center" style={{ left: center.x, top: center.y, transform: "translate(-50%, -50%)" }}>
-        <div
-          className="rounded-[14px]"
-          style={{
-            transform: speaking?.speaker === JUZHANG && phase !== "anticipate" ? "scale(1.1)" : phase === "anticipate" && speaking?.speaker === JUZHANG ? "scale(.95)" : "scale(1)",
-            transition: "transform 260ms cubic-bezier(.3,1.35,.5,1)",
-            boxShadow: speaking?.speaker === JUZHANG ? "0 0 46px rgb(226 65 46 / .55)" : "none",
-          }}
-        >
-          <SealLogo size={96} dark />
-        </div>
-        <span className="mt-3 rounded-full bg-night-3 px-3 py-0.5 text-[15px] font-bold text-cream-faint">局长 · 主持</span>
-      </div>
-
-      {/* 分身座位 */}
-      {codes.map((c, i) => {
-        const p = pos.get(c)!;
-        const tone = speakerTone(c);
-        const st = states[c];
-        const isSpeaker = speaking?.speaker === c;
-        const isLinked = linked.includes(c);
-        const dim = !!speaking && !isSpeaker && !isLinked && !done;
-        const wind = isSpeaker && phase === "anticipate";
-        const scale = wind ? 0.92 : isSpeaker ? 1.14 : isLinked ? 1.05 : 1;
-        const ok = done;
-        return (
-          <div
-            key={c}
-            className="absolute"
-            style={{
-              left: p.x,
-              top: p.y,
-              transform: "translate(-50%, -50%)",
-              animation: reduced ? undefined : `nl-seat-in 560ms cubic-bezier(.2,.8,.2,1) ${i * 90}ms both`,
-            }}
-          >
-            <div
-              className="relative flex size-[86px] flex-col items-center justify-center rounded-full border-[3px] bg-night-2"
-              style={{
-                borderColor: ok ? "#3ecf8e" : st?.blocked ? "#ff6b57" : tone.fg,
-                opacity: dim ? 0.38 : 1,
-                transform: `scale(${scale})`,
-                boxShadow: isSpeaker ? `0 0 34px ${tone.fg}99` : ok ? "0 0 22px rgb(62 207 142 / .35)" : "none",
-                // 拍板时座位依次变绿（错开 70ms，像涟漪传过一圈）
-                transition: `transform ${wind ? 180 : 300}ms cubic-bezier(.3,1.3,.5,1), opacity 320ms ease-in-out, border-color 500ms ease-in-out ${ok ? i * 70 : 0}ms, box-shadow 400ms ease-in-out ${ok ? i * 70 : 0}ms`,
-              }}
-            >
-              <span className="font-num text-[36px] font-black leading-none" style={{ color: tone.fg }}>
-                {tone.letter}
-              </span>
-              <span className="mt-0.5 text-[12px] font-bold text-cream-faint">分身</span>
-              {ok && !reduced && (
-                <span
-                  aria-hidden
-                  className="absolute inset-0 rounded-full border-2 border-[#3ecf8e]"
-                  style={{ animation: `nl-ripple 900ms ease-out ${i * 70}ms both` }}
-                />
-              )}
-              {/* 状态角标：卡点 / 让步 / 交换 / 补偿 */}
-              <span className="absolute -right-3 -top-2 flex flex-col gap-0.5">
-                {st?.blocked && !ok && <Badge icon={KIND_STYLE.block.icon} color={KIND_STYLE.block.color} />}
-                {st?.marks.map((m) => <Badge key={m} icon={KIND_STYLE[m].icon} color={KIND_STYLE[m].color} />)}
-                {ok && !st?.marks.length && <Badge icon="✓" color="#3ecf8e" />}
-              </span>
-            </div>
-            {isSpeaker && kind && phase !== "anticipate" && (
-              <span
-                className="absolute -top-9 left-1/2 whitespace-nowrap rounded-full px-3 py-0.5 text-[15px] font-black text-night"
-                style={{ background: kind.color, animation: reduced ? undefined : "nl-float-up 320ms cubic-bezier(.2,.8,.2,1) both", transform: "translateX(-50%)" }}
-              >
-                {kind.icon} {kind.label}
-              </span>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function Badge({ icon, color }: { icon: string; color: string }) {
-  return (
-    <span className="flex size-[26px] items-center justify-center rounded-full border-2 bg-night text-[13px] font-black" style={{ borderColor: color, color }}>
-      {icon}
-    </span>
-  );
-}
-
-/* ───────── 对话流 ───────── */
 function Transcript({ events, step, phase, typed, reduced }: { events: NegotiationEvent[]; step: number; phase: string; typed: number; reduced: boolean }) {
   // 显示到当前这条（预备阶段只亮座位，气泡还没出来）
   const upto = phase === "anticipate" ? step - 1 : step;
@@ -446,7 +277,15 @@ export function NegotiationLive({ state, right }: { state: JuState; right?: Reac
 
       <div className="relative flex min-h-0 flex-1 gap-8">
         <div className="flex shrink-0 items-center justify-center">
-          <Table codes={codes} events={events} step={ph.step} phase={ph.phase} reduced={reduced} />
+          <NegotiationScene
+            codes={codes}
+            events={events}
+            step={ph.step}
+            phase={talking && ph.phase === "done" ? "hold" : ph.phase}
+            reduced={reduced}
+            width={620}
+            bubble={!done && ph.step >= 0 && (ph.phase === "typing" || ph.phase === "hold" || (talking && ph.phase === "done")) ? (ph.phase === "typing" ? events[ph.step].text.slice(0, ph.typed) : events[ph.step].text) : undefined}
+          />
         </div>
         <div className="relative min-h-0 min-w-0 flex-1">
           {done ? (

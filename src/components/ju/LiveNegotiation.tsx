@@ -9,62 +9,14 @@ import type { JuState, Member, NegotiationEvent } from "@/lib/types";
 import { SealLogo } from "../ui";
 import { focusProposal } from "../screen/fmt";
 import { useReducedMotion } from "../screen/NegotiationLive";
-import { JUZHANG, KIND_STYLE, ROUNDS, avatarSentence, buildSchedule, negotiationStats, playhead, roundLabel, seatCodes, seatStates, speakerTone } from "../screen/negotiation";
+import { JUZHANG, KIND_STYLE, ROUNDS, avatarSentence, buildSchedule, negotiationStats, playhead, roundLabel, seatCodes, speakerTone } from "../screen/negotiation";
+import { NegotiationScene } from "../screen/NegotiationScene";
 
 const CSS = `
 @keyframes ln-bubble { 0% { transform: translateY(12px) scale(.97); opacity: 0 } 62% { transform: translateY(-2px); opacity: 1 } 100% { transform: none; opacity: 1 } }
 @keyframes ln-card { 0% { transform: translateY(24px) scale(.94); opacity: 0 } 60% { transform: translateY(-4px) scale(1.01); opacity: 1 } 100% { transform: none; opacity: 1 } }
 @keyframes ln-ripple { 0% { transform: scale(.8); opacity: .85 } 100% { transform: scale(1.8); opacity: 0 } }
 `;
-
-/** 谈判桌：代号围成一圈，局长在中间；说话的人亮起来、其他人变暗，卡在底线上的标红、让过步的挂标 */
-function MiniTable({ codes, events, step, phase, reduced }: { codes: string[]; events: NegotiationEvent[]; step: number; phase: string; reduced: boolean }) {
-  const size = 236;
-  const r = 92;
-  const cur = step >= 0 ? events[step] : undefined;
-  const speaking = cur && phase !== "intro" && phase !== "banner" && phase !== "done" ? cur.speaker : undefined;
-  const states = seatStates(events, phase === "anticipate" ? step - 1 : step);
-  const done = phase === "done";
-  return (
-    <div className="relative mx-auto" style={{ width: size, height: size }} aria-hidden>
-      <div className="absolute inset-[34px] rounded-full border border-night-line bg-night-3/60" />
-      <div className={`absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center transition-opacity ${speaking && speaking !== JUZHANG ? "opacity-50" : ""}`}>
-        <SealLogo size={speaking === JUZHANG ? 54 : 46} dark />
-        <span className="mt-0.5 text-[10px] font-bold text-cream-faint">局长 · 主持</span>
-      </div>
-      {codes.map((code, i) => {
-        const a = -Math.PI / 2 + (Math.PI * 2 * (i + 0.5)) / Math.max(1, codes.length);
-        const x = size / 2 + r * Math.cos(a);
-        const y = size / 2 + r * Math.sin(a);
-        const tone = speakerTone(code);
-        const st = states[code];
-        const on = speaking === code;
-        const dim = !!speaking && !on;
-        const ring = done ? "#3ecf8e" : st?.blocked ? "#ff6b5b" : tone.fg;
-        return (
-          <div
-            key={code}
-            className="absolute flex flex-col items-center transition-all duration-300"
-            // 居中只靠这里的 translate（Tailwind 的 -translate-* 是单独的 translate 属性，和 transform 叠加会偏两次）
-            style={{ left: x, top: y, opacity: dim ? 0.35 : 1, transform: `translate(-50%, -50%) scale(${on ? 1.18 : 1})` }}
-          >
-            {on && !reduced && <span className="absolute size-11 rounded-full border-2" style={{ borderColor: tone.fg, animation: "ln-ripple 1.1s ease-out infinite" }} />}
-            <span className="font-num relative flex size-11 items-center justify-center rounded-full border-[3px] bg-night-2 text-[18px] font-black" style={{ borderColor: ring, color: tone.fg }}>
-              {tone.letter}
-              {st?.marks.length ? (
-                <span className="absolute -right-1.5 -top-1.5 text-[13px]">{KIND_STYLE[st.marks.at(-1)!].icon}</span>
-              ) : st?.blocked && !done ? (
-                <span className="absolute -right-1.5 -top-1.5 text-[13px]">⛔</span>
-              ) : done ? (
-                <span className="absolute -right-1.5 -top-1.5 text-[12px]">✅</span>
-              ) : null}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 function Bubbles({ events, step, phase, typed, reduced }: { events: NegotiationEvent[]; step: number; phase: string; typed: number; reduced: boolean }) {
   const upto = phase === "anticipate" ? step - 1 : step;
@@ -160,6 +112,15 @@ export function LiveNegotiation({ state, me, onClose, live = true }: { state: Ju
   const [synced] = useState(() => talking || (live && !!computedAt && Date.now() - Date.parse(computedAt) < schedule.total));
   const [playing, setPlaying] = useState(true);
   const last = useRef<number | null>(null);
+  const ph0 = playhead(schedule, t, events);
+  // 场景宽度：手机屏宽减去两边留白
+  const [sceneW, setSceneW] = useState(340);
+  useEffect(() => {
+    const fit = () => setSceneW(Math.min(380, window.innerWidth - 32));
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
 
   useEffect(() => {
     if (!playing) return;
@@ -184,7 +145,7 @@ export function LiveNegotiation({ state, me, onClose, live = true }: { state: Ju
 
   const codes = useMemo(() => seatCodes(events, focusProposal(state.ju)?.experiences.length ?? state.counts.in), [events, state.ju, state.counts.in]);
   if (!neg) return null;
-  const ph = playhead(schedule, t, events);
+  const ph = ph0;
   // 播到最新一句、分身们还在谈：等下一句，不出结果卡
   const waiting = ph.phase === "done" && talking;
   const done = ph.phase === "done" && !talking;
@@ -220,7 +181,15 @@ export function LiveNegotiation({ state, me, onClose, live = true }: { state: Ju
       </ol>
 
       <div className="relative mt-2 shrink-0">
-        <MiniTable codes={codes} events={events} step={ph.step} phase={ph.phase} reduced={reduced} />
+        <NegotiationScene
+          codes={codes}
+          events={events}
+          step={ph.step}
+          phase={waiting ? "hold" : ph.phase}
+          reduced={reduced}
+          width={sceneW}
+          bubble={!done && ph.step >= 0 && (ph.phase === "typing" || ph.phase === "hold" || waiting) ? (ph.phase === "typing" ? events[ph.step].text.slice(0, ph.typed) : events[ph.step].text) : undefined}
+        />
         {ph.phase === "banner" && ph.round !== null && (
           <div key={ph.round} className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center">
             <div className="rounded-2xl border-2 border-mustard bg-night/95 px-5 py-2 text-center shadow-[0_8px_30px_rgb(0_0_0/.5)]">
@@ -231,8 +200,8 @@ export function LiveNegotiation({ state, me, onClose, live = true }: { state: Ju
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden px-4 pt-2" style={{ maskImage: done ? undefined : "linear-gradient(transparent, #000 18%)" }}>
-        <div className="flex h-full flex-col justify-end">
+      <div className={`min-h-0 flex-1 px-4 pt-2 ${done ? "overflow-y-auto" : "overflow-hidden"}`} style={{ maskImage: done ? undefined : "linear-gradient(transparent, #000 18%)" }}>
+        <div className={`flex flex-col ${done ? "min-h-full justify-end pb-2" : "h-full justify-end"}`}>
           {done ? <Result state={state} me={me} reduced={reduced} /> : <Bubbles events={events} step={ph.step} phase={waiting ? "hold" : ph.phase} typed={ph.typed} reduced={reduced} />}
           {waiting && <p className="mt-2 text-center text-[13px] font-bold text-cream-faint"><span className="animate-pulse">💬</span> 分身们正在想下一句…</p>}
         </div>
