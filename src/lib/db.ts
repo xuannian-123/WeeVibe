@@ -11,7 +11,8 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import type { GroupingInput } from "./planner/grouping";
-import type { Ju, LedgerEntry, Member, MyExperience, Poi, Profile } from "./types";
+import type { Ju, LedgerEntry, Member, MyExperience, Negotiation, Poi, Profile } from "./types";
+import type { AskDraft } from "./planner/repair";
 import { upgradeJu, upgradeMember } from "./legacy";
 
 type Store = { db: DatabaseSync; file: string };
@@ -168,6 +169,17 @@ export type JuPrivate = {
   decks: Record<string, Pick<Poi, "id" | "name" | "type">[]>;
   /** #18 最近一次排座的输入（含私密标记）和诱饵对：一键复算用，永远不出接口 */
   seatSnapshot?: { input: GroupingInput; decoys: [string, string][] };
+  /**
+   * v6 实时谈判的后台任务资料（永远不出接口）：规则版的完整记录（兜底 / 每句的意思）、每句是谁的分身说的、
+   * 每个成员的代号、超出授权要不要问本人还没定的问题草稿（等分身自己决定）
+   */
+  live?: {
+    computedAt: string;
+    template: Negotiation;
+    speakers: (string | null)[];
+    codes: Record<string, string>;
+    asks: AskDraft[];
+  };
 };
 
 export function getJuPrivate(juId: string): JuPrivate {

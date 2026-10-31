@@ -944,6 +944,8 @@ export type NegotiationEvent = {
 
 export type Negotiation = {
   events: NegotiationEvent[];
+  /** live = 分身们正在谈（每说一句就追加一条，大家实时看）；done / 没有 = 谈完了（可以回看） */
+  status?: "live" | "done";
   /** 聚合数字 */
   autoConcessions: number;
   asked: number;

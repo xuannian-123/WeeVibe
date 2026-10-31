@@ -10,11 +10,14 @@ export function usePublicJu(id: string, pollMs = 2000) {
   const [loadError, setLoadError] = useState<{ msg: string; status: number } | null>(null);
   const [offline, setOffline] = useState(false);
   const has = useRef(false);
+  // 分身们正在谈（实时）时每秒拉一次
+  const live = useRef(false);
 
   const fetchOnce = useCallback(async () => {
     try {
       const s = await organizerApi.getJu(id, null);
       has.current = true;
+      live.current = s.ju.plan?.negotiation?.status === "live";
       setState(s);
       setLoadError(null);
       setOffline(false);
@@ -36,7 +39,7 @@ export function usePublicJu(id: string, pollMs = 2000) {
         await fetchOnce();
         inflight = false;
       }
-      if (!stopped) timer = setTimeout(tick, pollMs);
+      if (!stopped) timer = setTimeout(tick, live.current ? Math.min(1000, pollMs) : pollMs);
     };
     tick();
     return () => {

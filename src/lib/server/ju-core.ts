@@ -253,6 +253,8 @@ export type PlanDeps = {
   concessions?: Record<string, number>;
   /** 公开 LLM 润色（B1 polishPlan）；不传 = 规则版 */
   polish?: (facts: PublicFacts, plan: Plan) => Promise<Plan>;
+  /** v6 实时谈判：给了就由分身们一句句谈（锁外跑），没给 = 直接用规则版记录 */
+  onLive?: (juId: string, computedAt: string) => void;
   /** 是否发群公告（反事实检验里也发，因为公告是公开输出的一部分） */
   announce?: boolean;
   /** v6 活动层：档案（profileId -> Profile），出方案时取每人的活动口味 / 身体限制（不传 = 只看本次说的） */
@@ -414,14 +416,26 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
   ju.pendingChanges = 0;
   priv.firstPlanAt ??= now.toISOString();
 
+  // v6 实时谈判：公开记录先清空、标 live，后台由分身们一句句谈；超出授权的问题等分身自己决定要不要问主人
+  const live = !!deps.onLive && !!polished.negotiation;
+  if (live) {
+    priv.live = { computedAt: polished.computedAt, template: structuredClone(polished.negotiation!), speakers: avatar.speakers, codes: avatar.codes, asks };
+    polished.negotiation = { ...polished.negotiation!, events: [], status: "live" };
+  } else delete priv.live;
+
   if (deps.announce !== false) announceAt(ju, planText(publicFacts(ju, members), replan), now);
   expireNudges(members);
   applyAvatar(ju, ins, avatar, now, deps.onConcede);
-  issueAsks(ins, asks, now);
+  if (!live) issueAsks(ins, asks, now);
   for (const m of ins) {
+    if (live) {
+      notify(m, "avatar", replan ? "有朋友更新了情况，分身们重新谈一轮——点开看直播" : "人齐了，分身们开始谈判了——点开看直播", now);
+      continue;
+    }
     if (ju.votes[m.id]) continue;
     notify(m, "nudge", replan ? "局长更新了方案，去看看还投不投原来那个？" : `局长出了 ${polished.proposals.length} 个方案，去投一票吧，过半就自动定局。`, now);
   }
+  if (live) deps.onLive!(ju.id, polished.computedAt);
 }
 
 // ---------------------------------------------------------------- v6 分身：替你做了什么
@@ -585,10 +599,21 @@ export type AdvanceDeps = Omit<PlanDeps, "now"> & { profiles: Record<string, Pro
  * - 投票中 + 截止时间到（且第一次出方案早于截止）→ 有攒着的变化先重算，再按推荐定局
  * - 投票中 + pendingChanges ≥ 2 且距上次重算 ≥ 3 分钟 → 攒批重算
  */
+/** 人齐了自动开谈的最少人数（两三个人的局直接让发起人点） */
+export const AUTO_START_MIN = 3;
+
 export async function advance(ju: Ju, members: Member[], priv: JuPrivate, now: Date, deps: AdvanceDeps): Promise<boolean> {
   let dirty = failQuorumIfDue(ju, members, now);
   if (ju.status === "cancelled") return dirty;
   const deadlinePassed = !!ju.deadline && now.getTime() >= Date.parse(ju.deadline);
+
+  // v6 人齐了自动开谈：在局里的人（至少 3 位）都交了授权书，不等发起人点
+  const ins = inOnly(members);
+  if (ju.status === "collecting" && !quorumHidden(ju) && ins.length >= AUTO_START_MIN && ins.every((m) => m.intake === "done")) {
+    appendTraceAt(ju, "listen", `人齐了：${ins.length} 位朋友都把授权书交给了分身，开谈`, now);
+    await computePlan(ju, members, priv, { ...deps, now });
+    return true;
+  }
 
   if (ju.status === "collecting" && deadlinePassed && !quorumHidden(ju) && inOnly(members).length > 0) {
     appendTraceAt(ju, "listen", "截止时间到了", now);

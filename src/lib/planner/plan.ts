@@ -1051,7 +1051,7 @@ export async function planJu(
     /** v6 活动层：memberId -> 档案里的活动口味、身体限制（Profile 的子集）。不传 = 只看本次说的 */
     profiles?: Record<string, ActivityProfile>;
   },
-): Promise<{ plan: Plan; mine: Record<string, MyExperience[]>; asks: AskDraft[]; avatar: Pick<NegotiateResult, "logs" | "conceded"> }> {
+): Promise<{ plan: Plan; mine: Record<string, MyExperience[]>; asks: AskDraft[]; avatar: Pick<NegotiateResult, "logs" | "conceded" | "speakers" | "codes"> }> {
   const trace: TraceFn = (k, t) => {
     try {
       opts.onTrace?.(k, t);
@@ -1203,5 +1203,5 @@ export async function planJu(
       cared: p.c.mines[i].cared,
     }));
   });
-  return { plan, mine, asks: repair.asks, avatar: { logs: talk.logs, conceded: talk.conceded } };
+  return { plan, mine, asks: repair.asks, avatar: { logs: talk.logs, conceded: talk.conceded, speakers: talk.speakers, codes: talk.codes } };
 }

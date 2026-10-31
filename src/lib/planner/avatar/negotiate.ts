@@ -45,8 +45,12 @@ function codeName(k: number): string {
 /** 同一轮里分身发言的先后：先亮卡点，再让步，再说"去问本人" */
 const KIND_ORDER: NegotiationEvent["kind"][] = ["open", "propose", "block", "concede", "ask", "trade", "compensate", "decide"];
 
-/** 按内容签名发代号，再按 (类别, 内容, 代号) 给每轮的分身发言排序 */
-function render(rounds: RoundDrafts[]): NegotiationEvent[] {
+/**
+ * 按内容签名发代号，再按 (类别, 内容, 代号) 给每轮的分身发言排序。
+ * 另外（只给服务端）：每条是谁的分身说的（成员下标，局长 = null），以及每个成员的代号——
+ * 没在记录里出现过的成员排在后面接着发（他们的记录都一样，怎么排都不影响公开内容）。
+ */
+function render(rounds: RoundDrafts[], n: number): { events: NegotiationEvent[]; speakers: (number | null)[]; codes: string[] } {
   const all = rounds.flatMap((r) => [...r.head, ...r.body, ...r.foot]);
   const actors = [...new Set(all.flatMap(actorsOf))];
   const signature = new Map(actors.map((a) => [a, all.filter((d) => actorsOf(d).includes(a)).map((d) => sig(d, a)).join("\n")]));
@@ -58,13 +62,19 @@ function render(rounds: RoundDrafts[]): NegotiationEvent[] {
   const neutral = (d: Draft) => sig(d, -1);
   const kindRank = (d: Draft) => KIND_ORDER.indexOf(d.kind);
   const out: NegotiationEvent[] = [];
+  const speakers: (number | null)[] = [];
   for (const r of rounds) {
     const body = [...r.body].sort(
       (x, y) => kindRank(x) - kindRank(y) || cmpStr(neutral(x), neutral(y)) || cmpStr(speaker(x), speaker(y)) || cmpStr(text(x), text(y)),
     );
-    for (const d of [...r.head, ...body, ...r.foot]) out.push({ round: d.round, speaker: speaker(d), kind: d.kind, text: text(d) });
+    for (const d of [...r.head, ...body, ...r.foot]) {
+      out.push({ round: d.round, speaker: speaker(d), kind: d.kind, text: text(d) });
+      speakers.push(typeof d.speaker === "string" ? null : d.speaker.a);
+    }
   }
-  return out;
+  let next = order.length;
+  const codes = Array.from({ length: n }, (_, i) => code.get(i) ?? codeName(next++));
+  return { events: out, speakers, codes };
 }
 
 // ---------------------------------------------------------------- 卡点（只说类别）
@@ -201,6 +211,9 @@ export type NegotiateResult = {
   logs: Record<string, AvatarLogEntry[]>;
   /** 这次自动让了步的人（服务端记进让步账：下次局里优先照顾、少找他让步） */
   conceded: string[];
+  /** 只给服务端（实时谈判用）：每条记录是谁的分身说的（成员 id，局长 = null）、每个成员的代号 */
+  speakers: (string | null)[];
+  codes: Record<string, string>;
 };
 
 export function negotiate(input: NegotiateInput): NegotiateResult {
@@ -333,7 +346,7 @@ export function negotiate(input: NegotiateInput): NegotiateResult {
   if (why.length) r4.head.push(boss(4, "decide", `为什么：${why.join("；")}。`));
   r4.foot.push(boss(4, "decide", "每个分身会私下告诉本人：你得到了什么、替你让了什么、为什么。"));
 
-  const events = render([r0, r1, r2, r3, r4]);
+  const { events, speakers, codes } = render([r0, r1, r2, r3, r4], n);
   const autoConcessions = uses.length;
   const outcome =
     `${n} 个分身谈了 ${NEGOTIATION_ROUNDS} 轮：` +
@@ -351,6 +364,8 @@ export function negotiate(input: NegotiateInput): NegotiateResult {
     negotiation: { events, autoConcessions, asked: askedIdx.length, trades: trades.length, outcome },
     logs: privateLogs(input, uses, segs, concededIdx),
     conceded: uses.map((u) => u.memberId),
+    speakers: speakers.map((i) => (i === null ? null : members[i].id)),
+    codes: Object.fromEntries(members.map((m, i) => [m.id, codes[i]])),
   };
 }
 

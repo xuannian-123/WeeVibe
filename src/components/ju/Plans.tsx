@@ -10,6 +10,7 @@ import { toast } from "../toast";
 import { NeedsChecklist, RisksList, SegmentsTimeline } from "./Decision";
 import { AvatarLog } from "./AvatarLog";
 import { NegotiationCard } from "./Negotiation";
+import { LiveEntry } from "./LiveNegotiation";
 
 const STATUS_TEXT: Record<Experience["status"], string> = {
   full: "全程",
@@ -333,6 +334,7 @@ export function PlansView({ state, me, actions }: { state: JuState; me: Member |
       </section>
 
       {/* v6：你的分身替你做了什么（只给本人）+ 公开的谈判记录 */}
+      <LiveEntry state={state} me={me} />
       {me && <AvatarLog state={state} me={me} actions={actions} />}
       <NegotiationCard state={state} me={me} showMine={!me} />
 

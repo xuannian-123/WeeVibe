@@ -54,6 +54,8 @@ export type JuHook = {
 /** 等待 / 投票期 3 秒，其他 10 秒 */
 export function pollInterval(s: JuState | null): number {
   if (!s) return 3000;
+  // 分身们正在谈：每秒拉一次，大家看到的是同一句
+  if (s.ju.plan?.negotiation?.status === "live") return 1000;
   const { status } = s.ju;
   if (status === "voting") return 3000;
   if (status === "collecting") {

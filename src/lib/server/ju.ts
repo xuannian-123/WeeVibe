@@ -44,6 +44,7 @@ import {
   type AdvanceDeps,
 } from "./ju-core";
 import { createdText, ruleGroupMessages } from "./ju-text";
+import { finishLocked, isLiveRunning, liveEnabled, startLiveNegotiation } from "./live-negotiation";
 import { emptyProfile, getProfile, rememberVote, saveProfile } from "./profile";
 import type { CreateJuInput, PatchJuInput, PatchMemberInput } from "./schemas";
 
@@ -239,6 +240,7 @@ export function planDeps(members: Member[]): AdvanceDeps {
     profiles: profilesFor(members),
     polish: polishPlan,
     onConcede: recordConcession,
+    ...(liveEnabled() ? { onLive: startLiveNegotiation } : {}),
   };
 }
 
@@ -491,8 +493,11 @@ export async function advanceJu(id: string): Promise<void> {
   const quick = db.getJu(id);
   if (!quick || quick.status === "cancelled") return;
   await mutateJu(id, async (ctx) => {
+    // 实时谈判停在 live、本进程却没在跑（重启过）：用规则版记录补齐
+    const plan = ctx.ju.plan;
+    const recovered = !!plan && plan.negotiation?.status === "live" && !isLiveRunning(id, plan.computedAt) && finishLocked(ctx.ju, ctx.members, ctx.priv, plan.computedAt, ctx.now);
     const dirty = await advance(ctx.ju, ctx.members, ctx.priv, ctx.now, planDeps(ctx.members));
-    if (!dirty) ctx.save = false;
+    if (!dirty && !recovered) ctx.save = false;
   });
 }
 

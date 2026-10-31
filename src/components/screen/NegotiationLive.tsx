@@ -395,7 +395,9 @@ export function NegotiationLive({ state, right }: { state: JuState; right?: Reac
   }, [playing, schedule.total]);
 
   const ph = playhead(schedule, t, events);
-  const done = ph.phase === "done";
+  // 分身们还在谈（实时）：播到最新一句就等下一句，谈完了才出结果卡
+  const talking = neg?.status === "live";
+  const done = ph.phase === "done" && !talking;
   const p = focusProposal(state.ju);
   const codes = useMemo(() => seatCodes(events, p?.experiences.length ?? state.counts.in), [events, p, state.counts.in]);
   if (!neg) return null;
@@ -447,7 +449,14 @@ export function NegotiationLive({ state, right }: { state: JuState; right?: Reac
           <Table codes={codes} events={events} step={ph.step} phase={ph.phase} reduced={reduced} />
         </div>
         <div className="relative min-h-0 min-w-0 flex-1">
-          {done ? <ResultCard state={state} reduced={reduced} /> : <Transcript events={events} step={ph.step} phase={ph.phase} typed={ph.typed} reduced={reduced} />}
+          {done ? (
+            <ResultCard state={state} reduced={reduced} />
+          ) : (
+            <>
+              <Transcript events={events} step={ph.step} phase={ph.phase === "done" ? "hold" : ph.phase} typed={ph.typed} reduced={reduced} />
+              {talking && ph.phase === "done" && <p className="absolute inset-x-0 -bottom-1 text-center text-[18px] font-bold text-cream-faint">💬 分身们正在想下一句…</p>}
+            </>
+          )}
         </div>
         {ph.phase === "banner" && ph.round !== null && (
           <div key={ph.round} className="pointer-events-none absolute left-0 top-2 z-10" style={{ animation: reduced ? undefined : `nl-banner ${1100}ms cubic-bezier(.45,0,.2,1) both` }}>
