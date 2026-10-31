@@ -304,9 +304,9 @@ function SwipeDeck({
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2">
-        <Button size="sm" variant="secondary" onClick={() => decide("pass")}>👈 没兴趣</Button>
-        <Button size="sm" variant="gold" onClick={() => decide("love")}>😍 超爱</Button>
-        <Button size="sm" variant="secondary" onClick={() => decide("like")}>喜欢 👉</Button>
+        <Button size="sm" variant="secondary" className="gap-1 whitespace-nowrap !px-2" onClick={() => decide("pass")}>👈 没兴趣</Button>
+        <Button size="sm" variant="gold" className="gap-1 whitespace-nowrap !px-2" onClick={() => decide("love")}>😍 超爱</Button>
+        <Button size="sm" variant="secondary" className="gap-1 whitespace-nowrap !px-2" onClick={() => decide("like")}>喜欢 👉</Button>
       </div>
     </div>
   );

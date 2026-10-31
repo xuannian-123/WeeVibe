@@ -17,6 +17,19 @@ import { toast } from "@/components/toast";
 const TRANSPORTS: [Transport, string][] = [["metro", "🚇 地铁公交"], ["taxi", "🚕 打车"], ["drive", "🚗 开车"], ["bike", "🚲 骑车"], ["walk", "🚶 走路"]];
 const KIND_ICON = { home: "🏠", work: "🏢", school: "🎓", other: "📍" } as const;
 const TASTE_LEVELS: [number, string][] = [[-0.5, "没兴趣"], [0.5, "喜欢"], [1, "超爱"]];
+
+/** 活动口味按"超爱 / 喜欢 / 没兴趣"分组，一组一行（比一个个贴标签好读） */
+function tasteLines(tastes: [string, number][]): string {
+  const groups: [string, (v: number) => boolean][] = [["超爱", (v) => v >= 1], ["喜欢", (v) => v > 0 && v < 1], ["没兴趣", (v) => v <= 0]];
+  return groups
+    .map(([label, hit]) => {
+      const names = tastes.filter(([, v]) => hit(v)).map(([k]) => `${activityOf(k)!.emoji}${activityOf(k)!.name}`);
+      return names.length ? `${label}：${names.join("、")}` : "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 const FEEDBACK_TEXT = { great: "很棒", tired: "太累", pricey: "太贵", far: "太远", loud: "太吵", ok: "还行" } as const;
 
 export function AvatarProfile() {
@@ -144,7 +157,7 @@ export function AvatarProfile() {
           ))}
           <Row
             label="活动口味"
-            value={tastes.length ? tastes.map(([k, v]) => `${activityOf(k)!.emoji}${v >= 1 ? "超爱" : v > 0 ? "喜欢" : "没兴趣"}`).join(" ") : undefined}
+            value={tastes.length ? tasteLines(tastes) : undefined}
             editing={ed("tastes")}
             onEdit={() => setEditing("tastes")}
             onDelete={() => save({ activityTastes: {} }, "删掉了")}
@@ -220,7 +233,7 @@ function Row({ label, value, editing, onEdit, onDelete, children }: { label: str
     <li className="px-4 py-2.5">
       <div className="flex items-center gap-2">
         <span className="w-[4.5rem] shrink-0 text-[12.5px] font-bold text-ink-soft">{label}</span>
-        <span className={`min-w-0 flex-1 break-words text-[14px] ${value ? "font-black" : "text-ink-faint"}`}>{value ?? "没说过"}</span>
+        <span className={`min-w-0 flex-1 whitespace-pre-line break-words text-[14px] leading-snug ${value ? "font-black" : "text-ink-faint"}`}>{value ?? "没说过"}</span>
         {onEdit && (
           <button type="button" onClick={onEdit} className="min-h-10 shrink-0 px-1.5 text-[13px] font-bold text-cinnabar">{value ? "改" : "填"}</button>
         )}

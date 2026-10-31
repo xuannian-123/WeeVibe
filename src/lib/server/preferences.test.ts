@@ -107,8 +107,11 @@ describe("授权书卡片（原偏好卡片）", () => {
     const call = vi.spyOn(provider, "callLlmJson").mockResolvedValue({ reply: "不喝酒记下了，酒水不会算你的。", askStep: null, rsvp: null, placeName: null, availability: null, dietTags: null, budgetMax: null, note: null, noAlcohol: true, skipItems: null, wantsAutofill: null, needs: null, budgetStrength: null });
     const result = await chat(id, token, chatBody.parse({ text: "我不喝酒", preferencesChat: true }));
     expect(call).toHaveBeenCalledOnce();
-    expect(call.mock.calls[0][0].system).toContain("不要逐项收集信息");
-    expect(call.mock.calls[0][0].user).toContain("【还缺的信息】没有了");
+    // 卡片里说话的是本人的分身：只复述听懂了什么，不追问清单，也不让人去刷店
+    expect(call.mock.calls[0][0].system).toContain("AI 分身");
+    expect(call.mock.calls[0][0].system).toContain("不要逐项追问");
+    expect(call.mock.calls[0][0].system).not.toContain("请对方刷几家店");
+    expect(call.mock.calls[0][0].user).toContain("【还缺的信息】不用问");
     expect(result.me.private?.billFacts.noAlcohol).toBe(true);
     expect(result.me.intake).toBe("chatting");
     expect(result.widget).toBeNull();

@@ -320,12 +320,17 @@ function ResultCard({ state, reduced }: { state: JuState; reduced: boolean }) {
   const s = negotiationStats(neg, p);
   const decides = neg.events.filter((e) => e.kind === "decide");
   const decide = decides.find((e) => /拍板/.test(e.text)) ?? decides.at(-1);
-  const chips: [string, string, string][] = [
-    [String(s.autoConcessions), "次自动让步", KIND_STYLE.concede.color],
-    [String(s.trades), "次交换", KIND_STYLE.trade.color],
-    [String(s.compensations), "次补偿", KIND_STYLE.compensate.color],
-    [String(s.asked), s.asked ? "人被私下问" : "人被打扰", "#f3e7d3"],
-  ];
+  // 0 次的不摆出来（"0 次交换"只会显得弱）；"0 人被打扰"是好事，一直留着
+  const chips = (
+    [
+      [s.autoConcessions, "次自动让步", KIND_STYLE.concede.color],
+      [s.trades, "次交换", KIND_STYLE.trade.color],
+      [s.compensations, "次补偿", KIND_STYLE.compensate.color],
+    ] as [number, string, string][]
+  )
+    .filter(([n]) => n > 0)
+    .map(([n, l, c]): [string, string, string] => [String(n), l, c])
+    .concat([[String(s.asked), s.asked ? "人被私下问" : "人被打扰", "#f3e7d3"]]);
   return (
     <div className="flex h-full flex-col justify-center">
       <div

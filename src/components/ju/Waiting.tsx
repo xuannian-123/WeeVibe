@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { JuState, Member } from "@/lib/types";
 import { ago, dayLabel, hhmm, INTAKE_TEXT, beijingDate } from "@/lib/client/format";
 import { errMsg, type ChatBody } from "@/lib/client/api";
+import { mandateOf, STYLE_LABEL } from "@/lib/client/mandate";
 import { store } from "@/lib/client/storage";
 import type { JuActions } from "@/lib/client/useJu";
 import { Avatar, Button, LockNote, SectionTitle, Sheet, copyText } from "../ui";
@@ -87,7 +88,7 @@ export function ProgressCard({ state, meId }: { state: JuState; meId?: string })
       <SectionTitle hint={ju.quorum?.state === "met" ? <span className="font-bold text-jade">✓ 已成局</span> : undefined}>谁说好了</SectionTitle>
       <div className="mb-1 flex items-baseline gap-1.5">
         <span className="font-num text-[34px] font-bold leading-none">{counts.done}</span>
-        <span className="font-num text-[16px] font-bold text-ink-soft">/ {counts.in} 人已确认偏好</span>
+        <span className="font-num text-[16px] font-bold text-ink-soft">/ {counts.in} 人交了授权书</span>
       </div>
       <div className="mb-3 h-2.5 overflow-hidden rounded-full border-2 border-ink bg-paper">
         <div className="h-full bg-mustard transition-all duration-700" style={{ width: `${(counts.done / total) * 100}%` }} />
@@ -202,6 +203,42 @@ export function MyInfoCard({ state, me, actions }: { state: JuState; me: Member;
   );
 }
 
+/* ───────── v6 分身手里的授权书（只给本人） ───────── */
+export function MandateSummary({ me }: { me: Member }) {
+  if (!me.private || me.private.rsvp === "no") return null;
+  const v = mandateOf(me);
+  const g = v.give;
+  const give = [
+    g.lateMin ? `晚到 ${g.lateMin} 分钟` : "",
+    g.stayCutMin ? `少待 ${g.stayCutMin} 分钟` : "",
+    g.budgetUp ? `多花 ¥${g.budgetUp}` : "",
+    g.commuteUp ? `多走 ${g.commuteUp} 分钟` : "",
+  ].filter(Boolean);
+  const rows: { label: string; value: string }[] = [
+    { label: "底线", value: v.floors.length ? v.floors.map((f) => f.text).join("；") : "没有，都可以商量" },
+    { label: "可以让", value: `${STYLE_LABEL[v.style]} · ${give.length ? `最多${give.join("、")}` : "这次一步都不让"}` },
+    { label: "想要", value: v.wants.length ? v.wants.map((w) => w.text).join("、") : "没什么要求" },
+  ];
+  return (
+    <section className="sticker p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <h3 className="flex-1 text-lg font-black">🤖 分身手里的授权书</h3>
+        <LockNote>只有你看得到</LockNote>
+      </div>
+      {v.status !== "confirmed" && <p className="mb-1 text-[12.5px] text-ink-soft">还没确认授权书：分身只守底线，不替你让步。</p>}
+      <ul className="divide-y-2 divide-dashed divide-line">
+        {rows.map((r) => (
+          <li key={r.label} className="flex gap-2 py-1.5">
+            <span className="w-12 shrink-0 text-[13px] font-bold text-ink-soft">{r.label}</span>
+            <span className="min-w-0 flex-1 text-[14px] font-semibold leading-snug">{r.value}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[12px] text-ink-faint">超出“可以让”的让步，分身都会先私下问你。</p>
+    </section>
+  );
+}
+
 /* ───────── 拉人 ───────── */
 export function SharePanel({ state }: { state: JuState }) {
   const [url, setUrl] = useState("");
@@ -210,7 +247,7 @@ export function SharePanel({ state }: { state: JuState }) {
     const t = store.getJson<string>(`jz:tier:${state.ju.id}`);
     setUrl(`${window.location.origin}/j/${state.ju.id}${t ? `?t=${encodeURIComponent(t)}` : ""}`);
   }, [state.ju.id]);
-  const msg = `【${state.ju.title}】点开确认偏好卡片就能报名，复杂顾虑再悄悄告诉局长。预算、来不来，只有局长知道 🤫 ${url}`;
+  const msg = `【${state.ju.title}】点开把你的情况交给你的 AI 分身，它替你去和大家谈。预算、来不来，只有局长知道 🤫 ${url}`;
   return (
     <section className="sticker p-4">
       <SectionTitle hint="帮局长拉人">📣 甩进群</SectionTitle>
@@ -278,6 +315,7 @@ export function WaitingView({ state, me, actions }: { state: JuState; me: Member
     <div className="space-y-5 pb-4">
       {waitlist ? <WaitlistCard /> : <QuorumCard state={state} />}
       {!waitlist && <ProgressCard state={state} meId={me.id} />}
+      <MandateSummary me={me} />
       <MyInfoCard state={state} me={me} actions={actions} />
       {!waitlist && <SocialCard state={state} me={me} actions={actions} />}
       {lastAnn && (

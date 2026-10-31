@@ -72,13 +72,17 @@ export function predictSwipes(profile: Profile | undefined, deck: Poi[]): Record
   return out;
 }
 
-/** #6 "都行"：按档案预填时间 / 预算 / 忌口；无档案给温和默认值（比最早开局提前 30 分钟能出发，意愿 ok） */
+/**
+ * #6 "都行"：按档案预填时间 / 预算 / 忌口。
+ * 几点能出发跟这次活动有关（下午局 / 晚上局、周末 / 工作日都不一样），一律按这次的时间给温和默认值
+ * （比最早开局提前 30 分钟）；门禁是跟人走的事实，才沿用档案。
+ */
 export function autofillFromProfile(
   profile: Profile | undefined,
   ju: Ju,
 ): { availability: Record<string, DayAvailability>; budgetMax?: number; dietTags: DietTag[] } {
   const earliest = hmToMin(ju.spec.earliest) ?? 18 * 60;
-  const from = hmToMin(profile?.usualFrom) !== undefined ? profile!.usualFrom! : minToHm(Math.max(0, earliest - 30));
+  const from = minToHm(Math.max(0, earliest - 30));
   const homeBy = hmToMin(profile?.usualHomeBy) !== undefined ? profile!.usualHomeBy : undefined;
   const availability: Record<string, DayAvailability> = {};
   for (const date of [...new Set(ju.spec.dates ?? [])].sort(cmpStr)) {

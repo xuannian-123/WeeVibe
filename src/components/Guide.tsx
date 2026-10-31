@@ -27,13 +27,13 @@ const ROLE_TABS: TourStep = {
 
 export const JU_TOURS: Record<string, TourStep[]> = {
   entry: [
-    { target: "entry-form", title: "先报个名", body: "填个称呼就能进局，接下来确认一张偏好卡片就好。" },
+    { target: "entry-form", title: "先报个名", body: "填个称呼就能进局。接下来认识一下替你去谈的分身，再交给它一张授权书。" },
     { target: "help", title: "随时再看一遍", body: "不知道下一步干嘛，就点右上角的“?”。" },
   ],
   preferences: [
-    { target: "preferences-card", title: "确认一张卡片就好", body: "选出发地，看看时间、预算和忌口。预填的内容都可以直接修改。" },
-    { target: "preferences-chat", title: "复杂顾虑再悄悄说", body: "这里是可选的私聊。局长只会在需要澄清时追问，预算和忌口不会点名公开。" },
-    { target: "preferences-confirm", title: "一次确认，报名完成", body: "不用逐轮聊天，也不用刷完店才能报名。想挑店可以点下方的可选入口。" },
+    { target: "preferences-card", title: "分身猜的你", body: "按你的档案先填好了，空着的格子就是还缺的。点一下就能改或补。" },
+    { target: "preferences-chat", title: "随口说一句", body: "比如“这周好累，想安静点”，分身听懂的格子会亮起来。说的话只有你和局长知道。" },
+    { target: "preferences-confirm", title: "交出授权书", body: "底线分身死守，“可以让”的范围内它替你做主，超出了才私下问你。点“就这样”就完成了。" },
   ],
   chat: [
     { target: "chat-privacy", title: "这是你和局长的私聊", body: "这里说的预算、门禁、不想去，只有局长知道，群里只看到“有人预算偏紧”这样的结论。" },
@@ -47,7 +47,7 @@ export const JU_TOURS: Record<string, TourStep[]> = {
     { target: "swipe-guess", title: "懒得刷？", body: "局长按你以前的口味猜好了，一键接受就行。" },
   ],
   waiting: [
-    { target: "waiting-progress", title: "等大家确认偏好", body: "这里能看到大家的报名进度。人差不多齐了，局长就出方案，并私信通知你。" },
+    { target: "waiting-progress", title: "等大家的分身到齐", body: "这里能看到谁交了授权书。人差不多齐了，局长就主持分身们谈一轮，出方案后私信通知你。" },
     { target: "wants", title: "想认识谁？", body: "悄悄选几个人。只有对方也选了你才会揭晓，单方面的选择永远没人知道。" },
   ],
   plans: [

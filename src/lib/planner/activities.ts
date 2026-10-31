@@ -125,7 +125,8 @@ export function moodFit(mood: Mood | undefined, a: Pick<ActivityDef, "energy" | 
     case "active":
       return [-18, 0, 12, 16][a.energy];
     case "lazy":
-      return [12, 0, -18, -32][a.energy];
+      // 想躺着的人被拉去出汗 = 没被照顾到：扣到保底线以下
+      return [12, 0, -26, -40][a.energy];
     default:
       return 0;
   }

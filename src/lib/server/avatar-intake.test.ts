@@ -370,11 +370,13 @@ describe("隐私：v6 字段只在本人视图", () => {
     const secret = "我膝盖不好这周好累只想躺着";
     await chat(id, token, chatBody.parse({ text: secret, preferencesChat: true }));
     await chat(id, token, chatBody.parse({
-      rsvp: "yes", location: XJH, budgetMax: 66, dietTags: ["清真"], availability: { [dates[0]]: { from: "18:00", pref: "ok" } },
+      rsvp: "yes", location: XJH, budgetMax: 4271, dietTags: ["清真"], availability: { [dates[0]]: { from: "18:00", pref: "ok" } },
       mood: "lazy", tags: ["quiet"], mandate: { style: "firm", floors: [] }, preferenceAction: "finish",
     }));
     const pub = JSON.stringify(getState(id, {}));
-    for (const s of ["秘密小橘", "lazy", "mandate", "膝盖", "清真", "quiet", "firm", "66", "avatarLog", "activityOpen"]) expect(pub).not.toContain(s);
+    for (const s of ["秘密小橘", "lazy", "mandate", "膝盖", "清真", "quiet", "firm", "avatarLog", "activityOpen"]) expect(pub).not.toContain(s);
+    // 预算按完整数字查：公开数据里随机的 id / 时间戳可能碰巧含有同样的几个数字
+    expect(pub).not.toMatch(/(?<!\d)4271(?!\d)/);
     const self = stateOf(id, token);
     expect(self.me?.private?.mood).toBe("lazy");
     expect(self.members.filter((m) => m.id !== self.me?.id).every((m) => !m.private)).toBe(true);

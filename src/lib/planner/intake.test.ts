@@ -34,13 +34,14 @@ describe("availabilityFromBusy（#7 课表）", () => {
 });
 
 describe("autofillFromProfile / predictSwipes（#6）", () => {
-  it("无档案给温和默认值；有档案用常用时间 / 价位 / 忌口", () => {
+  it("无档案给温和默认值；有档案沿用门禁 / 价位 / 忌口，出发时间仍按这次活动", () => {
     expect(autofillFromProfile(undefined, j)).toEqual({
       availability: { "2026-10-23": { from: "17:30", pref: "ok" }, "2026-10-24": { from: "17:30", pref: "ok" } },
       dietTags: [],
     });
     const a = autofillFromProfile(profile({ usualFrom: "18:30", usualHomeBy: "22:30", typicalBudget: 88.4, dietTags: ["不吃辣"] }), j);
-    expect(a.availability["2026-10-24"]).toEqual({ from: "18:30", homeBy: "22:30", pref: "ok" });
+    // 上次 18:30 后出发不代表这次也是（下午局 / 周末），出发时间按这次的开局时间给；门禁跟人走
+    expect(a.availability["2026-10-24"]).toEqual({ from: "17:30", homeBy: "22:30", pref: "ok" });
     expect(a.budgetMax).toBe(88);
     expect(a.dietTags).toEqual(["不吃辣"]);
   });

@@ -287,6 +287,20 @@ const absentRow = (m: Member, commute: number): ProgramRow => ({
   part: "none",
 });
 
+/** 饭点（午饭 11:30–13:00、晚饭 17:30–19:30）被一段不吃饭的活动占掉多少分钟 */
+const MEALS: [number, number][] = [
+  [11 * 60 + 30, 13 * 60],
+  [17 * 60 + 30, 19 * 60 + 30],
+];
+/** 占掉饭点超过这么久才算"没安排吃的" */
+export const MEAL_MIN = 60;
+/** 饭点没安排吃的：满意度扣这么多 */
+export const MEAL_MISS = 10;
+export function mealOverlap(slot: SegRun["slot"]): number {
+  const { start, end } = slotTimes(slot);
+  return Math.max(0, ...MEALS.map(([a, b]) => Math.min(end, b) - Math.max(start, a)));
+}
+
 const segLen = (run: SegRun) => {
   const t = slotTimes(run.slot);
   return t.end - t.start;
@@ -306,8 +320,11 @@ export function programExperience(
   if (runs.length === 1) {
     const d = segDetail(m, runs[0], commute, ctx, profile, false);
     if (d.pub.status === "absent") return { pub: d.pub, mine: d.mine, flags: d.flags, soft: d.soft, part: "none" };
-    const utility = Math.round(clamp(d.mine.utility + d.mood, 0, 100));
-    return { pub: d.pub, mine: { ...d.mine, utility, cared: !d.flags.hard && utility >= CARE_FLOOR }, flags: d.flags, soft: d.soft, part: "both" };
+    // 整个饭点都在玩、又没安排吃的：大家都会饿着（公开事实，所有到场的人一样扣）
+    const hungry = !runs[0].act.food && mealOverlap(runs[0].slot) >= MEAL_MIN;
+    const utility = Math.round(clamp(d.mine.utility + d.mood - (hungry ? MEAL_MISS : 0), 0, 100));
+    const notes = hungry ? [...d.mine.notes, "饭点没安排吃的"] : d.mine.notes;
+    return { pub: d.pub, mine: { ...d.mine, utility, notes, cared: !d.flags.hard && utility >= CARE_FLOOR }, flags: d.flags, soft: d.soft, part: "both" };
   }
   const [r1, r2] = runs;
   const ctxNoBudget: PlanContext = { ...ctx, spec: { ...ctx.spec, budgetPerPerson: undefined } };

@@ -153,7 +153,8 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
     const auto = me.private?.autoFilled ?? [];
     if (k === "mood" && draft.moodGuessed) return "猜的";
     if (dirty) return undefined;
-    if (k === "when" && auto.includes("availability")) return profile?.usualFrom ? "上次的" : "按活动预填";
+    // 出发时间总是按这次活动预填；沿用的只有门禁
+    if (k === "when" && auto.includes("availability")) return profile?.usualHomeBy ? "门禁照旧" : "按活动预填";
     if (k === "budget" && auto.includes("budget")) return "上次的";
     if (k === "care" && auto.includes("diet")) return "上次的";
     if (k === "from" && profile?.lastLocation && draft.location?.label === profile.lastLocation.label) return "上次的";

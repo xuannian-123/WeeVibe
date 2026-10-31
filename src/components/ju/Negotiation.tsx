@@ -25,14 +25,15 @@ function SpeakerDot({ speaker }: { speaker: string }) {
   );
 }
 
-export function NegotiationCard({ state, me, defaultOpen = false }: { state: JuState; me: Member | null; defaultOpen?: boolean }) {
+/** showMine：页面上已经有「我的分身」卡片时传 false，不再重复"和你有关的结论" */
+export function NegotiationCard({ state, me, defaultOpen = false, showMine = true }: { state: JuState; me: Member | null; defaultOpen?: boolean; showMine?: boolean }) {
   const neg = state.ju.plan?.negotiation;
   const [open, setOpen] = useState(defaultOpen);
   const name = useAvatarName(me);
   if (!neg?.events.length) return null;
   const s = negotiationStats(neg, focusProposal(state.ju));
   const groups = groupByRound(neg.events);
-  const mine = (me?.private?.avatarLog ?? []).filter((e) => e.kind !== "ask").slice(0, 4);
+  const mine = showMine ? (me?.private?.avatarLog ?? []).filter((e) => e.kind !== "ask").slice(0, 4) : [];
   const chips: [string, number, string][] = [
     ["自动让步", s.autoConcessions, KIND_STYLE.concede.soft],
     ["交换", s.trades, KIND_STYLE.trade.soft],

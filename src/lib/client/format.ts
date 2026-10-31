@@ -145,7 +145,7 @@ export function yuan(n: number | undefined): string {
 }
 
 export const INTAKE_TEXT: Record<Member["intake"], string> = {
-  chatting: "待确认偏好",
+  chatting: "还没交授权书",
   swiping: "在刷卡",
-  done: "已确认",
+  done: "已交授权书",
 };

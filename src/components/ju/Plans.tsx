@@ -327,7 +327,7 @@ export function PlansView({ state, me, actions }: { state: JuState; me: Member |
 
       {/* v6：你的分身替你做了什么（只给本人）+ 公开的谈判记录 */}
       {me && <AvatarLog state={state} me={me} actions={actions} />}
-      <NegotiationCard state={state} me={me} />
+      <NegotiationCard state={state} me={me} showMine={!me} />
 
       <div role="tablist" data-tour="plan-tabs" className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {proposals.map((p) => {
