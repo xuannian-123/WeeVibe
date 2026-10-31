@@ -36,6 +36,11 @@ export function askCostOf(m: Member, kind: AskDraft["kind"], needKey: string | u
   if (asks.length >= ASK_LIMIT_PER_PERSON) return Infinity;
   if (asks.some((a) => a.status === "pending")) return Infinity;
   if (asks.some((a) => a.status === "no" && a.kind === kind && (a.needKey ?? "") === (needKey ?? ""))) return Infinity;
+  // v6 本人撤回过分身在这一维的自动让步 = 这一维这局不行，不再拿同一件事去问他
+  const revoked = new Set((m.private?.avatarLog ?? []).filter((e) => e.revoked && e.dim).map((e) => e.dim));
+  if (kind === "selfTime" && (revoked.has("lateMin") || revoked.has("stayCutMin"))) return Infinity;
+  if (kind === "waiveSoft" && needKey === "budget" && revoked.has("budgetUp")) return Infinity;
+  if (kind === "waiveSoft" && revoked.has("commuteUp") && m.private?.needs?.some((n) => n.id === needKey && n.rule.t === "maxCommute")) return Infinity;
   const yes = asks.filter((a) => a.status === "yes").length;
   return 1 + 0.6 * yes + 0.5 * concessions + (kind === "waiveSoft" ? 0.3 : 0);
 }

@@ -408,8 +408,19 @@ function privateLogs(input: NegotiateInput, uses: GiveUse[], segs: Proposal["seg
         .filter((r, k) => k > 0 && r.result === "met" && !(usedBudget && /^人均 \d+ 以内$/.test(r.text)) && r.detail !== "不是吃饭的地方")
         .slice(0, 3)
         .map((r) => (r.detail ? `${r.text}（${r.detail}）` : r.text));
+      // 没顾上的也如实说（分身对本人报喜也报忧）；用了预算授权的超额上面的让步记录已经说了
+      const missed = rec.mines[i].needs
+        .filter((r, k) => k > 0 && (r.result === "unmet" || r.result === "partial") && !(usedBudget && /^人均 \d+ 以内$/.test(r.text)))
+        .slice(0, 2)
+        .map((r) => (r.detail ? `${r.text}（${r.detail}）` : r.text));
       const time = e.status === "full" ? "全程都在" : e.notes.join("，");
-      log.push(entry("gained", `你得到了：${where}，${time}${got.length ? `；${got.join("；")}` : ""}${rec.mines[i].cared ? "" : "。这次没完全照顾到你，下次你优先"}`, at));
+      log.push(
+        entry(
+          "gained",
+          `你得到了：${where}，${time}${got.length ? `；${got.join("；")}` : ""}${missed.length ? `。没顾上的：${missed.join("；")}` : ""}${rec.mines[i].cared ? "" : "。这次没完全照顾到你，下次你优先"}`,
+          at,
+        ),
+      );
     }
     // 补偿
     if (concededIdx.includes(i)) {

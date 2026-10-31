@@ -86,7 +86,9 @@ export function floorCandidates(m: Member): FloorItem[] {
   if (hb) items.push({ key: "homeBy", text: `${hb} 前得回去`, order: 0 });
   const diets = [...new Set(p?.dietTags ?? [])].filter((t) => HARD_DIET.includes(t));
   for (const t of HARD_DIET) if (diets.includes(t)) items.push({ key: `diet:${t}`, text: t === "清真" ? "只吃清真" : "吃素", order: 1 + HARD_DIET.indexOf(t) });
-  const hard = (p?.needs ?? []).filter((n) => n.kind === "hard").sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  // "九点门禁"常常被同时听成门禁（homeBy）和一条"21:00 前结束"的硬需求：同一个时刻算一条底线，别重复占名额
+  const sameAsHomeBy = (n: Need) => !!hb && n.rule.t === "leaveBy" && n.rule.at === hb;
+  const hard = (p?.needs ?? []).filter((n) => n.kind === "hard" && !sameAsHomeBy(n)).sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   hard.forEach((n, i) => items.push({ key: n.id, text: n.text, order: 10 + i }));
   const confirmed = p?.confirmed ?? [];
   const rank = (it: { key: string; order: number }) => {

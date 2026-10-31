@@ -2,9 +2,10 @@
 import { describe, expect, it } from "vitest";
 import { LOCAL_ACTIVITIES, ONBOARD_DECK } from "../../client/activities";
 import { GIVE_BY_STYLE, GIVE_MAX, mandateOf as cardMandate } from "../../client/mandate";
-import type { Member, Poi } from "../../types";
+import type { AvatarLogEntry, Member, Poi } from "../../types";
 import { ACTIVITY_LIB } from "../activities";
 import { compensate, type Candidate } from "../plan";
+import { askCostOf } from "../repair";
 import { GIVE_CAP, mandateOf, STYLE_GIVE } from "./mandate";
 
 describe("授权书卡片和谈判用的是同一份规则", () => {
@@ -77,5 +78,21 @@ describe("同一个人，卡片和谈判看到同一份授权书", () => {
     const v = cardMandate(m);
     expect(v.floors.map((f) => f.key)).toEqual(["homeBy", "n1"]);
     expect(v.demoted.map((f) => f.key).sort()).toEqual(["diet:清真", "diet:素食"]);
+  });
+});
+
+describe("撤回自动让步之后，同一件事这局不再问", () => {
+  const who = (log: AvatarLogEntry[]) =>
+    ({ id: "m1", private: { asks: [], avatarLog: log, needs: [{ id: "n-c", dim: "travel", kind: "soft", strength: 2, rule: { t: "maxCommute", minutes: 20 }, text: "路上别太久", source: "chat", at: "" }] } }) as unknown as Member;
+  it("撤回了晚到 → 不再问时间；没撤回照常问", () => {
+    const revoked = who([{ id: "e1", at: "", kind: "concede", text: "", dim: "lateMin", revoked: true }]);
+    expect(askCostOf(revoked, "selfTime", undefined, 0)).toBe(Infinity);
+    expect(askCostOf(who([]), "selfTime", undefined, 0)).toBeLessThan(Infinity);
+  });
+  it("撤回了多花 / 多走 → 不再问预算 / 通勤，别的照常", () => {
+    expect(askCostOf(who([{ id: "e2", at: "", kind: "concede", text: "", dim: "budgetUp", revoked: true }]), "waiveSoft", "budget", 0)).toBe(Infinity);
+    const c = who([{ id: "e3", at: "", kind: "concede", text: "", dim: "commuteUp", revoked: true }]);
+    expect(askCostOf(c, "waiveSoft", "n-c", 0)).toBe(Infinity);
+    expect(askCostOf(c, "waiveSoft", "budget", 0)).toBeLessThan(Infinity);
   });
 });

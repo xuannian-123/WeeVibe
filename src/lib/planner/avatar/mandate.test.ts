@@ -133,3 +133,14 @@ describe("风格与 give", () => {
     expect(m.private!.budgetMax).toBe(60);
   });
 });
+
+describe("门禁不重复占底线名额", () => {
+  it("同一时刻的门禁和「几点前结束」硬需求只算一条底线", () => {
+    const m = mk({
+      availability: { [DATE]: { from: "17:00", homeBy: "21:00", pref: "ok" } },
+      needs: [{ id: "n1-leaveBy", dim: "time", kind: "hard", strength: 3, rule: { t: "leaveBy", at: "21:00" }, text: "九点门禁必须赶回", source: "chat", at: "2026-11-01T00:00:00Z" }],
+      confirmed: ["homeBy"],
+    });
+    expect(mandateOf(m).floors.map((f) => f.key)).toEqual(["homeBy"]);
+  });
+});
