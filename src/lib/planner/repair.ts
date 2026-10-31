@@ -4,7 +4,10 @@
 //   waiveSoft：请本人这次不计较某一条软偏好（预算超一点、路上久一点）
 // 绝不请人违反硬约束（门禁、清真、"最多一小时"）。每个修复都会把这个人重新评估一遍，确认真的能被照顾到才算数。
 // 确定性：只用候选的计算结果和固定规则，同样的输入一定得到同样的问题。
+// v6 分身谈判（docs/AVATAR.md 4 节第 2 轮）：在分身授权范围（give）内的让步由谈判自动同意，到这里的都是超出 give 的——
+// 由"你的分身"来问本人，问句里写明超出了授权多少；碰底线的（门禁、清真 / 素食、硬需求）照旧不问。
 import type { Diagnosis, Member } from "../types";
+import { GIVE_DIMS, giveInEffect, withGive } from "./avatar/mandate";
 import { experienceDetail, timeFit, type PlanContext } from "./experience";
 import type { Candidate } from "./plan";
 import { slotLabel } from "./util";
@@ -45,20 +48,26 @@ function someone(k: number, rest: string): string {
 function fixFor(m: Member, i: number, c: Candidate, ctx: PlanContext, concessions: number): AskDraft | undefined {
   if (c.mines[i].cared || c.flags[i].hard) return undefined;
   const commute = c.pubs[i].commuteMin;
+  // 试算时把分身的授权（give）全部用上：问的是"授权之外还差的那一步"
+  const give = giveInEffect(m);
+  const full = withGive(m, give, GIVE_DIMS);
   const when = `${slotLabel(c.slot.start)}，在「${c.poi.name}」`;
 
   if (c.pubs[i].status === "absent") {
     const tf = timeFit(m, c.slot, commute);
     if (!tf.dayOk || tf.late > RELAX_MAX_LATE || tf.stay < RELAX_MIN_STAY) return undefined;
     const relax = { maxLateMin: Math.max(45, tf.late), minStayMin: Math.min(60, tf.stay) };
-    const trial = { ...m, private: { ...m.private!, relax: { ...m.private?.relax, ...relax } } };
+    const trial = { ...full, private: { ...full.private!, relax: { ...full.private?.relax, ...relax } } };
     if (!experienceDetail(trial, c.slot, c.poi, commute, ctx).mine.cared) return undefined;
     // 让人让得越多越贵：晚到超过 45 分钟的部分、少待不到 60 分钟的部分都算进去，优先问让得少的
     const imposition = (Math.max(0, tf.late - 45) / 45) * 0.5 + (Math.max(0, 60 - tf.stay) / 30) * 0.5;
     const cost = askCostOf(m, "selfTime", undefined, concessions) + imposition;
     if (!Number.isFinite(cost)) return undefined;
-    const lateText = tf.late > 45 ? `要晚到 ${tf.late} 分钟` : "";
-    const stayText = tf.stay < 60 ? `大约只能待 ${tf.stay} 分钟${tf.leaveAt ? `（${tf.leaveAt} 得走）` : ""}` : "";
+    const lateText = tf.late > 45 ? `要晚到 ${tf.late} 分钟${give.lateMin > 0 ? "（超出了你给分身的授权）" : ""}` : "";
+    const stayText =
+      tf.stay < 60
+        ? `大约只能待 ${tf.stay} 分钟${tf.leaveAt ? `（${tf.leaveAt} 得走）` : ""}${give.stayCutMin > 0 ? "，超出了你给分身的授权" : ""}`
+        : "";
     const text = `${when}：你${[lateText, stayText].filter(Boolean).join("、")}。这样也来吗？来的话大家会照顾你的时间。`;
     return { memberId: m.id, kind: "selfTime", text, relax, cost };
   }
@@ -66,19 +75,19 @@ function fixFor(m: Member, i: number, c: Candidate, ctx: PlanContext, concession
   // 人来得了，但被软偏好拖到保底线以下：只问扣分最多的那一条
   const top = [...(c.softs[i] ?? [])].sort((a, b) => b.cost - a.cost || (a.key < b.key ? -1 : 1))[0];
   if (!top) return undefined;
-  const trial = { ...m, private: { ...m.private!, waived: [...(m.private?.waived ?? []), top.key] } };
+  const trial = { ...full, private: { ...full.private!, waived: [...(full.private?.waived ?? []), top.key] } };
   if (!experienceDetail(trial, c.slot, c.poi, commute, ctx).mine.cared) return undefined;
   const cost = askCostOf(m, "waiveSoft", top.key, concessions);
   if (!Number.isFinite(cost)) return undefined;
   const text =
     top.key === "budget"
-      ? `${when}：${top.detail}。这是能让所有人都来的方案，这次可以接受吗？`
+      ? `${when}：${top.detail}${give.budgetUp > 0 ? `，超出了你授权分身多出的 ${give.budgetUp} 元` : ""}。这是能让所有人都来的方案，这次可以接受吗？`
       : `${when}：你说的「${top.text}」这次没法完全照顾到（${top.detail}）。为了让所有人都能来，这次可以吗？`;
   return { memberId: m.id, kind: "waiveSoft", text, needKey: top.key, cost };
 }
 
-/** 卡在哪：按类别数人（公开安全） */
-function reasonsFor(c: Candidate): string[] {
+/** 卡在哪：按类别数人（公开安全）。v6 谈判第 1 轮也用它说卡点 */
+export function reasonsFor(c: Candidate): string[] {
   let time = 0;
   let hard = 0;
   let money = 0;
@@ -87,7 +96,7 @@ function reasonsFor(c: Candidate): string[] {
     if (c.mines[i].cared) return;
     if (e.status === "absent") time++;
     else if (c.flags[i].hard) hard++;
-    else if ((c.softs[i] ?? []).sort((a, b) => b.cost - a.cost)[0]?.key === "budget") money++;
+    else if ([...(c.softs[i] ?? [])].sort((a, b) => b.cost - a.cost)[0]?.key === "budget") money++;
     else other++;
   });
   return [

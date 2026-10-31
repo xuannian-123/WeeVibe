@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { createMockMapProvider } from "../map";
 import type { Ju, Member, Plan } from "../types";
 import { guardMessages, guardPlan, publicFacts, publicState, scanText, sensitiveOf } from "./firewall";
-import { genScenario, publicOutputs, runPrivacySelfTest, swapHidden } from "./privacy";
+import { AVATAR_HIDDEN_KEYS, avatarize, genScenario, publicOutputs, runPrivacySelfTest, swapHidden } from "./privacy";
 
 const map = createMockMapProvider();
 
@@ -24,6 +24,11 @@ describe("反事实泄露检验", () => {
     expect(r.checks.find((c) => c.name.startsWith("单向标记"))!.runs).toBeGreaterThan(40);
     expect(r.checks.find((c) => c.name.startsWith("单方面"))!.runs).toBeGreaterThan(40);
     expect(r.checks.find((c) => c.name.startsWith("可否认回避"))!.runs).toBeGreaterThan(15);
+    // v6 谈判检验：每个场景都跑，且足够多的场景里真的发生了自动让步 / 交换
+    const ng = r.checks.find((c) => c.name.startsWith("谈判不可推断"))!;
+    expect(ng.runs).toBe(200);
+    expect(ng.leaks).toBe(0);
+    expect(r.negotiationActive).toBeGreaterThan(30);
     expect(r.leaks).toBe(0);
   });
 
@@ -48,6 +53,30 @@ describe("反事实泄露检验", () => {
       if (o0.ju.seating && o0.json !== o2.json) found = true;
     }
     expect(found).toBe(true);
+  });
+
+  it("v6 谈判检验不是空转：授权书确实改变谈判记录，但 A、B 对调授权书后记录逐字相同", async () => {
+    let checked = 0;
+    for (let s = 1; s < 120 && checked < 3; s++) {
+      const sc = avatarize(await genScenario(s, map), s);
+      const A = sc.members.find((m) => m.id === sc.a)!;
+      const B = sc.members.find((m) => m.id === sc.b)!;
+      // 只有 A 的分身授权了让步
+      A.private!.mandate = { status: "confirmed", style: "easy", give: { lateMin: 45, stayCutMin: 30, budgetUp: 60, commuteUp: 20 }, floors: [] };
+      B.private!.mandate = { status: "confirmed", style: "firm", give: { lateMin: 0, stayCutMin: 0, budgetUp: 0, commuteUp: 0 }, floors: [] };
+      const both = structuredClone(sc);
+      both.members.find((m) => m.id === sc.a)!.private!.mandate = structuredClone(B.private!.mandate);
+      const [o1, o2, o3] = await Promise.all([
+        publicOutputs(sc, map, { seat: false }),
+        publicOutputs(swapHidden(sc, AVATAR_HIDDEN_KEYS), map, { seat: false }),
+        publicOutputs(both, map, { seat: false }),
+      ]);
+      const n1 = JSON.stringify(o1.ju.plan?.negotiation);
+      if (n1 === JSON.stringify(o3.ju.plan?.negotiation)) continue; // A 的授权这次没派上用场
+      expect(JSON.stringify(o2.ju.plan?.negotiation)).toBe(n1);
+      checked++;
+    }
+    expect(checked).toBe(3);
   });
 
   it("同一个种子 → 同一个场景（可复现）", async () => {

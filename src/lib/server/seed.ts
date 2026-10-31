@@ -11,8 +11,10 @@ import { nanoid } from "nanoid";
 import * as db from "../db";
 import { getMapProvider } from "../map";
 import { DEMO_VENUE, buildSwipeDeck, demoPeople, predictSwipes, type DemoPerson } from "../planner";
-import type { Ju, JuState, Member, Need, Poi, Profile, SwipeVerdict } from "../types";
-import { publicState } from "./firewall";
+import type { AvatarStyle, Ju, JuState, Member, Mood, Need, NeedStrength, Poi, Profile, SwipeVerdict } from "../types";
+import { STYLE_GIVE } from "../planner/avatar/mandate";
+import { hmToMin, minToHm } from "../planner/util";
+import { publicState, quorumHidden } from "./firewall";
 import { HttpError } from "./http";
 import { AVATARS, TIER_LABELS, mutateJu, planDeps, type Viewer } from "./ju";
 import { appendTraceAt, applyAnswer, autofillMember, computePlan, emptyPrivate, evalQuorum, inOnly, markChanged, pendingAsks, recomputeMatches } from "./ju-core";
@@ -389,5 +391,121 @@ export function answerDemoAsks(id: string, viewer: Viewer = {}): Promise<JuState
       await computePlan(ctx.ju, ctx.members, ctx.priv, { ...planDeps(ctx.members), now: ctx.now });
     }
     return publicState(ctx.ju, ctx.members, viewer, { mine: ctx.priv.mine });
+  });
+}
+
+// ---------------------------------------------------------------- v6 分身谈判场景（scene = "avatar"）
+// 8 个人（发起人 + 7 位演示朋友），每人一个分身，一键出方案就能看到完整的五轮谈判：
+// - 阿杰：宿舍门禁（确认过的底线），分身很坚持 —— 晚一点开始他就待不满
+// - 小林：加班，晚到；分身授权"多等我 15 分钟" —— 自动让步
+// - 老王：手头紧，但"我都行"（随和，授权多出 30 元）—— 自动让步；和小林在不同维度各让一步 = 交换
+// - 小周：也手头紧，而且"这次就想省点"（坚持，什么都不让）—— 超出授权，分身私下来问本人
+// - 阿May：随和，"别太远就好"（授权多走 20 分钟）；想躺着
+// - 大刘：想动一动，想找个能聊天的地方
+// - 木木：想动一动，还没确认授权书（分身只守底线、不替她让步）
+// 时间都相对发起人定的最早开始时间（默认 18:30），所以换个日期 / 时段也成立。
+
+type AvatarPerson = {
+  name: string;
+  avatar: string;
+  /** 相对最早开始时间的分钟数 */
+  from: number;
+  homeBy?: number;
+  budgetMax?: number;
+  budgetStrength?: NeedStrength;
+  needs?: Need[];
+  mood: Mood;
+  style: AvatarStyle;
+  confirmed: boolean;
+  say: string;
+  dLat: number;
+  dLng: number;
+};
+
+const AVATAR_DEMO: AvatarPerson[] = [
+  { name: "阿杰", avatar: "🧑‍💻", from: -90, homeBy: 105, mood: "chill", style: "firm", confirmed: true, say: "宿舍门禁，必须按时回去", dLat: 0.01, dLng: -0.01 },
+  { name: "小林", avatar: "🦊", from: 70, mood: "active", style: "balanced", confirmed: true, say: "今天加班，得七点多才能走", dLat: -0.008, dLng: 0.012 },
+  { name: "老王", avatar: "🐻", from: -60, budgetMax: 60, budgetStrength: 3, mood: "lazy", style: "easy", confirmed: true, say: "我都行，就是最近手头有点紧", dLat: 0.015, dLng: 0.004 },
+  { name: "小周", avatar: "🐧", from: -60, budgetMax: 55, budgetStrength: 3, mood: "hype", style: "firm", confirmed: true, say: "这次就想省点钱", dLat: -0.012, dLng: -0.006 },
+  {
+    name: "阿May",
+    avatar: "🐰",
+    from: -60,
+    needs: [{ id: "n1-maxCommute", dim: "travel", kind: "soft", strength: 2, rule: { t: "maxCommute", minutes: 15 }, text: "单程尽量别超过 15 分钟", source: "chat", at: NEED_AT }],
+    mood: "lazy",
+    style: "easy",
+    confirmed: true,
+    say: "我都行，别太远就好",
+    dLat: 0.004,
+    dLng: 0.018,
+  },
+  {
+    name: "大刘",
+    avatar: "🐯",
+    from: -60,
+    needs: [{ id: "n1-quiet", dim: "ambience", kind: "soft", strength: 2, rule: { t: "quiet" }, text: "想安静点、能好好聊天", source: "chat", at: NEED_AT }],
+    mood: "active",
+    style: "balanced",
+    confirmed: true,
+    say: "想找个能聊天的地方，动一动也行",
+    dLat: -0.004,
+    dLng: -0.016,
+  },
+  { name: "木木", avatar: "🌳", from: -60, mood: "active", style: "balanced", confirmed: false, say: "想动一动", dLat: 0.018, dLng: -0.004 },
+];
+
+/** 分身谈判演示局：加 7 位带授权书的演示朋友，并直接出方案（五轮谈判一次看完） */
+export function seedAvatar(id: string, viewer: Viewer = {}): Promise<JuState> {
+  return mutateJu(id, async (ctx) => {
+    const { ju, members, now } = ctx;
+    if (ju.status === "confirmed" || ju.status === "cancelled") throw new HttpError(409, "局已经定了，不能再加演示成员");
+    const taken = new Set(members.map((m) => m.name));
+    const e0 = hmToMin(ju.spec.earliest) ?? 18 * 60 + 30;
+    let n = 0;
+    AVATAR_DEMO.forEach((p, i) => {
+      if (taken.has(p.name)) return;
+      const pv = emptyPrivate();
+      pv.rsvp = "yes";
+      for (const d of ju.spec.dates)
+        pv.availability[d] = { from: minToHm(e0 + p.from), ...(p.homeBy !== undefined ? { homeBy: minToHm(e0 + p.homeBy) } : {}), pref: "ok" };
+      if (p.homeBy !== undefined) pv.confirmed = ["homeBy"];
+      if (p.budgetMax) {
+        pv.budgetMax = p.budgetMax;
+        pv.budgetStrength = p.budgetStrength ?? 2;
+      }
+      if (p.needs) pv.needs = structuredClone(p.needs);
+      pv.mood = p.mood;
+      pv.chat.push({ role: "me", text: p.say, at: now.toISOString() });
+      pv.mandate = {
+        status: p.confirmed ? "confirmed" : "draft",
+        style: p.style,
+        give: { ...STYLE_GIVE[p.style] },
+        floors: p.homeBy !== undefined ? ["homeBy"] : [],
+        ...(p.confirmed ? { confirmedAt: now.toISOString() } : {}),
+      };
+      const m: Member = {
+        id: nanoid(10),
+        juId: id,
+        name: p.name,
+        avatar: p.avatar,
+        location: { label: `${p.name}的出发地`, lat: +(DEMO_VENUE.lat + p.dLat).toFixed(5), lng: +(DEMO_VENUE.lng + p.dLng).toFixed(5) },
+        role: "guest",
+        intake: "done",
+        status: "in",
+        joinedAt: new Date(now.getTime() + i).toISOString(),
+        isOrganizer: false,
+        isDemo: true,
+        private: pv,
+        secret: { token: nanoid(24), tier: 1 },
+      };
+      members.push(m);
+      markChanged(ju, ctx.priv, m.id);
+      n++;
+    });
+    if (n) appendTraceAt(ju, "listen", `又有 ${n} 位朋友把授权书交给了自己的分身`, now);
+    evalQuorum(ju, members, now);
+    // 一键看完整谈判：直接出方案（门限没达成时先不出）
+    if (!quorumHidden(ju) && inOnly(members).length > 0) await computePlan(ju, members, ctx.priv, { ...planDeps(members), now });
+    return publicState(ju, members, viewer, { mine: ctx.priv.mine });
   });
 }
