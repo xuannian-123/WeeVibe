@@ -74,7 +74,8 @@ export const joinBody = z.object({
 const MOODS = ["hype", "chill", "active", "lazy"] as const;
 const STYLES = ["easy", "balanced", "firm"] as const;
 const TRANSPORTS = ["metro", "drive", "taxi", "bike", "walk"] as const;
-const activityKey = z.string().regex(/^[a-z]{2,20}$/, "活动 key 不对");
+// 活动库的 key：小写字母，可以带下划线（korean_bbq）
+const activityKey = z.string().regex(/^[a-z][a-z_]{1,29}$/, "活动 key 不对");
 
 export const giveSchema = z.object({
   lateMin: z.number().int().min(0).max(GIVE_MAX.lateMin),

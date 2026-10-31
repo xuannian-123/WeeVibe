@@ -96,3 +96,12 @@ describe("撤回自动让步之后，同一件事这局不再问", () => {
     expect(askCostOf(c, "waiveSoft", "budget", 0)).toBeLessThan(Infinity);
   });
 });
+
+describe("活动库的每个 key 都能通过接口校验", () => {
+  it("授权书「想干什么」和建档滑卡提交任何活动都不会被当成参数不合法", async () => {
+    const { chatBody } = await import("../../server/schemas");
+    const keys = ACTIVITY_LIB.map((a) => a.key);
+    for (let i = 0; i < keys.length; i += 6) expect(() => chatBody.parse({ activities: keys.slice(i, i + 6), preferenceAction: "review" })).not.toThrow();
+    expect(() => chatBody.parse({ onboarding: { swipes: Object.fromEntries(keys.map((k) => [k, "like"])) } })).not.toThrow();
+  });
+});
