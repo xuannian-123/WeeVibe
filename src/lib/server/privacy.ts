@@ -14,12 +14,18 @@
 //   6. 单方面不可见：A 单方面"想认识" / "聊得来"某人，排座后的全部公开输出不变。
 //   7. 可否认回避：悄悄回避的两人从不同桌，并且从没同桌的对数 ≥ 3 × 回避数；做不到时结果和没人提回避逐字节相同。
 //   另外可否认缺席、字面检验、身份隔离都在排座 + 轮次推进（含按反馈重排）之后跑。
+// v6 分身谈判：
+//   8. 谈判不可推断：给每个人随机配上授权书（风格 / 可以让多少 / 确认没确认）、心情、软硬需求，把 A、B 的这些隐藏信息
+//      连同 1 里的全部隐藏信息一起互换，公开谈判记录（plan.negotiation）逐字相同；记录里不出现任何人名、私密备注原文、预算数字，
+//      说话人只有"局长"和"分身 X"。（公开体验里"谁晚到了"是现场看得见的事实，本来就公开，不在这一项里比）
 // 这里调用的 computePlan / evalQuorum / computeSeating / advanceRound / publicState / publicFacts 就是线上跑的那一份。
 import { ruleGroupMessages as b1GroupMessages, rulePolishPlan } from "../llm";
 import { createMockMapProvider } from "../map";
 import { AVOID_COVER, buildSwipeDeck, generateSlots, pairKey } from "../planner";
+import { STYLE_GIVE } from "../planner/avatar/mandate";
 import type { JuPrivate } from "../db";
 import type {
+  AvatarStyle,
   DayAvailability,
   DietTag,
   Familiarity,
@@ -29,6 +35,8 @@ import type {
   MapProvider,
   Member,
   MemberPrivate,
+  Mood,
+  Need,
   Poi,
   PrivacySelfTest,
   RoundFeel,
@@ -36,7 +44,7 @@ import type {
   SocialEnergy,
   SwipeVerdict,
 } from "../types";
-import { publicFacts, publicState, quorumHidden, scanText, sensitiveOf, stringsIn, type Sensitive } from "./firewall";
+import { numbersIn, publicFacts, publicState, quorumHidden, scanText, sensitiveOf, stringsIn, type Sensitive } from "./firewall";
 import { HttpError } from "./http";
 import { computePlan, confirmProposal, emptyPrivate, evalQuorum, inOnly } from "./ju-core";
 import { ruleGroupMessages } from "./ju-text";
@@ -405,12 +413,15 @@ const HIDDEN_KEYS: (keyof MemberPrivate)[] = [
   "clickMatches",
 ];
 
-/** 交换 A、B 的全部"隐藏"私密信息（含 secret.tier、账本、档案 id） */
-export function swapHidden(sc: Scenario): Scenario {
+/** v6：授权书 / 心情 / 需求（谈判检验额外互换这些） */
+export const AVATAR_HIDDEN_KEYS: (keyof MemberPrivate)[] = [...HIDDEN_KEYS, "mood", "mandate", "needs", "budgetStrength", "confirmed", "avatarLog"];
+
+/** 交换 A、B 的全部"隐藏"私密信息（含 secret.tier、账本、档案 id）。keys 默认是 v5 的那一组 */
+export function swapHidden(sc: Scenario, keys: (keyof MemberPrivate)[] = HIDDEN_KEYS): Scenario {
   const s = structuredClone(sc);
   const A = s.members.find((m) => m.id === s.a)!;
   const B = s.members.find((m) => m.id === s.b)!;
-  for (const k of HIDDEN_KEYS) {
+  for (const k of keys) {
     const tmp = A.private![k];
     (A.private as Record<string, unknown>)[k] = B.private![k];
     (B.private as Record<string, unknown>)[k] = tmp;
@@ -498,6 +509,11 @@ const FORBIDDEN_KEYS = [
   "asks",
   "relax",
   "waived",
+  // v6 分身
+  "mood",
+  "mandate",
+  "avatarLog",
+  "give",
 ];
 
 function forbiddenKeys(x: unknown, path = "", out: string[] = []): string[] {
@@ -653,9 +669,85 @@ async function avoidCheck(sc: Scenario, map: MapProvider): Promise<string[] | un
   return o2.json === out.json ? [] : [`回避没执行，但结果和没人提回避时不一样：${firstDiff(out.json, o2.json)}`];
 }
 
+// ---------------------------------------------------------------- v6 谈判检验
+
+const STYLES: AvatarStyle[] = ["easy", "balanced", "firm"];
+const MOODS: Mood[] = ["hype", "chill", "active", "lazy"];
+const NEED_POOL: Omit<Need, "id" | "at" | "source">[] = [
+  { dim: "travel", kind: "soft", strength: 2, rule: { t: "maxCommute", minutes: 25 }, text: "单程尽量别超过 25 分钟" },
+  { dim: "travel", kind: "soft", strength: 3, rule: { t: "maxCommute", minutes: 35 }, text: "单程尽量别超过 35 分钟" },
+  { dim: "ambience", kind: "soft", strength: 2, rule: { t: "quiet" }, text: "想安静点、能好好聊天" },
+  { dim: "time", kind: "soft", strength: 2, rule: { t: "leaveBy", at: "21:30" }, text: "想 21:30 前结束" },
+  { dim: "travel", kind: "hard", strength: 2, rule: { t: "maxCommute", minutes: 45 }, text: "单程不能超过 45 分钟" },
+];
+
+/** 给场景里每个人随机配上 v6 的隐藏信息（授权书 / 心情 / 需求）。只依赖 seed */
+export function avatarize(sc: Scenario, seed: number): Scenario {
+  const r = rngOf(seed ^ 0x2545f491);
+  const s = structuredClone(sc);
+  // 一半的场景里 A、B（公开处境相同）都晚下班：谁的分身有授权、谁没有，决定了谁替谁让步——正是要测的
+  if (chance(r, 0.5)) {
+    for (const m of s.members) {
+      if (m.id !== s.a && m.id !== s.b) continue;
+      for (const d of Object.keys(m.private!.availability)) m.private!.availability[d] = { ...m.private!.availability[d], from: "19:15" };
+    }
+  }
+  for (const m of s.members) {
+    const p = m.private!;
+    // 手头紧的人（预算不太"整"，方便字面检验）
+    if (chance(r, 0.35)) {
+      p.budgetMax = pick(r, [53, 59, 61]);
+      p.budgetStrength = 3;
+    }
+    if (chance(r, 0.7)) p.mood = pick(r, MOODS);
+    const style = pick(r, STYLES);
+    const scale = pick(r, [1, 1, 2]);
+    const g = STYLE_GIVE[style];
+    p.mandate = {
+      status: chance(r, 0.75) ? "confirmed" : "draft",
+      style,
+      give: { lateMin: g.lateMin * scale, stayCutMin: g.stayCutMin, budgetUp: g.budgetUp * scale, commuteUp: g.commuteUp },
+      floors: [],
+    };
+    const needs = NEED_POOL.filter(() => chance(r, 0.25)).map((n, k) => ({ ...n, id: `n${k + 1}-${n.rule.t}`, source: "chat" as const, at: NOW.toISOString() }));
+    if (needs.length) p.needs = needs;
+    if (p.budgetMax !== undefined && chance(r, 0.5)) p.budgetStrength = pick(r, [1, 2, 3] as const);
+    if (chance(r, 0.3)) p.confirmed = ["homeBy"];
+  }
+  return s;
+}
+
+const SPEAKER_RE = /^(局长|分身 [A-Z]\d*)$/;
+
+/** 8. 谈判不可推断：互换 A、B 的全部隐藏信息（含授权书），公开谈判记录逐字相同；记录里没有人名 / 私密原文 / 预算数字 */
+async function negotiationCheck(sc: Scenario, map: MapProvider): Promise<{ problems: string[]; active: boolean }> {
+  const av = avatarize(sc, sc.seed);
+  const [o1, o2] = await Promise.all([publicOutputs(av, map, { seat: false }), publicOutputs(swapHidden(av, AVATAR_HIDDEN_KEYS), map, { seat: false })]);
+  const n1 = o1.ju.plan?.negotiation;
+  const n2 = o2.ju.plan?.negotiation;
+  const problems: string[] = [];
+  const j1 = JSON.stringify(n1 ?? null);
+  const j2 = JSON.stringify(n2 ?? null);
+  if (j1 !== j2) problems.push(`互换隐藏信息后谈判记录变了：${firstDiff(j1, j2)}`);
+  if (!n1) return { problems, active: false };
+  const sens = sensitiveOf(o1.ju, o1.members);
+  const names = o1.members.map((m) => m.name).filter((x) => x.trim().length > 0);
+  for (const e of n1.events) {
+    if (!SPEAKER_RE.test(e.speaker)) problems.push(`说话人不是局长或分身代号：${e.speaker}`);
+    for (const h of scanText(e.text, sens, numbersIn(JSON.stringify(publicFacts(o1.ju, o1.members))))) problems.push(`谈判记录命中 ${h.kind}：${h.detail}`);
+    for (const nm of names) if (e.text.includes(nm) || e.speaker.includes(nm)) problems.push(`谈判记录里出现了人名 ${nm}`);
+  }
+  for (const k of forbiddenKeys(n1)) problems.push(`谈判记录里出现了私密字段 ${k}`);
+  return { problems: [...new Set(problems)], active: n1.autoConcessions > 0 || n1.trades > 0 };
+}
+
 // ---------------------------------------------------------------- 总入口
 
-export type SelfTestReport = PrivacySelfTest & { failures: { seed: number; check: string; detail: string }[] };
+export type SelfTestReport = PrivacySelfTest & {
+  failures: { seed: number; check: string; detail: string }[];
+  /** 谈判检验里真的发生了自动让步 / 交换的场景数（证明检验不是空转） */
+  negotiationActive: number;
+};
 
 export async function runPrivacySelfTest(opts: { scenarios?: number; seed?: number; map?: MapProvider } = {}): Promise<SelfTestReport> {
   const total = opts.scenarios ?? 200;
@@ -669,7 +761,9 @@ export async function runPrivacySelfTest(opts: { scenarios?: number; seed?: numb
     asym: { name: "单向标记隐藏（对方说了挺熟，我标什么都不影响排座和任何公开输出）", runs: 0, leaks: 0 },
     unilateral: { name: "单方面不可见（单方面想认识 / 聊得来不改变任何公开输出）", runs: 0, leaks: 0 },
     avoid: { name: `可否认回避（回避的人从不同桌，且从没同桌的对数 ≥ ${AVOID_COVER} × 回避数；藏不住就不执行）`, runs: 0, leaks: 0 },
+    negotiation: { name: "谈判不可推断（A、B 对调授权书 / 心情 / 需求等全部隐藏信息，公开谈判记录逐字相同；说话人只有局长和分身代号）", runs: 0, leaks: 0 },
   };
+  let negotiationActive = 0;
   const failures: SelfTestReport["failures"] = [];
   const fail = (seed: number, check: keyof typeof checks, detail: string) => {
     checks[check].leaks++;
@@ -720,6 +814,16 @@ export async function runPrivacySelfTest(opts: { scenarios?: number; seed?: numb
     checks.identity.runs++;
     for (const p of identityCheck(o1, r)) fail(seed, "identity", p);
 
+    // 8. 谈判不可推断
+    checks.negotiation.runs++;
+    try {
+      const ng = await negotiationCheck(sc, map);
+      if (ng.active) negotiationActive++;
+      for (const p of ng.problems) fail(seed, "negotiation", p);
+    } catch (e) {
+      fail(seed, "negotiation", `运行出错：${(e as Error)?.message ?? e}`);
+    }
+
     // 5–7. 排座（只在定局并排座的场景里跑）
     if (o1.ju.seating) {
       try {
@@ -745,6 +849,7 @@ export async function runPrivacySelfTest(opts: { scenarios?: number; seed?: numb
     checks: list,
     at: new Date().toISOString(),
     failures,
+    negotiationActive,
   };
 }
 
@@ -764,7 +869,8 @@ const g = globalThis as unknown as { __privacySelfTest?: { at: number; p: Promis
 export function cachedSelfTest(): Promise<PrivacySelfTest> {
   const c = g.__privacySelfTest;
   if (c && Date.now() - c.at < CACHE_MS) return c.p;
-  const p = runPrivacySelfTest().then(({ failures, ...rest }) => {
+  const p = runPrivacySelfTest().then(({ failures, negotiationActive: _active, ...rest }) => {
+    void _active;
     if (failures.length) console.warn(`[privacy] 反事实检验发现 ${rest.leaks} 处问题，例：${JSON.stringify(failures.slice(0, 3))}`);
     return rest;
   });

@@ -152,6 +152,8 @@ export type PlanSnapshot = {
   mapLog: Record<string, unknown>;
   /** v5 让步账（影响诊断里"正在协调几人"，复算要用同一份） */
   concessions?: Record<string, number>;
+  /** v6 活动层：memberId -> 档案里的活动口味 / 身体限制（影响节目打分，复算要用同一份） */
+  profiles?: Record<string, Pick<Profile, "activityTastes" | "body">>;
 };
 
 export type JuPrivate = {

@@ -26,6 +26,9 @@ import { categoryMatches, categoryWords } from "./category";
 import { isHotpotCategory } from "./diet";
 import { CARE_FLOOR, experienceDetail, HARD_DIET, queueMinutes, slotTimes, type PlanContext, type PrivateFlags, type SoftCost } from "./experience";
 import { planRepairs, type AskDraft } from "./repair";
+import { applyGive } from "./avatar/give";
+import { planMember } from "./avatar/mandate";
+import { negotiate, type NegotiateResult } from "./avatar/negotiate";
 import { openFits, risksFor, slotWeather, weatherEffects, type Effects, type SlotWeather } from "./external";
 import { poiIndoor } from "./needs";
 import { fairnessWeights } from "./fairness";
@@ -980,7 +983,7 @@ export async function planJu(
     /** v6 活动层：memberId -> 档案里的活动口味、身体限制（Profile 的子集）。不传 = 只看本次说的 */
     profiles?: Record<string, ActivityProfile>;
   },
-): Promise<{ plan: Plan; mine: Record<string, MyExperience[]>; asks: AskDraft[] }> {
+): Promise<{ plan: Plan; mine: Record<string, MyExperience[]>; asks: AskDraft[]; avatar: Pick<NegotiateResult, "logs" | "conceded"> }> {
   const trace: TraceFn = (k, t) => {
     try {
       opts.onTrace?.(k, t);
@@ -1007,7 +1010,11 @@ export async function planJu(
   );
 
   const profiles = opts.profiles ?? {};
-  const { slots, pois, center, cands, weights, ctx, total, programs } = await computeCandidates(ju, inMembers, map, ledgers, trace, undefined, { profiles });
+  // v6 分身谈判：按授权书算（底线最多 3 条，多的降成"想要"；坚持风格的想要更用力），再对"不让就照顾不到"的人启用 give
+  const planMembers = inMembers.map(planMember);
+  const { slots, pois, center, cands: baseCands, weights, ctx, total, programs } = await computeCandidates(ju, planMembers, map, ledgers, trace, undefined, { profiles });
+  const given = applyGive(planMembers, baseCands, weights, ctx, opts.concessions ?? {}, profiles);
+  const cands = given.cands;
 
   if (programs)
     trace("compute", `计算了 ${programs.length} 个节目 × ${slots.length} 个开始时间 × 预筛的店 = ${total} 个组合 × ${n} 个人 = ${total * n} 次体验（两段的每人每段分别算）`);
@@ -1064,7 +1071,7 @@ export async function planJu(
     algorithmVersion: ALGORITHM_VERSION,
   };
   // v5 极端情况：没能照顾到所有人 → 诊断 + 找一个问题就能照顾到的人（局长私下去问）
-  const repair = planRepairs(inMembers, pool, rec, ctx, opts.concessions ?? {}, decisionCompare);
+  const repair = planRepairs(planMembers, pool, rec, ctx, opts.concessions ?? {}, decisionCompare);
   if (repair.diagnosis) {
     trace("warn", `没有完美方案：${repair.diagnosis.reasons.join("，")}`);
     if (repair.asks.length) trace("decide", `局长私下去问 ${repair.asks.length} 位朋友能不能让一小步，问完自动重算`);
@@ -1072,6 +1079,25 @@ export async function planJu(
   }
   const yes = inMembers.filter((m) => (m.private?.asks ?? []).some((a) => a.status === "yes")).length;
   const coordination = yes ? `局长私下协调了 ${yes} 位朋友` : undefined;
+  // v6 五轮谈判：公开记录（大屏直播）+ 每人私下的"分身替你做了什么"
+  const basePool = baseCands.filter((c) => !c.vetoed && c.attend > 0);
+  const baseRec = [...(basePool.length ? basePool : baseCands.filter((c) => c.attend > 0))].sort(decisionCompare)[0] ?? rec;
+  const talk = negotiate({
+    members: inMembers,
+    planMembers,
+    baseRec,
+    basePool: basePool.length ? basePool : baseCands,
+    given,
+    pool,
+    rec,
+    proposal: proposals[0],
+    asks: repair.asks,
+    diagnosis: repair.diagnosis,
+    why,
+    counts: { slots: slots.length, pois: pois.length, ...(programs ? { programs: programs.length } : {}) },
+    now: opts.now ?? new Date(),
+  });
+  trace("decide", talk.negotiation.outcome);
   const body = {
     proposals,
     recommendation,
@@ -1081,6 +1107,7 @@ export async function planJu(
     center,
     ...(repair.diagnosis ? { diagnosis: repair.diagnosis } : {}),
     ...(coordination ? { coordination } : {}),
+    negotiation: talk.negotiation,
   };
   audit.outputHash = outputHashOf({ ...body, audit });
   const plan: Plan = { ...body, audit, computedAt: (opts.now ?? new Date()).toISOString() };
@@ -1098,5 +1125,5 @@ export async function planJu(
       cared: p.c.mines[i].cared,
     }));
   });
-  return { plan, mine, asks: repair.asks };
+  return { plan, mine, asks: repair.asks, avatar: { logs: talk.logs, conceded: talk.conceded } };
 }

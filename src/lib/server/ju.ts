@@ -44,7 +44,7 @@ import {
   type AdvanceDeps,
 } from "./ju-core";
 import { createdText, ruleGroupMessages } from "./ju-text";
-import { getProfile, rememberVote } from "./profile";
+import { emptyProfile, getProfile, rememberVote, saveProfile } from "./profile";
 import type { CreateJuInput, PatchJuInput, PatchMemberInput } from "./schemas";
 
 export { nowFor };
@@ -210,15 +210,25 @@ export function ledgersFor(members: Member[]): Record<string, LedgerEntry[]> {
   return out;
 }
 
-/** v5 让步账：memberId -> 最近 6 局里答应过让步的次数（从档案取） */
+/** v5 让步账：memberId -> 最近 6 局里答应过让步的次数（从档案取）。
+ *  v6：这一局自己的不算——同一局里已经让过的步由 asks / avatarLog 记着，算进来会让重算时"谁来让"来回翻 */
 export function concessionsFor(members: Member[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const m of members) {
     if (m.status !== "in" || !m.profileId) continue;
-    const n = (getProfile(m.profileId)?.concessions ?? []).slice(-6).length;
+    const n = (getProfile(m.profileId)?.concessions ?? []).filter((c) => c.juId !== m.juId).slice(-6).length;
     if (n) out[m.id] = n;
   }
   return out;
+}
+
+/** v5 / v6 让步账：记一笔"在这一局让过步"（同一局只记一次） */
+export function recordConcession(m: Member, juId: string, now: Date): void {
+  if (!m.profileId) return;
+  const prof = getProfile(m.profileId) ?? emptyProfile(m.profileId);
+  if ((prof.concessions ?? []).some((c) => c.juId === juId)) return;
+  prof.concessions = [...(prof.concessions ?? []), { juId, at: now.toISOString() }].slice(-20);
+  saveProfile(prof);
 }
 
 export function planDeps(members: Member[]): AdvanceDeps {
@@ -228,6 +238,7 @@ export function planDeps(members: Member[]): AdvanceDeps {
     concessions: concessionsFor(members),
     profiles: profilesFor(members),
     polish: polishPlan,
+    onConcede: recordConcession,
   };
 }
 
@@ -365,6 +376,7 @@ export async function verifyPlan(id: string): Promise<{ ok: boolean; inputHash: 
     snap.ledgers,
     new Date(snap.now),
     snap.concessions ?? {},
+    snap.profiles ?? {},
   );
   const a = ju.plan.audit;
   return {

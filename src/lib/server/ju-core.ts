@@ -1,10 +1,12 @@
 // 局的状态机：纯内存操作（不碰数据库），DB 层（ju.ts / intake.ts / seed.ts）和反事实检验（privacy.ts）共用。
 // 所以反事实检验测到的，就是线上真实跑的那一份逻辑。
-import { pushNotice } from "./after/inbox";
+import { pushNotice, pushNoticeOnce } from "./after/inbox";
 import { autofillFromProfile, planJu } from "../planner";
 import type { AskDraft } from "../planner/repair";
+import type { ActivityProfile } from "../planner/activities";
 import type { JuPrivate, PlanSnapshot } from "../db";
 import type {
+  AvatarLogEntry,
   DietTag,
   Ju,
   LedgerEntry,
@@ -253,6 +255,10 @@ export type PlanDeps = {
   polish?: (facts: PublicFacts, plan: Plan) => Promise<Plan>;
   /** 是否发群公告（反事实检验里也发，因为公告是公开输出的一部分） */
   announce?: boolean;
+  /** v6 活动层：档案（profileId -> Profile），出方案时取每人的活动口味 / 身体限制（不传 = 只看本次说的） */
+  profiles?: Record<string, Profile | undefined>;
+  /** v6 让步账：谈判里自动让了步的人（DB 层记进档案的 concessions；不传 = 不记，反事实检验里就是这样） */
+  onConcede?: (m: Member, juId: string, now: Date) => void;
 };
 
 type MapLog = Record<string, unknown>;
@@ -316,6 +322,7 @@ export async function runPlanner(
   ledgers: Record<string, LedgerEntry[]>,
   now: Date,
   concessions: Record<string, number> = {},
+  profiles: Record<string, ActivityProfile> = {},
 ) {
   if (!ju.admin?.auditSecret) throw new HttpError(500, "局缺少审计密钥");
   return planJu(ju, inOnly(members), map, {
@@ -324,7 +331,19 @@ export async function runPlanner(
     ledgers,
     now,
     concessions,
+    profiles,
   });
+}
+
+/** memberId -> 档案里的活动口味 / 身体限制（只取活动层要用的两项；没有档案的人不出现） */
+export function activityProfilesOf(members: Member[], profiles: Record<string, Profile | undefined> | undefined): Record<string, ActivityProfile> {
+  const out: Record<string, ActivityProfile> = {};
+  for (const m of members) {
+    const p = m.profileId ? profiles?.[m.profileId] : undefined;
+    if (!p || (!p.activityTastes && !p.body)) continue;
+    out[m.id] = { ...(p.activityTastes ? { activityTastes: { ...p.activityTastes } } : {}), ...(p.body ? { body: [...p.body] } : {}) };
+  }
+  return out;
 }
 
 /**
@@ -347,15 +366,16 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
   const snapJu = structuredClone(ju);
   const snapMembers = structuredClone(ins);
   const mapLog: MapLog = {};
+  const activityProfiles = activityProfilesOf(ins, deps.profiles);
 
   let result: Awaited<ReturnType<typeof planJu>>;
   try {
-    result = await runPlanner(ju, ins, recordingMap(deps.map, mapLog), deps.ledgers, now, deps.concessions ?? {});
+    result = await runPlanner(ju, ins, recordingMap(deps.map, mapLog), deps.ledgers, now, deps.concessions ?? {}, activityProfiles);
   } catch (e) {
     if (e instanceof HttpError) throw e;
     throw new HttpError(422, (e as Error)?.message || "出方案失败");
   }
-  const { plan, mine, asks } = result;
+  const { plan, mine, asks, avatar } = result;
 
   let polished: Plan;
   if (deps.polish) {
@@ -387,6 +407,7 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
     now: now.toISOString(),
     mapLog,
     ...(deps.concessions && Object.keys(deps.concessions).length ? { concessions: deps.concessions } : {}),
+    ...(Object.keys(activityProfiles).length ? { profiles: activityProfiles } : {}),
   };
   priv.snapshot = snapshot;
   priv.pendingMembers = [];
@@ -395,6 +416,7 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
 
   if (deps.announce !== false) announceAt(ju, planText(publicFacts(ju, members), replan), now);
   expireNudges(members);
+  applyAvatar(ju, ins, avatar, now, deps.onConcede);
   issueAsks(ins, asks, now);
   for (const m of ins) {
     if (ju.votes[m.id]) continue;
@@ -402,7 +424,43 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
   }
 }
 
-// ---------------------------------------------------------------- v5 协商：局长私下问
+// ---------------------------------------------------------------- v6 分身：替你做了什么
+
+/** 本人视图里最多留多少条 */
+export const AVATAR_LOG_MAX = 30;
+/** 结果公布后多久内可以撤回自动让步 */
+export const REVOKE_WINDOW_MS = 30 * 60_000;
+
+/**
+ * 把这次谈判写进每个人的 avatarLog（只进本人 private）：这次重新生成的条目替换上一版；
+ * 撤回过的自动让步（这一维 give 视为 0）和分身来问过的事保留。新的自动让步发一条站内信（kind = avatar），同一件事只发一次。
+ */
+export function applyAvatar(
+  ju: Ju,
+  members: Member[],
+  avatar: { logs: Record<string, AvatarLogEntry[]>; conceded: string[] },
+  now: Date,
+  onConcede?: PlanDeps["onConcede"],
+): void {
+  for (const m of members) {
+    const fresh = avatar.logs[m.id];
+    if (!fresh) continue;
+    const p = (m.private ??= emptyPrivate());
+    const kept = (p.avatarLog ?? []).filter((e) => e.revoked || e.kind === "ask");
+    const ids = new Set(kept.map((e) => e.id));
+    p.avatarLog = [...kept, ...fresh.filter((e) => !ids.has(e.id))].slice(-AVATAR_LOG_MAX);
+    for (const e of fresh) {
+      if (e.kind !== "concede") continue;
+      pushNoticeOnce(m, "avatar", `${ju.id}-${e.id}`, `你的分身${e.text}。不同意的话，30 分钟内可以在「分身替你做了什么」里撤回。`, now);
+    }
+  }
+  if (onConcede) for (const id of avatar.conceded) {
+    const m = members.find((x) => x.id === id);
+    if (m) onConcede(m, ju.id, now);
+  }
+}
+
+// ---------------------------------------------------------------- v5 协商：局长私下问（v6：由"你的分身"来问）
 
 /** 把规划器给的问题草稿私下发出去（站内信 + 私聊里的是 / 否按钮）。只进本人 private */
 export function issueAsks(members: Member[], drafts: AskDraft[], now: Date): number {
@@ -422,7 +480,10 @@ export function issueAsks(members: Member[], drafts: AskDraft[], now: Date): num
       at: now.toISOString(),
     };
     p.asks = [...(p.asks ?? []), ask];
-    notify(m, "ask", `局长私下问你一件事：${d.text}`, now);
+    notify(m, "ask", `你的分身来问你：${d.text}`, now);
+    p.avatarLog = [...(p.avatarLog ?? []), { id: `ask-${ask.id}`, at: ask.at, kind: "ask" as const, text: `这一步超出了你给分身的授权，分身来问你：${d.text}` }].slice(
+      -AVATAR_LOG_MAX,
+    );
     n++;
   }
   return n;
@@ -444,6 +505,8 @@ export function applyAnswer(m: Member, askId: string, yes: boolean, now: Date): 
     if (!p.relax.maxLateMin) delete p.relax.maxLateMin;
   }
   if (yes && ask.needKey) p.waived = [...new Set([...(p.waived ?? []), ask.needKey])];
+  const log = (p.avatarLog ?? []).find((e) => e.id === `ask-${ask.id}`);
+  if (log && !/你回答了/.test(log.text)) log.text += yes ? "——你回答了「可以」，分身照这个去谈" : "——你回答了「不行」，分身换别的办法";
   return ask;
 }
 
