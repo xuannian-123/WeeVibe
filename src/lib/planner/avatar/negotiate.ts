@@ -270,7 +270,19 @@ export function negotiate(input: NegotiateInput): NegotiateResult {
   if (baseBlocked.length) {
     const rs = reasonsFor(baseRec);
     r1.foot.push(boss(1, "propose", `卡在：${rs.join("，")}。看看谁能让一小步。`));
-  } else r1.foot.push(boss(1, "propose", "不用谁让步。"));
+  } else {
+    // 两段式不让步就照顾到了所有人：把"只玩一样最多照顾到几个"摆出来，讲清楚局长是怎么做到的（只有人数）
+    const bestOne = baseRec.segments?.length === 2 ? Math.max(0, ...basePool.filter((c) => (c.segments?.length ?? 1) < 2).map((c) => c.cared)) : baseRec.cared;
+    r1.foot.push(
+      boss(
+        1,
+        "propose",
+        bestOne < baseRec.cared
+          ? `只玩一样的话最多照顾到 ${bestOne}/${n}；拆成两段——晚到的直接来第二段，要早走的玩完第一段再走——不用谁让步。`
+          : "不用谁让步。",
+      ),
+    );
+  }
 
   // ---- 第 2 轮：让步
   const r2: RoundDrafts = { head: [], body: [], foot: [] };

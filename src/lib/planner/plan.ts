@@ -531,7 +531,7 @@ export function whyLines(c: Candidate, members: Member[]): string[] {
     const worst = [...here].sort((a, b) => a.utility - b.utility || cmpStr(a.memberId, b.memberId))[0];
     const maxCommute = Math.max(...here.map((e) => e.commuteMin));
     if (worst.status === "full") out.push(`每个到场的人都全程在，最远的路上 ${maxCommute} 分钟`);
-    else out.push(`最吃亏的朋友也只是${worst.notes.filter((x) => !/路上/.test(x)).join("、") || `路上 ${worst.commuteMin} 分钟`}`);
+    else out.push(`最吃亏的那位：${worst.notes.filter((x) => !/路上/.test(x)).join("，") || `路上 ${worst.commuteMin} 分钟`}`);
   }
   if (absent) out.push(`${absent} 位朋友这个时间来不了`);
   const second = c.pubs.filter((_, i) => secondOnly(c, i)).length;
