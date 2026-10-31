@@ -11,6 +11,7 @@ import { api, errMsg, type ChatBody } from "@/lib/client/api";
 import { store } from "@/lib/client/storage";
 import { dayLabel } from "@/lib/client/format";
 import { activityKeyOfWord, ALL_ACTIVITIES } from "@/lib/client/activities";
+import { fixedActivity, juMayEat } from "@/lib/planner/relevance";
 import { CARE_TAGS, GIVE_BY_STYLE, GIVE_MAX, HARD_DIET, MAX_FLOORS, MOOD_LABEL, STYLE_LABEL } from "@/lib/client/mandate";
 import { needsOnboarding } from "@/lib/client/profileFacts";
 import { bodyOf, cellValues, draftFor, draftProblem, examplePrompt, litCells, missingRequired, type CellKey, type Day, type Draft } from "@/lib/client/intakeDraft";
@@ -127,6 +128,9 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
   const litTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pending = me.private?.pendingConfirm;
   const avatarName = profile?.avatarName || "你的分身";
+  // 这个局用得上哪些：发起人定了干什么就不问"想干什么"；不吃饭的局不问忌口（忌口存在档案里，吃饭的局才拿出来）
+  const fixedAct = fixedActivity(state.ju.spec);
+  const mayEat = juMayEat(state.ju.spec);
 
   useEffect(() => () => clearTimeout(litTimer.current), []);
 
@@ -356,6 +360,17 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
           <div className="grid grid-cols-2 gap-2.5">
             {(Object.keys(CELL_META) as CellKey[]).map((k) => {
               const meta = CELL_META[k];
+              if (k === "activity" && fixedAct)
+                return (
+                  <div key={k} className="relative min-h-[86px] min-w-0 rounded-xl border-2 border-ink/40 bg-paper-deep/60 p-2.5 text-left">
+                    <span className="flex items-center gap-1 pr-12 text-[12px] font-bold text-ink-soft">
+                      <span aria-hidden>{meta.icon}</span>
+                      {meta.label}
+                    </span>
+                    <span className="absolute right-1.5 top-1.5 rounded-full border border-ink/30 bg-card px-1.5 py-px text-[10.5px] font-black text-ink-soft">发起人定的</span>
+                    <span className="mt-1.5 line-clamp-2 block break-words text-[14px] font-black leading-snug">{fixedAct}</span>
+                  </div>
+                );
               const v = values[k];
               const badge = badgeOf(k);
               const isLit = lit.includes(k);
@@ -658,7 +673,7 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
           {open === "care" && (
             <>
               <div className="flex flex-wrap gap-2">
-                {CARE_TAGS.map((t) => {
+                {CARE_TAGS.filter((t) => mayEat || (!t.diet && t.key !== "light")).map((t) => {
                   const on = t.diet ? draft.diet.includes(t.diet) : draft.tags.includes(t.key);
                   return (
                     <Chip
@@ -671,7 +686,7 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
                     </Chip>
                   );
                 })}
-                {EXTRA_DIETS.map((d: DietTag) => (
+                {(mayEat ? EXTRA_DIETS : []).map((d: DietTag) => (
                   <Chip key={d} selected={draft.diet.includes(d)} onClick={() => edit({ diet: draft.diet.includes(d) ? draft.diet.filter((x) => x !== d) : [...draft.diet, d] })} className="px-3 text-[14px]">{d}</Chip>
                 ))}
               </div>

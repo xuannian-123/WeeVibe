@@ -21,7 +21,7 @@ import { loadJu, loadMembers, mutateJu, recordConcession } from "./ju";
 import { getProfile } from "./profile";
 
 /** 两句之间至少隔多久：太快大家看不过来 */
-export const liveGapMs = () => Number(process.env.JUZHANG_LIVE_GAP_MS ?? 1100);
+export const liveGapMs = () => Number(process.env.JUZHANG_LIVE_GAP_MS ?? 700);
 /** 单个分身一句话最多等多久，超时就用规则版 */
 export const LIVE_SPEAK_TIMEOUT_MS = 9000;
 /** 讨论第二圈最多让几个意见不同的分身回应 */

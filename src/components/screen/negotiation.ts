@@ -180,12 +180,12 @@ export function negotiationStats(neg: Negotiation, p?: Proposal): NegotiationSta
 }
 
 /* ───────── 播放节奏 ───────── */
-export const CHAR_MS = 34;
+export const CHAR_MS = 18;
 
 /** 一条发言打完后停多久（毫秒）：拍板和交换停得久一点，让人看清 */
 export function holdMs(e: NegotiationEvent): number {
-  const base = 650 + Math.min(900, e.text.length * 14);
-  return e.kind === "decide" ? base + 900 : e.kind === "trade" || e.kind === "compensate" ? base + 400 : base;
+  const base = 380 + Math.min(520, e.text.length * 8);
+  return e.kind === "decide" ? base + 500 : e.kind === "trade" || e.kind === "compensate" ? base + 250 : base;
 }
 
 /**
@@ -204,9 +204,9 @@ export type Beat = {
 };
 export type Schedule = { intro: number; beats: Beat[]; total: number };
 
-export const INTRO_MS = 1400;
-export const BANNER_MS = 1100;
-export const ANTICIPATE_MS = 280;
+export const INTRO_MS = 800;
+export const BANNER_MS = 700;
+export const ANTICIPATE_MS = 160;
 
 export function buildSchedule(events: NegotiationEvent[], opts: { reduced?: boolean } = {}): Schedule {
   const reduced = !!opts.reduced;

@@ -438,3 +438,31 @@ describe("点菜提醒进群公告和订位话术", () => {
     expect(ruleGroupMessages(f).reservationScript).toContain("有朋友不吃香菜");
   });
 });
+
+describe("忌口存在档案里，只在可能吃饭的局拿出来", () => {
+  const mk = async (category: string, pid: string) => {
+    const { id } = await createJu({ prompt: "", spec: { category, poiKeywords: [category], dates, earliest: "14:00", latest: "16:00", durationMinutes: 120, city: "上海" }, title: "测", organizerName: "阿明" } as Parameters<typeof createJu>[0]);
+    const j = await join(id, { name: "小鹿", profileId: pid }, {});
+    return { id, token: j.memberToken, mid: j.memberId };
+  };
+  it("在卡片上写过敏 → 记进档案；打羽毛球的局不拿出来、也不冲掉档案；吃火锅的局自动带上", async () => {
+    const a = await mk("火锅", "pid-diet-0001");
+    await chat(a.id, a.token, chatBody.parse({ rsvp: "yes", location: XJH, budgetMax: 100, dietTags: ["不吃辣"], availability: { [dates[0]]: { from: "13:00", pref: "ok" } }, preferenceAction: "review" }));
+    await chat(a.id, a.token, chatBody.parse({ addNeed: { text: "对芒果过敏", kind: "hard" }, preferenceAction: "review" }));
+    await chat(a.id, a.token, chatBody.parse({ rsvp: "yes", location: XJH, budgetMax: 100, dietTags: ["不吃辣"], availability: { [dates[0]]: { from: "13:00", pref: "ok" } }, preferenceAction: "finish" }));
+    expect(getProfile("pid-diet-0001")!.dietTags).toContain("不吃辣");
+    expect(saidFacts(getProfile("pid-diet-0001")).some((f) => f.text === "对芒果过敏")).toBe(true);
+
+    const b = await mk("羽毛球", "pid-diet-0001");
+    let p = meOf(b.mid).private!;
+    expect(p.dietTags).toEqual([]);
+    expect((p.needs ?? []).some((n) => n.text === "对芒果过敏")).toBe(false);
+    await chat(b.id, b.token, chatBody.parse({ rsvp: "yes", location: XJH, budgetMax: 100, dietTags: [], availability: { [dates[0]]: { from: "13:00", pref: "ok" } }, preferenceAction: "finish" }));
+    expect(getProfile("pid-diet-0001")!.dietTags).toContain("不吃辣");
+
+    const c = await mk("火锅", "pid-diet-0001");
+    p = meOf(c.mid).private!;
+    expect(p.dietTags).toContain("不吃辣");
+    expect((p.needs ?? []).some((n) => n.text === "对芒果过敏" && n.kind === "hard")).toBe(true);
+  });
+});

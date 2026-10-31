@@ -56,7 +56,8 @@ function mode(xs: string[]): string | undefined {
  * tastes（刷卡）、typicalBudget（私下说的预算）、usualFrom / usualHomeBy（常用时间）、出发地、忌口。
  * 被局长预填的字段不回写（那不是本人的真实偏好）。
  */
-export function learnFromMember(prev: Profile | null, m: Member, deck: Pick<Poi, "id" | "name" | "type">[], now = new Date()): Profile | null {
+/** mayEat = 这个局可能吃饭：不吃饭的局（打羽毛球）里没问忌口，不能拿空的忌口把档案里的冲掉 */
+export function learnFromMember(prev: Profile | null, m: Member, deck: Pick<Poi, "id" | "name" | "type">[], now = new Date(), mayEat = true): Profile | null {
   if (!m.profileId || !m.private) return prev;
   const p: Profile = prev ? structuredClone(prev) : emptyProfile(m.profileId);
   const priv = m.private;
@@ -64,7 +65,7 @@ export function learnFromMember(prev: Profile | null, m: Member, deck: Pick<Poi,
   p.name = m.name;
   p.avatar = m.avatar;
   if (m.location) p.lastLocation = m.location;
-  if (!auto.has("diet")) p.dietTags = [...priv.dietTags];
+  if (mayEat && !auto.has("diet")) p.dietTags = [...priv.dietTags];
   if (!auto.has("budget") && priv.budgetMax !== undefined) p.typicalBudget = priv.budgetMax;
   if (!auto.has("availability")) {
     const days = Object.values(priv.availability) as DayAvailability[];

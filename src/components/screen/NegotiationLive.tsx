@@ -11,6 +11,7 @@ import { NegotiationScene } from "./NegotiationScene";
 import { focusProposal } from "./fmt";
 import {
   JUZHANG,
+  BANNER_MS,
   KIND_STYLE,
   ROUNDS,
   buildSchedule,
@@ -298,7 +299,7 @@ export function NegotiationLive({ state, right }: { state: JuState; right?: Reac
           )}
         </div>
         {ph.phase === "banner" && ph.round !== null && (
-          <div key={ph.round} className="pointer-events-none absolute left-0 top-2 z-10" style={{ animation: reduced ? undefined : `nl-banner ${1100}ms cubic-bezier(.45,0,.2,1) both` }}>
+          <div key={ph.round} className="pointer-events-none absolute left-0 top-2 z-10" style={{ animation: reduced ? undefined : `nl-banner ${BANNER_MS}ms cubic-bezier(.45,0,.2,1) both` }}>
             <div className="rounded-2xl border-2 border-mustard bg-night/90 px-6 py-3 shadow-[0_10px_40px_rgb(0_0_0/.5)]">
               <div className="font-num text-[16px] font-bold text-mustard">ROUND {ph.round + 1} / 5</div>
               <div className="text-[34px] font-black leading-tight text-cream">{roundLabel(ph.round)}</div>

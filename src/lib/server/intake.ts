@@ -37,8 +37,9 @@ import {
 } from "./ju-core";
 import { activitiesIn, activityByKey, libActivityOfWord } from "../planner/activities";
 import { customNeed, type CustomNeed } from "../planner/customNeed";
+import { juMayEat } from "../planner/relevance";
 import { materializeNeeds } from "../planner/needs";
-import { applyOnboarding, commuteLimitOf, getProfile, isFloorFact, learnedFacts, learnFromMember, saidFacts, saveProfile } from "./profile";
+import { applyOnboarding, commuteLimitOf, emptyProfile, getProfile, isFloorFact, learnedFacts, learnFromMember, saidFacts, saveProfile, setSaid } from "./profile";
 import type { ChatBody, JoinInput } from "./schemas";
 import { prefillKnow } from "./social";
 
@@ -175,7 +176,7 @@ const careNeed = (key: string, kind: Need["kind"] = "soft") => {
  * - 授权书草稿：风格按档案
  * 只补空的，不覆盖本人这次已经说过的。
  */
-export function prefillAvatar(m: Member, profile: Profile | undefined, now: Date): void {
+export function prefillAvatar(m: Member, profile: Profile | undefined, now: Date, mayEat = true): void {
   if (!profile) return;
   const p = (m.private ??= emptyPrivate());
   const at = now.toISOString();
@@ -189,6 +190,9 @@ export function prefillAvatar(m: Member, profile: Profile | undefined, now: Date
   // 建档写的底线（选的和自己写的）：按原话转成这次的规则；门禁、忌口写进各自的字段
   for (const f of saidFacts(profile).filter((x) => isFloorFact(x.key))) {
     const cn = customNeed(f.text, "hard");
+    // 吃的方面的底线（忌口、过敏）存在档案里，不吃饭的局就不拿出来
+    const foodOnly = !cn.homeBy && cn.needs.every((n) => n.dim === "food" || n.rule.t === "noAlcohol") && (cn.dietTags.length > 0 || cn.needs.length > 0);
+    if (!mayEat && foodOnly) continue;
     hard.push(...cn.needs);
     applyCustomFields(p, cn);
     if (cn.homeBy) confirm("homeBy");
@@ -251,6 +255,13 @@ function applyCard(ctx: MutateCtx, me: Member, body: ChatBody, profile: Profile 
     const hardOne = body.addNeed.kind === "hard";
     if (hardOne && chosenFloors(p).length >= MAX_FLOORS) throw new HttpError(400, `底线最多 ${MAX_FLOORS} 条：先去掉一条，或者把它加到"想要"里`);
     const cn = customNeed(body.addNeed.text, body.addNeed.kind);
+    // 忌口、过敏这类跟人走的事顺手记进档案：下次可能吃饭的局自动带上，不用再填
+    if (me.profileId && (cn.dietTags.length || cn.needs.some((n) => n.dim === "food"))) {
+      const prof = getProfile(me.profileId) ?? emptyProfile(me.profileId);
+      prof.dietTags = [...new Set([...prof.dietTags, ...cn.dietTags])];
+      if (hardOne && cn.needs.some((n) => n.dim === "food")) setSaid(prof, `floor:food:${body.addNeed.text.trim().slice(0, 40)}`, body.addNeed.text.trim().slice(0, 40), ctx.now);
+      saveProfile(prof);
+    }
     const before = new Set((p.needs ?? []).map((n) => n.id));
     if (cn.needs.length) p.needs = materializeNeeds(p.needs ?? [], cn.needs, "widget", at);
     applyCustomFields(p, cn);
@@ -387,7 +398,7 @@ export async function join(
     members.push(m);
     if (profile) {
       autofillMember(ju, m, profile);
-      prefillAvatar(m, profile, now);
+      prefillAvatar(m, profile, now, juMayEat(ju.spec));
     }
     // #21 同一拨人再约：局长记得上次谁和谁同桌、谁和谁聊得来（各自档案里的记忆，双向预填）
     prefillKnow(members, m);
@@ -548,7 +559,7 @@ async function onboard(juId: string, token: string, body: ChatBody): Promise<Cha
     const next = applyOnboarding(getProfile(me.profileId), me.profileId, body.onboarding!, ctx.now);
     saveProfile(next);
     autofillMember(ctx.ju, me, next);
-    prefillAvatar(me, next, ctx.now);
+    prefillAvatar(me, next, ctx.now, juMayEat(ctx.ju.spec));
     if (me.intake === "done" && me.status === "in") markChanged(ctx.ju, ctx.priv, me.id);
     const reply = `好，我大概认识你了${next.avatarName ? `，以后我就是「${next.avatarName}」` : ""}。这次的授权书先按你说的填好了，看看对不对。`;
     me.private!.chat.push({ role: "juzhang", text: reply, at: ctx.now.toISOString() });
@@ -691,7 +702,7 @@ export function finishIntake(ctx: MutateCtx, me: Member): void {
   if (me.private && !me.private.rsvp && !ctx.ju.quorum) me.private.rsvp = "yes";
   if (me.profileId) {
     const deck = ctx.priv.decks[me.id] ?? [];
-    const next = learnFromMember(getProfile(me.profileId), me, deck, ctx.now);
+    const next = learnFromMember(getProfile(me.profileId), me, deck, ctx.now, juMayEat(ctx.ju.spec));
     if (next) saveProfile(next);
   }
   if (me.status === "in") markChanged(ctx.ju, ctx.priv, me.id);

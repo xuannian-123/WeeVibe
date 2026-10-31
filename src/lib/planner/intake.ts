@@ -1,5 +1,6 @@
 // 入局相关：刷卡卡片（#6）、局长猜你（#6）、档案预填（#6）、课表 → 可出发时间（#7）。
 import type { BusyBlock, DayAvailability, DietTag, Ju, JuSpec, MapProvider, Member, Poi, Profile, SwipeVerdict } from "../types";
+import { juMayEat } from "./relevance";
 import { haversineKm } from "../map/geo";
 import { fairCenter } from "./center";
 import { searchPois } from "./plan";
@@ -90,7 +91,8 @@ export function autofillFromProfile(
   }
   const out: { availability: Record<string, DayAvailability>; budgetMax?: number; dietTags: DietTag[] } = {
     availability,
-    dietTags: [...new Set(profile?.dietTags ?? [])],
+    // 忌口跟人走、存在档案里：只在这个局可能吃饭时拿出来（打羽毛球就不用）
+    dietTags: juMayEat(ju.spec) ? [...new Set(profile?.dietTags ?? [])] : [],
   };
   if (profile?.typicalBudget && profile.typicalBudget > 0) out.budgetMax = Math.round(profile.typicalBudget);
   return out;
