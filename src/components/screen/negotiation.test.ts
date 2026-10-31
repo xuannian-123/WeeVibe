@@ -41,7 +41,7 @@ describe("事件分组", () => {
   it("按轮次连续分组，保留原下标", () => {
     const g = groupByRound(EVENTS);
     expect(g.map((x) => x.round)).toEqual([0, 1, 2, 3, 4]);
-    expect(g.map((x) => x.label)).toEqual(["交底", "出方案", "让步", "交换与补偿", "拍板"]);
+    expect(g.map((x) => x.label)).toEqual(["交底", "方案讨论", "让步", "交换与补偿", "拍板"]);
     expect(g[1].events.map((e) => e.index)).toEqual([1, 2, 3]);
     expect(g[4].events[0].index).toBe(8);
   });

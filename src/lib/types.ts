@@ -450,6 +450,11 @@ export type Plan = {
   coordination?: string;
   /** v6：分身谈判记录（公开安全，大屏直播用；说话人只有"局长"和与身份解耦的分身代号） */
   negotiation?: Negotiation;
+  /**
+   * v6：分身讨论的结果（公开）：规则排第一的方案、讨论后定的方案、每个方案的呼声（支持 +1、主动让步 +0.5、反对 −1）。
+   * 只在一样公平的方案之间改选；同一份讨论记录复算一定得到同一个结论
+   */
+  discussion?: { ruleChoice: string; chosen: string; support: Record<string, number> };
   /** v6：点菜提醒（挑店用不上、但到店要注意的忌口，只说人数），如 ["有人不吃香菜", "2 人对花生过敏"] */
   reminders?: string[];
   /** #10 跨局公平的公开说明（聚合），如 "这次优先照顾了前几次跑得最远的 1 位朋友" */
@@ -938,7 +943,8 @@ export type NegotiationEvent = {
   round: 0 | 1 | 2 | 3 | 4;
   /** "局长" 或分身代号（"分身 A"…，按内容规范顺序分配，与成员身份无关） */
   speaker: string;
-  kind: "open" | "propose" | "block" | "concede" | "trade" | "compensate" | "ask" | "decide";
+  /** argue = 分身在讨论里表态（支持 / 反对哪个方案、说理由、回应别人） */
+  kind: "open" | "propose" | "argue" | "block" | "concede" | "trade" | "compensate" | "ask" | "decide";
   text: string;
 };
 

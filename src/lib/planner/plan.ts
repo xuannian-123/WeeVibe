@@ -998,6 +998,23 @@ export function whereText(p: Pick<Proposal, "slot" | "poi" | "segments">): strin
   return `${slotLabel(sg[0].start)} ${sg[0].activityName}（${sg[0].poi.name}）→ ${minToHm(slotTimes({ id: "", start: sg[1].start, end: sg[1].end }).start)} ${sg[1].activityName}（${sg[1].poi.name}）`;
 }
 
+/** v6 讨论里能改选的备选：最吃亏的人的加权损失和推荐方案差多少以内算"一样公平" */
+export const FAIR_LOSS_EPS = 10;
+
+/** 实时谈判的一个候选方案：fair = 讨论时能改选它；talk = 选它时的整套谈判（只在服务端） */
+export type LiveOption = {
+  proposalId: string;
+  fair: boolean;
+  talk?: Pick<NegotiateResult, "negotiation" | "logs" | "conceded" | "speakers" | "codes"> & { why: string[] };
+};
+
+/** 和推荐方案一样公平：照顾到的人（及公平权重）一样多，最吃亏的人损失差不多，主角都在 */
+export function fairAlternative(c: Candidate, rec: Candidate): boolean {
+  if (c.vetoed || c.infeasible || c.cared !== rec.cared) return false;
+  if (Math.abs(c.caredW - rec.caredW) > 1e-9) return false;
+  return Math.abs((c.losses[0] ?? 0) - (rec.losses[0] ?? 0)) <= FAIR_LOSS_EPS;
+}
+
 /**
  * v6 补偿（AVATAR.md 第 4 节第 3 轮）：推荐方案是两段式、又有人让了步时，在"同一时间、同一个第一段、照顾到的人一样多"的
  * 候选里，挑让过步的人满意度之和最高的第二段（打平按三级准则）。不会为了补偿少照顾一个人。
@@ -1051,7 +1068,7 @@ export async function planJu(
     /** v6 活动层：memberId -> 档案里的活动口味、身体限制（Profile 的子集）。不传 = 只看本次说的 */
     profiles?: Record<string, ActivityProfile>;
   },
-): Promise<{ plan: Plan; mine: Record<string, MyExperience[]>; asks: AskDraft[]; avatar: Pick<NegotiateResult, "logs" | "conceded" | "speakers" | "codes"> }> {
+): Promise<{ plan: Plan; mine: Record<string, MyExperience[]>; asks: AskDraft[]; avatar: Pick<NegotiateResult, "logs" | "conceded" | "speakers" | "codes"> & { options: LiveOption[] } }> {
   const trace: TraceFn = (k, t) => {
     try {
       opts.onTrace?.(k, t);
@@ -1175,6 +1192,19 @@ export async function planJu(
     now: opts.now ?? new Date(),
   });
   trace("decide", talk.negotiation.outcome);
+  // v6 讨论：和推荐方案一样公平的备选（照顾到的人一样多、最吃亏的人损失差不多、不用私下问人），
+  // 分身们讨论时可以改选它——先把它的整套谈判（让步、补偿、本人记录）也算好
+  const nowAt = opts.now ?? new Date();
+  const options: LiveOption[] = picked.map((pk, k) => {
+    const fair = k === 0 || (!repair.asks.length && fairAlternative(pk.c, rec));
+    const t =
+      k === 0
+        ? talk
+        : fair
+          ? negotiate({ members: inMembers, planMembers, baseRec, basePool: basePool.length ? basePool : baseCands, given, pool, rec: pk.c, proposal: proposals[k], asks: [], why: whyLines(pk.c, inMembers), counts: { slots: slots.length, pois: pois.length, ...(programs ? { programs: programs.length } : {}) }, now: nowAt })
+          : undefined;
+    return { proposalId: proposals[k].id, fair, ...(t ? { talk: { negotiation: t.negotiation, logs: t.logs, conceded: t.conceded, speakers: t.speakers, codes: t.codes, why: k === 0 ? why : whyLines(pk.c, inMembers) } } : {}) };
+  });
   const body = {
     proposals,
     recommendation,
@@ -1203,5 +1233,5 @@ export async function planJu(
       cared: p.c.mines[i].cared,
     }));
   });
-  return { plan, mine, asks: repair.asks, avatar: { logs: talk.logs, conceded: talk.conceded, speakers: talk.speakers, codes: talk.codes } };
+  return { plan, mine, asks: repair.asks, avatar: { logs: talk.logs, conceded: talk.conceded, speakers: talk.speakers, codes: talk.codes, options } };
 }

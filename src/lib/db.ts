@@ -13,6 +13,7 @@ import path from "node:path";
 import type { GroupingInput } from "./planner/grouping";
 import type { Ju, LedgerEntry, Member, MyExperience, Negotiation, Poi, Profile } from "./types";
 import type { AskDraft } from "./planner/repair";
+import type { LiveOption } from "./planner/plan";
 import { upgradeJu, upgradeMember } from "./legacy";
 
 type Store = { db: DatabaseSync; file: string };
@@ -179,6 +180,12 @@ export type JuPrivate = {
     speakers: (string | null)[];
     codes: Record<string, string>;
     asks: AskDraft[];
+    /** 讨论时能选的方案（推荐方案在第一个）：一样公平的备选带着它自己的整套谈判 */
+    options?: LiveOption[];
+    /** 讨论记录：每个分身最后的表态（代号 → 支持 / 反对哪个方案）。拿同一份记录复算一定得到同一个结论 */
+    stances?: { code: string; support?: string; oppose?: string; offer?: boolean }[];
+    /** 讨论后定下的方案 */
+    chosen?: string;
   };
 };
 

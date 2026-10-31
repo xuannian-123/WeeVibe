@@ -7,7 +7,7 @@ export type Round = NegotiationEvent["round"];
 
 export const ROUNDS: { round: Round; label: string; short: string }[] = [
   { round: 0, label: "交底", short: "交底" },
-  { round: 1, label: "出方案", short: "方案" },
+  { round: 1, label: "方案讨论", short: "讨论" },
   { round: 2, label: "让步", short: "让步" },
   { round: 3, label: "交换与补偿", short: "交换" },
   { round: 4, label: "拍板", short: "拍板" },
@@ -100,6 +100,7 @@ export type KindStyle = { icon: string; label: string; color: string; soft: stri
 export const KIND_STYLE: Record<NegotiationEvent["kind"], KindStyle> = {
   open: { icon: "📜", label: "交底", color: "#a89a88", soft: "#f3e8d6" },
   propose: { icon: "🧭", label: "方案", color: "#f2b530", soft: "#fde9b8" },
+  argue: { icon: "💬", label: "表态", color: "#ffd166", soft: "#fff1c9" },
   block: { icon: "⛔", label: "卡点", color: "#ff6b57", soft: "#fbe0da" },
   concede: { icon: "🤝", label: "让步", color: "#7cc4ff", soft: "#cfe8ff" },
   trade: { icon: "⇄", label: "交换", color: "#c79bff", soft: "#eadcff" },

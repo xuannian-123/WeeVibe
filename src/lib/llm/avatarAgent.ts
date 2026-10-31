@@ -11,7 +11,12 @@ export type AvatarTurn =
   /** 被点名表达一个意思（卡点 / 让步…）：intent 是规则版的那句话，分身用自己的口吻说出来 */
   | { kind: "say"; eventKind: NegotiationEvent["kind"]; intent: string }
   /** 局长请你让的超出了授权：自己决定私下问主人（ask_owner）还是替主人婉拒（decline） */
-  | { kind: "ask"; request: string; floorRelated: boolean };
+  | { kind: "ask"; request: string; floorRelated: boolean }
+  /**
+   * 讨论：局长摆出几个方案，你表态（支持 / 反对哪个、愿不愿意为它主动让一步）。
+   * options[].mine 是这个方案对你主人怎么样（只有你知道）；respond = 第二圈，有人和你意见不同，你可以坚持或改主意
+   */
+  | { kind: "argue"; options: { no: number; label: string; summary: string; mine: string }[]; respond?: boolean };
 
 export type AvatarInput = {
   code: string;
@@ -22,7 +27,15 @@ export type AvatarInput = {
   turn: AvatarTurn;
 };
 
-export type AvatarOut = { say: string; action?: "ask_owner" | "decline" };
+export type AvatarOut = {
+  say: string;
+  action?: "ask_owner" | "decline";
+  /** 讨论里支持 / 反对的方案编号（1 起） */
+  support?: number;
+  oppose?: number;
+  /** 愿意为支持的方案在授权内主动让一步 */
+  offer?: boolean;
+};
 
 const STYLE_TEXT: Record<AvatarStyle, string> = {
   easy: "随和：好说话，乐意成全大家",
@@ -34,10 +47,13 @@ const MOOD_TEXT: Record<Mood, string> = { hype: "想嗨一点", chill: "想安�
 const schema = {
   type: "object",
   additionalProperties: false,
-  required: ["say", "action"],
+  required: ["say", "action", "support", "oppose", "offer"],
   properties: {
     say: { type: "string", description: "你在谈判群里说的一句话，≤40 字" },
     action: { type: ["string", "null"], enum: ["ask_owner", "decline", null] },
+    support: { type: ["integer", "null"], description: "讨论时支持的方案编号，不是讨论填 null" },
+    oppose: { type: ["integer", "null"], description: "讨论时反对的方案编号，没有填 null" },
+    offer: { type: ["boolean", "null"], description: "讨论时愿不愿意为支持的方案在授权内主动让一步" },
   },
 } as const;
 
@@ -66,6 +82,18 @@ function floorKinds(v: MandateView): string {
 }
 
 function instruction(t: AvatarTurn): string {
+  if (t.kind === "argue") {
+    const opts = t.options.map((o) => `方案 ${o.no}「${o.label}」：${o.summary}\n   （只有你知道）对你主人：${o.mine}`).join("\n");
+    return [
+      "局长摆出了几个方案，现在是讨论时间：",
+      opts,
+      t.respond
+        ? "有分身和你意见不一样。看看大家刚才说的，你可以坚持（说清理由、回应对方，点名用代号），也可以改支持别的方案。"
+        : "结合你主人的情况和大家刚才说的，表个态：说清你支持哪个、为什么；可以回应前面的人（点名用代号）。",
+      "support 填你支持的方案编号；oppose 填你反对的（没有就 null）；offer = true 表示为了你支持的方案，你愿意在授权范围内主动让一步。",
+      "理由只说类别（安静、省钱、时间、离得近、好玩…），不说主人的具体数字和原因。action 填 null。",
+    ].join("\n");
+  }
   if (t.kind === "open")
     return "轮到你开场：从你的状态和想要里挑你最在意的一件事，用一句话说出来（类别就行，不说具体数字、不说原因）。别用「大家好」开头，像群里随口接话；没有底线就别提底线。action 填 null。";
   if (t.kind === "say") {
@@ -99,11 +127,19 @@ export async function avatarSpeak(input: AvatarInput, timeoutMs = 9000): Promise
   ].join("\n");
   const ctx = input.context.slice(-8).map((e) => `${e.speaker}：${e.text}`).join("\n");
   const user = `${ctx ? `到目前为止的谈判群：\n${ctx}\n\n` : "谈判刚开始。\n\n"}${instruction(input.turn)}`;
-  const raw = (await callLlmJson({ system, user, schema: schema as unknown as Record<string, unknown>, maxTokens: 200, timeoutMs })) as { say?: unknown; action?: unknown };
+  const raw = (await callLlmJson({ system, user, schema: schema as unknown as Record<string, unknown>, maxTokens: 260, timeoutMs })) as Record<string, unknown>;
   const say = typeof raw?.say === "string" ? raw.say.trim() : "";
   if (!say) throw new Error("分身没说话");
   const action = raw.action === "ask_owner" || raw.action === "decline" ? raw.action : undefined;
   if (input.turn.kind === "ask" && !action) throw new Error("分身没做决定");
+  if (input.turn.kind === "argue") {
+    const nos = new Set(input.turn.options.map((o) => o.no));
+    const pick = (v: unknown) => (typeof v === "number" && nos.has(v) ? v : undefined);
+    const support = pick(raw.support);
+    if (support === undefined) throw new Error("分身没表态");
+    const oppose = pick(raw.oppose);
+    return { say, support, ...(oppose !== undefined && oppose !== support ? { oppose } : {}), ...(raw.offer === true ? { offer: true } : {}) };
+  }
   return { say, ...(action ? { action } : {}) };
 }
 

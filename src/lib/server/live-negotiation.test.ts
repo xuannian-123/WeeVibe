@@ -53,6 +53,9 @@ describe("实时分身谈判", () => {
     expect(opens.every((e) => e.text === "我都可以，大家开心就好～")).toBe(true);
     expect(new Set(opens.map((e) => e.speaker)).size).toBe(8);
     expect(ev.every((e) => e.speaker === "局长" || /^分身 [A-Z]$/.test(e.speaker))).toBe(true);
+    // 整份公开记录里没有任何人的名字（不然代号就对上人了）
+    const names = raw(id).map((m) => m.name);
+    for (const e of ev) for (const nm of names) expect(e.text).not.toContain(nm);
     // 局长的话照规则版：交底、拍板都在
     expect(ev.some((e) => e.speaker === "局长" && e.kind === "decide" && /拍板/.test(e.text))).toBe(true);
   });
@@ -111,5 +114,32 @@ describe("实时分身谈判", () => {
     await advanceJu(id);
     expect(neg(id).status).toBe("done");
     expect(neg(id).events.map((e) => e.text)).toEqual(["规则版"]);
+  });
+  it("讨论：分身们表态、互相回应；局长只在一样公平的方案之间听呼声；记录能复算", async () => {
+    // 所有分身都支持方案 2、反对方案 1
+    reply = (u) =>
+      u.includes("讨论时间")
+        ? { say: "我更想要方案 2，安静点好聊天。", action: null, support: 2, oppose: 1, offer: true }
+        : { say: "好。", action: null };
+    const { id } = await avatarJu();
+    await done(id);
+    const ev = neg(id).events;
+    const argues = ev.filter((e) => e.kind === "argue");
+    expect(argues.length).toBeGreaterThanOrEqual(8);
+    expect(argues.every((e) => /^分身 [A-Z]$/.test(e.speaker))).toBe(true);
+    expect(ev.some((e) => e.speaker === "局长" && /大家的呼声|意见都记下了/.test(e.text))).toBe(true);
+    const plan = getState(id).ju.plan!;
+    const live = db.getJuPrivate(id).live!;
+    const { deliberationPick } = await import("../planner/avatar/deliberate");
+    // 同一份讨论记录复算，结论一样
+    expect(deliberationPick(live.options!, live.stances!).chosen).toBe(live.chosen);
+    expect(plan.discussion?.chosen).toBe(live.chosen);
+    const second = live.options![1];
+    if (second?.fair) {
+      expect(plan.proposals[0].id).toBe(second.proposalId);
+      expect(plan.recommendation).toMatch(/讨论后选的/);
+    } else {
+      expect(plan.proposals[0].id).toBe(plan.discussion?.ruleChoice);
+    }
   });
 });

@@ -419,13 +419,14 @@ export async function computePlan(ju: Ju, members: Member[], priv: JuPrivate, de
   // v6 实时谈判：公开记录先清空、标 live，后台由分身们一句句谈；超出授权的问题等分身自己决定要不要问主人
   const live = !!deps.onLive && !!polished.negotiation;
   if (live) {
-    priv.live = { computedAt: polished.computedAt, template: structuredClone(polished.negotiation!), speakers: avatar.speakers, codes: avatar.codes, asks };
+    priv.live = { computedAt: polished.computedAt, template: structuredClone(polished.negotiation!), speakers: avatar.speakers, codes: avatar.codes, asks, options: avatar.options };
     polished.negotiation = { ...polished.negotiation!, events: [], status: "live" };
   } else delete priv.live;
 
   if (deps.announce !== false) announceAt(ju, planText(publicFacts(ju, members), replan), now);
   expireNudges(members);
-  applyAvatar(ju, ins, avatar, now, deps.onConcede);
+  // 实时谈判时，"分身替你做了什么"等讨论定了方案再写（分身们可能改选备选）
+  if (!live) applyAvatar(ju, ins, avatar, now, deps.onConcede);
   if (!live) issueAsks(ins, asks, now);
   for (const m of ins) {
     if (live) {
