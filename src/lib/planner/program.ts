@@ -24,6 +24,7 @@ import {
 import { budgetDegree, CARE_FLOOR, experienceDetail, slotTimes, type PlanContext, type PrivateFlags, type SoftCost } from "./experience";
 import type { Effects } from "./external";
 import { softPenalty } from "./needs";
+import { groupBans, pairShape, partMatches, shapeLabel } from "./shape";
 import { clamp, hmToMin, minToHm } from "./util";
 
 /** 活动层最多排出几个节目去搜店 */
@@ -136,9 +137,39 @@ export function buildPrograms(
   const { moods, diverged } = moodSplit(members);
   const late = lateJoiners(members, spec);
   const split: SplitInfo = { moods, diverged, late };
-  const live = scores.filter((s) => !s.excluded);
+  // 发起人说的整体要求（"有个人膝盖不好"）排除的活动直接不考虑
+  const bans = groupBans(spec.constraints);
+  const live = scores.filter((s) => !s.excluded && !bans.has(s.key));
   const blocked = live.filter((s) => s.hard.some(Boolean)).length;
   const rainedOut = scores.length - live.length;
+
+  // 发起人说了两段安排（"下午玩 → 晚上吃"）：只出这个顺序的两段式，每段从符合那一段的活动里挑
+  const shape = pairShape(spec);
+  if (shape) {
+    const firsts = live.filter((s) => partMatches(s.act, shape[0]));
+    const seconds = live.filter((s) => partMatches(s.act, shape[1]));
+    const all: Program[] = [];
+    for (const f of firsts)
+      for (const s of seconds) {
+        if (f.act === s.act) continue;
+        const segs: ProgramSeg[] = [f, s].map((x) => ({ act: x.act, minutes: Math.min(x.act.minutes, x.act.food ? PAIR_EAT_MAX : PAIR_PLAY_MAX + 30) }));
+        const rows = members.map((_, i) => pairFit(f.detail[i], segs[0].minutes, s.detail[i], segs[1].minutes));
+        const order = ACTIVITY_LIB.length * (1 + ACTIVITY_LIB.indexOf(f.act)) + ACTIVITY_LIB.indexOf(s.act);
+        const g = grade(rows.map((r) => r.fit), rows.map((r) => r.hard), weights, order);
+        all.push({ ...g, key: `${f.act.key}+${s.act.key}`, segs, minutes: segs[0].minutes + segs[1].minutes, label: progLabel(segs) });
+      }
+    all.sort(gradeCompare);
+    // 别四个节目都是同一个"玩"：每个第一段最多两次，先保证第一段各不相同
+    const picked: Program[] = [];
+    for (const pass of [1, 2])
+      for (const pr of all) {
+        if (picked.length >= MAX_PROGRAMS) break;
+        if (picked.includes(pr)) continue;
+        if (picked.filter((x) => x.segs[0].act === pr.segs[0].act).length >= pass) continue;
+        picked.push(pr);
+      }
+    if (picked.length) return { programs: picked.sort(gradeCompare), scores, split, blocked, rainedOut };
+  }
 
   const single = (s: ActivityScore): Program => ({ ...s, key: s.key, segs: [{ act: s.act, minutes: s.act.minutes }], minutes: s.act.minutes, label: s.act.name });
   const wantPairs = diverged || late > 0;
@@ -200,6 +231,8 @@ export function moodSummary(split: SplitInfo): string | undefined {
 
 /** 活动池（发起人给的候选）的公开说法 */
 export function poolSummary(spec: JuSpec): string {
+  const shape = pairShape(spec);
+  if (shape) return `发起人的安排是「${shapeLabel(shape)}」，局长按这个顺序排两段${spec.constraints?.length ? `；也记着：${spec.constraints.join("、")}` : ""}`;
   const pool = candidatePool(spec);
   if (pool.length === ACTIVITY_LIB.length && !(spec.activities ?? []).length) return `发起人让局长定干什么，局长从 ${pool.length} 种活动里挑`;
   return `发起人给了 ${pool.length} 个候选：${pool.map((a) => a.name).join(" / ")}`;

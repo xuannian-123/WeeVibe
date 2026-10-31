@@ -36,6 +36,7 @@ import { generateSlots } from "./slots";
 import { bjIso, canonicalJson, chainName, cmpStr, hmToMin, hmacHex, minToHm, sha256Hex, slotLabel } from "./util";
 import { activityByKey, type ActivityInfo, type ActivityProfile } from "./activities";
 import { buildPrograms, moodSummary, poolSummary, programExperience, segmentTimes, WALK_MAX_MIN, type Program, type ProgramRow, type SegRun } from "./program";
+import { segmentsInWindows, shapeLabel } from "./shape";
 import { dietConflictReason } from "./diet";
 
 export const ALGORITHM_VERSION = "juzhang-planner/3.0";
@@ -827,7 +828,9 @@ async function computeActivityCandidates(
   if (pp.blocked) trace("filter", `有人的底线（饮食 / 身体 / 预算）和 ${pp.blocked} 种活动冲突，这些活动排到后面`);
   const hasPair = pp.programs.some((p) => p.segs.length > 1);
   if (hasPair) {
-    const why = [pp.split.diverged ? "大家这次的状态不太一样" : "", pp.split.late ? someone(pp.split.late, "只能晚到") : ""].filter(Boolean).join("，");
+    const why = spec.shape?.length
+      ? "按发起人的安排"
+      : [pp.split.diverged ? "大家这次的状态不太一样" : "", pp.split.late ? someone(pp.split.late, "只能晚到") : ""].filter(Boolean).join("，");
     trace("compute", `${why}，考虑分两段：一段玩、一段吃，第二家店离第一家步行 ${WALK_MAX_MIN} 分钟以内${pp.split.late ? "，晚到的朋友可以直接来第二段" : ""}`);
   }
   if (pp.programs.length === 0) throw new Error("候选的活动这几天都不成立（户外遇上大雨），换个活动或日期吧");
@@ -925,10 +928,25 @@ async function computeActivityCandidates(
         cands.push(c);
       }
     }
+  // 发起人说的安排带时段（"下午玩、晚上吃"）：每段的开始时间要落在那个时段里（吃饭真的在饭点）
+  if (spec.shape?.some((p) => p.when)) {
+    const fits = (c: Candidate) => segmentsInWindows((c.segments ?? []).map((sg) => slotTimes({ id: "", start: sg.start, end: sg.end }).start), spec.shape!);
+    const timed = cands.filter((c) => !c.infeasible && fits(c)).length;
+    if (timed) {
+      let off = 0;
+      for (const c of cands)
+        if (!c.infeasible && !fits(c)) {
+          c.infeasible = "不在说好的时段里";
+          off++;
+        }
+      if (off) trace("filter", `${off} 个组合的时间和「${shapeLabel(spec.shape)}」对不上（比如吃饭不在饭点），不考虑`);
+    } else trace("warn", `没有组合能让每段都落在「${shapeLabel(spec.shape)}」的时段里，先按最接近的排`);
+  }
   const feasible = cands.filter((c) => !c.infeasible);
   const closed = cands.filter((c) => c.infeasible?.includes("打烊") || c.infeasible?.includes("营业")).length;
-  const rained = cands.length - feasible.length - closed;
-  if (feasible.length && feasible.length < cands.length) {
+  const offTime = cands.filter((c) => c.infeasible === "不在说好的时段里").length;
+  const rained = cands.length - feasible.length - closed - offTime;
+  if (feasible.length && feasible.length < cands.length - offTime && (closed || rained)) {
     trace("filter", [closed ? `${closed} 个组合打烊前来不及` : "", rained ? `${rained} 个户外组合遇上坏天气` : ""].filter(Boolean).join("，") + "，直接排除");
   }
   return {

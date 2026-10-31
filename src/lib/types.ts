@@ -30,6 +30,20 @@ export type JuSpec = {
   open?: boolean;
   /** v6 发起人给的候选活动池（ActivityDef.key），如 ["hotpot", "boardgame"]；open 时为空 = 全库 */
   activities?: string[];
+  /** v6 发起人说的安排（先干什么、再干什么、各在什么时候），如"下午玩 → 晚上吃"；有两段时只出两段式方案 */
+  shape?: SpecPart[];
+  /** v6 发起人公开说的整体要求（"有个人膝盖不好"），所有方案都按它来 */
+  constraints?: string[];
+};
+
+/** v6 安排里的一段 */
+export type SpecPart = {
+  /** 这一段干什么：吃 / 玩（含看展、户外）/ 喝 / 不限 */
+  kind: "eat" | "play" | "drink" | "any";
+  /** 指定了具体活动（ActivityDef.key）；空 = 这一段交给局长定 */
+  activities?: string[];
+  /** 大概什么时候 */
+  when?: "morning" | "noon" | "afternoon" | "evening" | "night";
 };
 
 /** 候选开始时间 */

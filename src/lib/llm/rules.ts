@@ -1,6 +1,7 @@
 // 规则兜底：没有 LLM 或 LLM 出错时用。纯函数、确定性，便于单测。
 import type { DietTag, JuSpec } from "../types";
 import { ACTIVITY_LIB, activitiesIn, activityByKey } from "../planner/activities";
+import { detectConstraints, detectShape, WHEN_WINDOW } from "../planner/shape";
 import { NUM_RE_SRC, parseCnNumber } from "./cn-number";
 import {
   addDays,
@@ -441,7 +442,46 @@ export function ruleParsePrompt(prompt: string, now: Date, defaultCity: string):
     ...(open ? { open: true } : {}),
     ...(pool ? { activities: pool } : {}),
   };
+  const constraints = detectConstraints(text);
+  if (constraints) spec.constraints = constraints;
+  const shaped = withShape(spec, text, dateLabel);
+  if (shaped) return shaped;
   return { title: activityTitle(dateLabel, spec, headcount) ?? makeTitle(dateLabel, category, headcount), spec };
+}
+
+/** 安排里一段的简称（局名用）："羽毛球" / "出去玩" / "吃饭" */
+function partName(p: NonNullable<JuSpec["shape"]>[number]): string {
+  if (p.activities?.length) return p.activities.map((k) => activityByKey(k)?.name ?? k).slice(0, 2).join("或");
+  return { eat: "吃饭", play: "出去玩", drink: "喝一杯", any: "聚聚" }[p.kind];
+}
+
+/**
+ * 一句话里有两段安排（"下午玩、晚上吃""先打球再吃火锅"）：按安排出两段式。
+ * 时间窗 = 第一段的开始时间（按它的时段），时长 = 两段合计；有一段没指定活动就交给局长定（不设候选池，按段筛）。
+ */
+function withShape(spec: JuSpec, text: string, dateLabel: string): { title: string; spec: JuSpec } | undefined {
+  const shape = detectShape(text);
+  if (!shape) return undefined;
+  const allSet = shape.every((p) => p.activities?.length);
+  const keys = [...new Set(shape.flatMap((p) => p.activities ?? []))];
+  const acts = keys.map((k) => activityByKey(k)!).filter(Boolean);
+  const w = shape[0].when;
+  const win = w ? { earliest: fromMinutes(WHEN_WINDOW[w][0] + 30), latest: fromMinutes(Math.min(WHEN_WINDOW[w][1] - 60, WHEN_WINDOW[w][0] + 210)) } : { earliest: spec.earliest, latest: spec.latest };
+  const out: JuSpec = {
+    ...spec,
+    category: allSet ? acts.map((a) => a.name).join("→").slice(0, 20) : "局长定",
+    poiKeywords: acts.length ? [...new Set(acts.map((a) => a.poiKeywords[0]))].slice(0, 3) : ["餐厅"],
+    earliest: win.earliest,
+    latest: win.latest <= win.earliest ? win.earliest : win.latest,
+    durationMinutes: 270,
+    shape,
+  };
+  delete out.open;
+  delete out.activities;
+  if (allSet && keys.length >= 2) out.activities = keys;
+  else out.open = true;
+  const title = `${dateLabel}${shape.map(partName).join("+")}`;
+  return { title: charLen(title) <= 12 ? title : `${dateLabel}组局`, spec: out };
 }
 
 /** v6 局名："周六聚一聚" / "周六吃什么局" / "周六桌游或火锅局"（太长就叫"周六组局"）；v5 单品类返回 undefined */

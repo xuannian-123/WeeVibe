@@ -23,6 +23,18 @@ export const juSpecSchema = z
     // v6 活动层：干什么交给局长 / 候选活动池（ActivityDef.key）
     open: z.boolean().optional(),
     activities: z.array(z.string().trim().min(1).max(30)).max(30).optional(),
+    // v6 安排（先干什么、再干什么）和整体要求
+    shape: z
+      .array(
+        z.object({
+          kind: z.enum(["eat", "play", "drink", "any"]),
+          activities: z.array(z.string().trim().min(1).max(30)).max(10).optional(),
+          when: z.enum(["morning", "noon", "afternoon", "evening", "night"]).optional(),
+        }),
+      )
+      .max(2)
+      .optional(),
+    constraints: z.array(z.string().trim().min(1).max(40)).max(5).optional(),
   })
   .refine((s) => s.earliest <= s.latest, { message: "earliest 不能晚于 latest" });
 

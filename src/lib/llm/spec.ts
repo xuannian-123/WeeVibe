@@ -59,11 +59,18 @@ export function specFromLlm(
     spec.poiKeywords = rule.spec.poiKeywords;
     spec.durationMinutes = rule.spec.durationMinutes;
   }
+  // 两段安排：开始时间窗按第一段的时段（规则算的），大模型按"晚饭 18:00"给的窗会把下午那段挤掉
+  if (rule.spec.shape) {
+    spec.earliest = rule.spec.earliest;
+    spec.latest = rule.spec.latest;
+  }
   const checked = juSpecSchema.safeParse(spec);
   if (!checked.success) throw new Error(`spec 校验失败：${checked.error.issues[0]?.message}`);
-  const v6: Pick<JuSpec, "open" | "activities"> = {
+  const v6: Pick<JuSpec, "open" | "activities" | "shape" | "constraints"> = {
     ...(rule.spec.open ? { open: true } : {}),
     ...(rule.spec.activities?.length ? { activities: rule.spec.activities } : {}),
+    ...(rule.spec.shape ? { shape: rule.spec.shape } : {}),
+    ...(rule.spec.constraints ? { constraints: rule.spec.constraints } : {}),
   };
   const title = rule.spec.open || rule.spec.activities?.length ? rule.title : charLen(out.title) <= 12 ? out.title : rule.title;
   return { title, spec: { ...(checked.data as JuSpec), ...v6 } };

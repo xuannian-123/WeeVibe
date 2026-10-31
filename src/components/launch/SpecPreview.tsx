@@ -1,7 +1,17 @@
 "use client";
 
-import type { JuSpec, SeedMember } from "@/lib/types";
+import type { JuSpec, SeedMember, SpecPart } from "@/lib/types";
 import { categoryEmoji, dayLabel } from "@/components/screen/fmt";
+import { activityByKey } from "@/lib/planner/activityLib";
+
+const WHEN: Record<NonNullable<SpecPart["when"]>, string> = { morning: "上午", noon: "中午", afternoon: "下午", evening: "晚上", night: "夜里" };
+const KIND: Record<SpecPart["kind"], string> = { eat: "吃饭", play: "玩", drink: "喝点什么", any: "干点什么" };
+
+/** "下午 · 羽毛球" / "晚上 · 吃饭（局长定）" */
+function partText(p: SpecPart): string {
+  const what = p.activities?.length ? p.activities.map((k) => activityByKey(k)?.name ?? k).join("或") : `${KIND[p.kind]}（局长定）`;
+  return `${p.when ? `${WHEN[p.when]} · ` : ""}${what}`;
+}
 
 export type Draft = { title: string; spec: JuSpec; seeds: Omit<SeedMember, "id" | "claimedBy">[]; fallback?: boolean };
 
@@ -56,6 +66,37 @@ export function SpecPreview({ draft, onChange }: { draft: Draft; onChange: (d: D
           />
         </Field>
       </div>
+      {s.shape && s.shape.length >= 2 && (
+        <div>
+          <span className="mb-1 block text-[13px] font-bold text-ink-soft">安排（分两段，第二家店在第一家步行 15 分钟内）</span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {s.shape.map((p, i) => (
+              <span key={i} className="flex items-center gap-1.5">
+                {i > 0 && <span className="font-black text-ink-faint">→</span>}
+                <span className="rounded-full border-2 border-ink bg-card px-3 py-1.5 text-[14px] font-bold">{partText(p)}</span>
+              </span>
+            ))}
+            <button type="button" className="min-h-10 px-2 text-[13px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4" onClick={() => set({ shape: undefined, durationMinutes: 120 })}>
+              不分两段
+            </button>
+          </div>
+        </div>
+      )}
+      {!!s.constraints?.length && (
+        <div>
+          <span className="mb-1 block text-[13px] font-bold text-ink-soft">整体要求（所有方案都按它来）</span>
+          <div className="flex flex-wrap gap-2">
+            {s.constraints.map((c) => (
+              <span key={c} className="inline-flex min-h-10 items-center gap-1 rounded-full border-2 border-ink bg-cinnabar/10 pl-3 text-[14px] font-bold">
+                {c}
+                <button type="button" aria-label={`去掉：${c}`} className="flex size-10 items-center justify-center text-ink-soft" onClick={() => set({ constraints: s.constraints!.filter((x) => x !== c) })}>
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       <Field label="哪天">
         <div className="flex flex-wrap gap-2">
           {s.dates.map((d) => (
@@ -73,11 +114,11 @@ export function SpecPreview({ draft, onChange }: { draft: Draft; onChange: (d: D
         </div>
       </Field>
       <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-        <Field label="最早几点开始">
+        <Field label={s.shape?.length ? "第一段最早几点开始" : "最早几点开始"}>
           <input className="field font-num" type="time" value={s.earliest} onChange={(e) => set({ earliest: e.target.value })} />
         </Field>
         <span className="pb-3 font-bold text-ink-faint">—</span>
-        <Field label="最晚几点开始">
+        <Field label={s.shape?.length ? "第一段最晚几点开始" : "最晚几点开始"}>
           <input className="field font-num" type="time" value={s.latest} onChange={(e) => set({ latest: e.target.value })} />
         </Field>
       </div>
