@@ -20,7 +20,8 @@ const CSS = `
 
 function Bubbles({ events, step, phase, typed, reduced }: { events: NegotiationEvent[]; step: number; phase: string; typed: number; reduced: boolean }) {
   const upto = phase === "anticipate" ? step - 1 : step;
-  const tail = events.slice(0, upto + 1).map((e, i) => ({ e, i })).slice(-4);
+  // 到当前为止的每一句都留着（外面的容器可以上下滑）
+  const tail = events.slice(0, upto + 1).map((e, i) => ({ e, i }));
   if (!tail.length) return <p className="py-6 text-center text-[15px] font-bold text-cream-faint">🪑 分身们正在入座…</p>;
   return (
     <ol className="flex flex-col justify-end gap-2.5" aria-live="polite">
@@ -31,7 +32,7 @@ function Bubbles({ events, step, phase, typed, reduced }: { events: NegotiationE
         const jz = e.speaker === JUZHANG;
         const last = k === tail.length - 1;
         return (
-          <li key={i} className={`flex items-start gap-2 ${last ? "" : "opacity-60"}`} style={{ animation: reduced ? undefined : "ln-bubble 360ms cubic-bezier(.2,.8,.2,1) both" }}>
+          <li key={i} className={`flex items-start gap-2 ${last ? "" : "opacity-75"}`} style={{ animation: reduced || !last ? undefined : "ln-bubble 360ms cubic-bezier(.2,.8,.2,1) both" }}>
             {jz ? (
               <span className="mt-0.5 shrink-0"><SealLogo size={30} dark /></span>
             ) : (
@@ -144,6 +145,14 @@ export function LiveNegotiation({ state, me, onClose, live = true }: { state: Ju
   }, []);
 
   const codes = useMemo(() => seatCodes(events, focusProposal(state.ju)?.experiences.length ?? state.counts.in), [events, state.ju, state.counts.in]);
+  // 聊天记录可以上下滑：在底部时跟着新消息走，往上翻着看的时候不拽回去
+  const chatRef = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+  const shown = ph0.phase === "anticipate" ? ph0.step : ph0.step + 1;
+  useEffect(() => {
+    const el = chatRef.current;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
+  }, [shown, ph0.typed, ph0.phase]);
   if (!neg) return null;
   const ph = ph0;
   // 播到最新一句、分身们还在谈：等下一句，不出结果卡
@@ -180,7 +189,8 @@ export function LiveNegotiation({ state, me, onClose, live = true }: { state: Ju
         })}
       </ol>
 
-      <div className="relative mt-2 shrink-0">
+      {/* 上面留出气泡的位置：局长坐在桌首，他说话时气泡不能盖住轮次条 */}
+      <div className="relative mt-2 shrink-0 pt-14">
         <NegotiationScene
           codes={codes}
           events={events}
@@ -200,8 +210,15 @@ export function LiveNegotiation({ state, me, onClose, live = true }: { state: Ju
         )}
       </div>
 
-      <div className={`min-h-0 flex-1 px-4 pt-2 ${done ? "overflow-y-auto" : "overflow-hidden"}`} style={{ maskImage: done ? undefined : "linear-gradient(transparent, #000 18%)" }}>
-        <div className={`flex flex-col ${done ? "min-h-full justify-end pb-2" : "h-full justify-end"}`}>
+      <div
+        ref={chatRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+        }}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-2"
+      >
+        <div className="flex min-h-full flex-col justify-end pb-2">
           {done ? <Result state={state} me={me} reduced={reduced} /> : <Bubbles events={events} step={ph.step} phase={waiting ? "hold" : ph.phase} typed={ph.typed} reduced={reduced} />}
           {waiting && <p className="mt-2 text-center text-[13px] font-bold text-cream-faint"><span className="animate-pulse">💬</span> 分身们正在想下一句…</p>}
         </div>
