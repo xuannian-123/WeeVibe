@@ -25,12 +25,17 @@ export function TopBar({ status, offline, right }: { status?: string; offline?: 
     <div className="flex items-center justify-between gap-2 pb-2" style={{ paddingTop: "max(14px, env(safe-area-inset-top))" }}>
       <Link href="/" className="flex min-h-11 items-center gap-2.5" aria-label="AI 局长首页">
         <SealLogo size={34} />
-        <span className="text-[17px] font-black tracking-wide">AI 局长</span>
+        {/* 窄屏放不下就只留印章（点它一样回首页） */}
+        <span className="hidden whitespace-nowrap text-[17px] font-black tracking-wide min-[400px]:inline">AI 局长</span>
       </Link>
       <div className="flex items-center gap-2">
         {offline && <span className="text-[12px] text-ink-faint">重连中…</span>}
         {status && <StatusBadge status={status} />}
-        <Link href="/me" data-tour="my-ju" className="min-h-10 px-1 py-2 text-[13px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4">
+        {/* 左上角的标志也能回首页，但看不出来能点：这里给一个明确的入口 */}
+        <Link href="/" className="min-h-10 whitespace-nowrap px-1 py-2 text-[13px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4">
+          首页
+        </Link>
+        <Link href="/me" data-tour="my-ju" className="min-h-10 whitespace-nowrap px-1 py-2 text-[13px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4">
           我的局
         </Link>
         {right}

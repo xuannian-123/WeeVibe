@@ -2,7 +2,7 @@
 
 import { useId } from "react";
 
-/* 隐私防火墙三层架构图：手写 SVG，横版（≥768px）/ 竖版（手机）两套坐标，内容同一份。
+/* AI 分身谈判架构图（分身 → 局长 + 规则 → 防火墙 → 公开谈判）：手写 SVG，横版（≥768px）/ 竖版（手机）两套坐标，内容同一份。
    颜色全部走 Tailwind 的 fill-/stroke- 工具类，dark: 跟随系统明暗。 */
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -20,41 +20,41 @@ type Layer = {
 const LAYERS: Layer[] = [
   {
     n: "1",
-    title: "私聊局长",
-    sub: "大模型 · 一人一个对话",
-    see: ["你自己说的话", "你的预算、门禁、忌口"],
+    title: "你的分身",
+    sub: "大模型 · 一人一个",
+    see: ["你的底线（≤3 条）", "你能让的、想要的"],
     blind: ["别人的任何信息"],
-    out: ["回复只给你本人"],
+    out: ["立场 + 一句话", "授权内必须同意"],
   },
   {
     n: "2",
-    title: "确定性规划器",
-    sub: "纯算法 · 不是大模型",
-    see: ["所有人的私密约束", "通勤、时段、刷卡"],
-    blind: ["不写任何文字"],
-    out: ["方案 + 审计哈希", "公开满意度只看通勤和时段"],
+    title: "局长 + 规则",
+    sub: "局长主持 · 算法拍板",
+    see: ["所有人的授权书", "每个分身的立场"],
+    blind: ["不看谁嗓门大"],
+    out: ["三级准则定方案", "同样记录 → 同样结论"],
     accent: true,
   },
   {
     n: "3",
-    title: "公开局长",
-    sub: "大模型 · 写群公告",
-    see: ["PublicFacts", "聚合后的结论"],
-    blind: ["任何人的私密信息"],
-    out: ["群公告 · 订位 · 回顾"],
+    title: "公开谈判",
+    sub: "谈判桌直播 · 群公告",
+    see: ["分身代号", "过了检查的发言"],
+    blind: ["名字·原因·钱数"],
+    out: ["谈判直播 · 群公告", "订位 · 回顾"],
   },
 ];
 
 const INPUTS: [string, string][] = [
-  ["🐰", "预算 80 就够了"],
-  ["🐻", "11 点前得回宿舍"],
-  ["🦊", "这次不太想去…"],
+  ["🐰", "人均别超 80"],
+  ["🐻", "11 点前得回"],
+  ["🦊", "远一点我能让"],
 ];
 
 const OUTPUTS: string[][] = [
-  ["有人预算偏紧，", "已按舒服的价位筛选"],
-  ["6 人全到，", "有人 21:20 需先走"],
-  ["说了不来的人，", "群里直接不存在"],
+  ["分身 B：这家我", "这边不行，换一家？"],
+  ["局长：6 人全到，", "有人 21:20 先走"],
+  ["代号按内容分配，", "对不上是谁"],
 ];
 
 type Layout = {
@@ -231,7 +231,7 @@ function Diagram({ L, compact }: { L: Layout; compact: boolean }) {
   const cx = (r: Rect) => r.x + r.w / 2;
 
   return (
-    <svg viewBox={`0 0 ${L.W} ${L.H}`} className="block h-auto w-full" role="img" aria-label="隐私防火墙三层架构：私聊局长、确定性规划器、公开局长">
+    <svg viewBox={`0 0 ${L.W} ${L.H}`} className="block h-auto w-full" role="img" aria-label="AI 分身谈判架构：你的分身、局长加规则、防火墙、公开谈判">
       <defs>
         <marker id={mk} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0 0 L10 5 L0 10 Z" className="fill-ink dark:fill-cream" />
@@ -244,7 +244,7 @@ function Diagram({ L, compact }: { L: Layout; compact: boolean }) {
 
       {/* 输入：成员私下说的话 */}
       <text x={L.inTitle.x} y={L.inTitle.y} fontSize="17" fontWeight="900" className={T.soft} letterSpacing="2">
-        成员私下说的
+        私下交给分身的
       </text>
       {L.inputs.map((r, i) => (
         <g key={i}>
@@ -269,7 +269,7 @@ function Diagram({ L, compact }: { L: Layout; compact: boolean }) {
           <PathArrow
             id={mk}
             d={`M${cx(l2)} ${l2.y + l2.h + 4} V${L.H - 16} H${L.outputs[2].x + L.outputs[2].w / 2} V${L.outputs[2].y + L.outputs[2].h + 8}`}
-            label="公开数字：只由通勤、时段算出，直接上大屏"
+            label="公开打分：只由通勤、时段算出，直接上大屏"
             lx={(w.x + w.w + L.outputs[2].x + L.outputs[2].w / 2) / 2}
             ly={L.H - 24}
           />
@@ -280,12 +280,12 @@ function Diagram({ L, compact }: { L: Layout; compact: boolean }) {
       ) : (
         <>
           <Arrow id={mk} a={[cx(l1), L.inputs[2].y + L.inputs[2].h + 4]} b={[cx(l1), l1.y - 6]} />
-          <Arrow id={mk} a={[cx(l1), l1.y + l1.h + 4]} b={[cx(l2), l2.y - 6]} label="约束→数字" />
-          <Arrow id={mk} a={[l2.x + 50, l2.y + l2.h + 4]} b={[l3.x + 50, l3.y - 6]} label="只有聚合结论" />
+          <Arrow id={mk} a={[cx(l1), l1.y + l1.h + 4]} b={[cx(l2), l2.y - 6]} label="立场" />
+          <Arrow id={mk} a={[l2.x + 50, l2.y + l2.h + 4]} b={[l3.x + 50, l3.y - 6]} label="逐句检查后的发言" />
           <PathArrow
             id={mk}
             d={`M${l2.x + l2.w + 4} ${l2.y + l2.h - 60} H${L.W - 22} V${L.outputs[0].y - 18} H${cx(L.outputs[0]) + 120} V${L.outputs[0].y - 6}`}
-            label="公开数字：只由通勤、时段算出"
+            label="公开打分：只由通勤、时段算出"
             lx={L.W - 8}
             ly={(l2.y + l2.h + L.outputs[0].y) / 2 + 40}
             rotate
@@ -301,14 +301,14 @@ function Diagram({ L, compact }: { L: Layout; compact: boolean }) {
           <g transform={`translate(${w.x + w.w / 2} ${w.y + w.h / 2}) rotate(-90)`}>
             <rect x="-170" y="-14" width="340" height="28" rx="6" className="fill-ink dark:fill-night" />
             <text textAnchor="middle" y="6" fontSize="16" fontWeight="900" fill="#fff" letterSpacing="1">
-              防火墙 · publicFacts() · 类型上拿不到私密字段
+              防火墙 · 分身每句话公开前都过检查
             </text>
           </g>
         ) : (
           <g transform={`translate(${w.x + w.w / 2} ${w.y + w.h / 2})`}>
             <rect x="-120" y="-14" width="240" height="28" rx="6" className="fill-ink dark:fill-night" />
             <text textAnchor="middle" y="6" fontSize="15" fontWeight="900" fill="#fff">
-              防火墙 · publicFacts()
+              防火墙 · 逐句检查
             </text>
           </g>
         )}
@@ -320,7 +320,7 @@ function Diagram({ L, compact }: { L: Layout; compact: boolean }) {
 
       {/* 输出：群里 / 大屏看到的 */}
       <text x={L.outTitle.x} y={L.outTitle.y} fontSize="17" fontWeight="900" className={T.soft} letterSpacing="2">
-        群里看到的
+        大家看到的
       </text>
       {L.outputs.map((r, i) => (
         <g key={i}>
@@ -351,15 +351,15 @@ export function FirewallDiagram() {
 
 /** 每层能看到什么 —— 一张表说清楚 */
 export const VISIBILITY: { what: string; cells: [boolean, boolean, boolean, boolean] }[] = [
-  { what: "私下说的预算数字", cells: [true, true, false, false] },
-  { what: "几点前得回（门禁）", cells: [true, true, false, false] },
-  { what: "忌口、私密备注", cells: [true, true, false, false] },
+  { what: "你的底线和原因（“人均别超 80”）", cells: [true, true, false, false] },
+  { what: "你能让什么、想争取什么", cells: [true, true, false, false] },
+  { what: "别人的授权书", cells: [false, true, false, false] },
+  { what: "忌口、过敏、私密备注", cells: [true, true, false, false] },
   { what: "谁说了不来", cells: [true, true, false, false] },
-  { what: "单方面的\"想认识\"", cells: [true, true, false, false] },
-  { what: "我觉得和谁熟不熟、今天的电量", cells: [true, true, false, false] },
   { what: "悄悄不想和谁一桌", cells: [true, true, false, false] },
-  { what: "座位表、\"新认识了几对\"", cells: [true, true, true, true] },
-  { what: "出发地、通勤时间", cells: [true, true, true, true] },
-  { what: "聚合结论（\"有人预算偏紧\"）", cells: [false, true, true, true] },
+  { what: "分身代号 ↔ 真实身份", cells: [false, true, false, false] },
+  { what: "分身说的话（已过检查）", cells: [true, true, true, true] },
+  { what: "选了哪个方案、为什么", cells: [true, true, true, true] },
+  { what: "聚合结论（“有人 21:20 先走”）", cells: [true, true, true, true] },
 ];
-export const VIS_COLS = ["私聊局长", "规划器", "公开局长", "群 / 大屏"];
+export const VIS_COLS = ["你的分身", "局长 + 规则", "公开谈判", "群 / 大屏"];

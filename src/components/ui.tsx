@@ -300,7 +300,7 @@ export function StatusBadge({ status }: { status: string }) {
   };
   const [text, cls] = map[status] ?? [status, "bg-line"];
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border-2 border-ink px-3 py-1 text-[13px] font-bold ${cls}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border-2 border-ink px-3 py-1 text-[13px] font-bold ${cls}`}>
       {status === "collecting" && <span className="size-2 animate-pulse rounded-full bg-cinnabar" />}
       {text}
     </span>

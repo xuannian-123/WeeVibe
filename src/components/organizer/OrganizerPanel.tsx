@@ -9,7 +9,7 @@ import { Button, RotatingText, Sheet } from "@/components/ui";
 import { toast } from "@/components/toast";
 import { InviteLinks } from "@/components/launch/InviteLinks";
 import { confirmedProposal, slotLabel, voteTally, yuan } from "@/components/screen/fmt";
-import { errMsg, organizerApi, type CreateResult, type OrganizerApi, type Payments } from "./api";
+import { errMsg, organizerApi, tierUrl, type CreateResult, type OrganizerApi, type Payments } from "./api";
 import { decisionOf } from "@/lib/decision";
 import { Card, CopyBlock, type Ctx } from "./bits";
 import { SeatingPanel } from "./Seating";
@@ -66,7 +66,15 @@ function useMessages(c: Ctx) {
 
 function Broadcast({ msgs, state }: { msgs: GroupMessages | null; state: JuState }) {
   const fallback = state.ju.announcements.at(-1)?.text;
-  const text = msgs?.broadcast || fallback;
+  const body = msgs?.broadcast || fallback;
+  // 群公告带上局的链接（分了圈就用核心圈的），群里的人点一下就能进来
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
+  const core = state.ju.admin?.tiers?.slice().sort((a, b) => a.tier - b.tier)[0];
+  const url = origin ? tierUrl(origin, state.ju.id, core?.token) : "";
+  const text = body && url && !body.includes(url) ? `${body}
+
+👉 点链接进局：${url}` : body;
   return (
     <Card title="📣 群公告" tour="org-broadcast">
       {text ? <CopyBlock text={text} label="复制群公告" clamp /> : <p className="text-[14px] text-ink-faint">局长在写…</p>}

@@ -36,7 +36,7 @@ export default function FirewallPage() {
       <main className="mx-auto w-full max-w-[1180px] overflow-x-clip px-4 pb-20 md:px-8">
         <header className="flex h-16 items-center gap-3">
           <SealLogo size={36} />
-          <span className="text-[17px] font-black">AI 局长 · 隐私防火墙</span>
+          <span className="text-[17px] font-black">AI 局长 · 分身谈判原理</span>
           <Link href="/" className="ml-auto text-[14px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4 dark:text-cream-faint">
             去组个局 →
           </Link>
@@ -46,15 +46,15 @@ export default function FirewallPage() {
           <h1 className="text-[34px] font-black leading-[1.15] tracking-tight md:text-[56px]">
             说不出口的话，
             <br />
-            <span className="text-cinnabar">进得来，出不去。</span>
+            <span className="text-cinnabar">让分身替你谈。</span>
           </h1>
           <p className="mt-4 max-w-[640px] text-[16px] leading-relaxed text-ink-soft md:text-[19px] dark:text-cream-faint">
-            预算、门禁、不想去 —— 私下告诉局长。局长用这些信息帮大家挑方案，但对外只说聚合结论。
-            而且我们不靠“保证”，靠<b className="text-ink dark:text-cream">结构</b>和<b className="text-ink dark:text-cream">每次都跑的检验</b>。
+            预算、门禁、能让什么 —— 私下交给自己的 AI 分身。分身们当着所有人的面谈判，局长主持、规则拍板，
+            谁守着什么底线，从谈判记录里看不出来。我们不靠“保证”，靠<b className="text-ink dark:text-cream">结构</b>和<b className="text-ink dark:text-cream">每次都跑的检验</b>。
           </p>
         </section>
 
-        <Section n="1" title="三层隔离：每一层只看得到它该看的">
+        <Section n="1" title="谁知道什么：分身只知道主人，规则看得到全部但不说话">
           <div className={`${card} p-3 md:p-6`}>
             <FirewallDiagram />
           </div>
@@ -83,11 +83,63 @@ export default function FirewallPage() {
                 ))}
               </tbody>
             </table>
-            <p className="mt-2 text-[12px] text-ink-faint dark:text-cream-faint">私聊局长一人一个对话，只看得到、也只回复本人。</p>
+            <p className="mt-2 text-[12px] text-ink-faint dark:text-cream-faint">每个分身是单独的一次大模型调用，提示里只有主人自己的授权书；别人的分身问什么，它也只能按主人的授权回答。</p>
           </div>
         </Section>
 
-        <Section n="2" title="实时自检：把两个人的秘密对调，公开内容一个字都不能变">
+        <Section n="2" title="谈判公开，拍板靠规则：不是谁嗓门大听谁的">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className={`${card} p-5`}>
+              <div className="text-[13px] font-black tracking-widest text-cinnabar">先过底线</div>
+              <p className="mt-2 text-[16px] leading-relaxed">
+                每个分身先亮出主人的底线（最多 3 条），碰底线的方案直接出局；授权书里写了“可以让”的，分身<b>必须让</b>，不讨价还价。
+                <span className="text-ink-soft dark:text-cream-faint">让了步的人，局长会在后面记一笔补偿。</span>
+              </p>
+            </div>
+            <div className={`${card} p-5`}>
+              <div className="text-[13px] font-black tracking-widest text-cinnabar">三级准则</div>
+              <p className="mt-2 text-[16px] leading-relaxed">
+                ① 照顾到的人最多 → ② 最吃亏的那个人别太吃亏 → ③ 大家加起来最满意。
+                <span className="text-ink-soft dark:text-cream-faint">一级定不下来才看下一级，全程是算法，不是大模型拍脑袋。</span>
+              </p>
+            </div>
+            <div className={`${card} p-5`}>
+              <div className="text-[13px] font-black tracking-widest text-cinnabar">只在一样公平的方案里讨论</div>
+              <p className="mt-2 text-[16px] leading-relaxed">
+                准则打平的几个方案，才交给分身们辩论：支持、可以让、反对，按票算分。
+                <span className="text-ink-soft dark:text-cream-faint">同样的谈判记录一定得到同样的结论，任何人都能复算。</span>
+              </p>
+            </div>
+          </div>
+        </Section>
+
+        <Section n="3" title="分身的嘴上了锁：每句话公开前都过检查">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className={`${card} p-5`}>
+              <div className="text-[13px] font-black tracking-widest text-cinnabar">没有名字</div>
+              <p className="mt-2 text-[16px] leading-relaxed">
+                谈判桌上只有“分身 A、B、C”。代号按<b>发言内容</b>分配，跟是谁无关 —— 同样的话换个人说，代号也一样。
+                <span className="text-ink-soft dark:text-cream-faint">提到任何成员名字的话，直接拦下。</span>
+              </p>
+            </div>
+            <div className={`${card} p-5`}>
+              <div className="text-[13px] font-black tracking-widest text-cinnabar">不说原因，不报数</div>
+              <p className="mt-2 text-[16px] leading-relaxed">
+                分身只能说“这家我这边不行”，不能说为什么；预算数字、“一百五”这种中文数字、私密备注原文，一律拦。
+                <span className="text-ink-soft dark:text-cream-faint">能出现的数字，只有方案里本来就公开的。</span>
+              </p>
+            </div>
+            <div className={`${card} p-5`}>
+              <div className="text-[13px] font-black tracking-widest text-cinnabar">拦下也不冷场</div>
+              <p className="mt-2 text-[16px] leading-relaxed">
+                被拦下的话换成按立场生成的固定句子，立场照样算数。
+                <span className="text-ink-soft dark:text-cream-faint">大模型说漏嘴，最多是少一句俏皮话，不会多一句秘密。</span>
+              </p>
+            </div>
+          </div>
+        </Section>
+
+        <Section n="4" title="实时自检：把两个人的秘密对调，公开内容一个字都不能变">
           <div className="grid gap-4 md:grid-cols-[1.1fr_1fr]">
             <div className={`${card} p-5 md:p-7`}>
               <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
@@ -126,6 +178,9 @@ export default function FirewallPage() {
                   <b className="text-ink dark:text-cream">交换检验：</b>造两个公开信息一模一样的人 A、B，只有私密信息不同。生成全部公开输出，再把两人的秘密对调重来一遍 —— 两份输出必须逐字节相同（A、B 互换后）。
                 </li>
                 <li>
+                  <b className="text-ink dark:text-cream">谈判检验：</b>把 A、B 的授权书、心情、需求整个对调，重新谈一遍 —— 公开谈判记录必须逐字相同，说话的只有局长和分身代号。
+                </li>
+                <li>
                   <b className="text-ink dark:text-cream">字面检验：</b>私密备注原文、预算数字、说了不来的名字、候补的名字……一个字都不许出现在任何公开输出里。
                 </li>
                 <li>
@@ -136,7 +191,7 @@ export default function FirewallPage() {
           </div>
         </Section>
 
-        <Section n="3" title="攒批重算：连「什么时候变了」都不泄露">
+        <Section n="5" title="攒批重算：连「什么时候变了」都不泄露">
           <div className={`${card} p-5 md:p-7`}>
             <div className="grid items-center gap-5 md:grid-cols-[1fr_auto_1fr]">
               <div className="rounded-xl border-2 border-dashed border-cinnabar p-4">
@@ -160,7 +215,7 @@ export default function FirewallPage() {
           </div>
         </Section>
 
-        <Section n="4" title="可否认的排座：座位用了你的秘密，但从座位推不出来">
+        <Section n="6" title="可否认的排座：座位用了你的秘密，但从座位推不出来">
           <div className="grid gap-4 md:grid-cols-3">
             <div className={`${card} p-5`}>
               <div className="text-[13px] font-black tracking-widest text-cinnabar">双方取高</div>
@@ -189,13 +244,14 @@ export default function FirewallPage() {
           </p>
         </Section>
 
-        <Section n="5" title="评委可以试试">
+        <Section n="7" title="评委可以试试">
           <div className="grid items-center gap-5 rounded-[var(--radius-card)] border-2 border-ink bg-mustard p-5 text-ink shadow-sticker md:grid-cols-[1fr_auto] md:p-8 dark:border-mustard">
             <div>
               <p className="text-[24px] font-black leading-snug md:text-[34px]">扫码进局，私下问局长：</p>
               <p className="mt-2 text-[30px] font-black leading-snug text-cinnabar-deep md:text-[44px]">“谁预算最紧？”</p>
               <p className="mt-4 max-w-[560px] text-[15px] leading-relaxed text-ink-soft md:text-[17px]">
                 局长知道答案 —— 但它只会告诉你“有人预算偏紧，已经按大家都舒服的价位筛过了”。连发起人问，也是这句。
+                再去看谈判直播，猜猜分身 B 是谁。
               </p>
             </div>
             {juUrl ? (
