@@ -123,10 +123,24 @@ export function SpecPreview({ draft, onChange }: { draft: Draft; onChange: (d: D
         </Field>
       </div>
       <Field label="大概几个人">
-        <div className="flex items-center">
-          <Stepper ariaLabel="人数" value={s.headcount ?? 4} min={2} max={50} onChange={(v) => set({ headcount: v })} />
+        <div className="flex items-center gap-2">
+          {s.headcount ? (
+            <>
+              <Stepper ariaLabel="人数" value={s.headcount} min={2} max={50} onChange={(v) => set({ headcount: v })} />
+              <button type="button" className="min-h-10 px-1 text-[12.5px] font-bold text-ink-soft underline decoration-ink-faint underline-offset-4" onClick={() => set({ headcount: undefined })}>
+                不确定
+              </button>
+            </>
+          ) : (
+            <button type="button" className="min-h-11 rounded-xl border-2 border-dashed border-ink px-3 text-[14px] font-bold" onClick={() => set({ headcount: 4 })}>
+              ＋ 填人数
+            </button>
+          )}
           <span className="ml-auto text-[13px] text-ink-faint">📍 {s.city}</span>
         </div>
+        <span className="mt-1 block text-[12px] text-ink-faint">
+          {s.headcount ? `到 ${s.headcount} 个人、都交了授权书，分身们就自动开谈` : "没填人数：大家都交了授权书时局长会提醒你，由你点开谈"}
+        </span>
       </Field>
     </div>
   );

@@ -603,17 +603,35 @@ export type AdvanceDeps = Omit<PlanDeps, "now"> & { profiles: Record<string, Pro
 /** 人齐了自动开谈的最少人数（两三个人的局直接让发起人点） */
 export const AUTO_START_MIN = 3;
 
+/**
+ * 人齐了没有：还没点开链接的朋友不在局里，所以"在局的人都交了授权书"不等于人齐了。
+ * 发起人说了人数（spec.headcount）：在局人数到了、并且都交了授权书 = 齐了，自动开谈；
+ * 没说人数：不自动开谈，只提醒发起人"人齐了吗？齐了就点开谈"（每多一个人交了提醒一次）。截止时间到了照常开谈。
+ */
+export function readyToTalk(ju: Ju, members: Member[]): "auto" | "ask" | false {
+  const ins = inOnly(members);
+  if (ju.status !== "collecting" || quorumHidden(ju) || ins.length < AUTO_START_MIN || !ins.every((m) => m.intake === "done")) return false;
+  const want = ju.spec.headcount;
+  if (want && want >= AUTO_START_MIN) return ins.length >= want ? "auto" : false;
+  return "ask";
+}
+
 export async function advance(ju: Ju, members: Member[], priv: JuPrivate, now: Date, deps: AdvanceDeps): Promise<boolean> {
   let dirty = failQuorumIfDue(ju, members, now);
   if (ju.status === "cancelled") return dirty;
   const deadlinePassed = !!ju.deadline && now.getTime() >= Date.parse(ju.deadline);
 
-  // v6 人齐了自动开谈：在局里的人（至少 3 位）都交了授权书，不等发起人点
-  const ins = inOnly(members);
-  if (ju.status === "collecting" && !quorumHidden(ju) && ins.length >= AUTO_START_MIN && ins.every((m) => m.intake === "done")) {
-    appendTraceAt(ju, "listen", `人齐了：${ins.length} 位朋友都把授权书交给了分身，开谈`, now);
+  // v6 人齐了自动开谈（发起人说的人数到了、都交了授权书）；没说人数就提醒发起人一键开谈
+  const ready = readyToTalk(ju, members);
+  if (ready === "auto") {
+    appendTraceAt(ju, "listen", `人齐了：${inOnly(members).length} 位朋友都把授权书交给了分身，开谈`, now);
     await computePlan(ju, members, priv, { ...deps, now });
     return true;
+  }
+  if (ready === "ask") {
+    const k = inOnly(members).length;
+    const org = members.find((m) => m.isOrganizer && m.status === "in");
+    if (org && pushNoticeOnce(org, "nudge", `${ju.id}-ready-${k}`, `在局的 ${k} 位朋友都交了授权书。人齐了吗？齐了就点「出方案」让分身们开谈；还有人没来就再等等。`, now)) dirty = true;
   }
 
   if (ju.status === "collecting" && deadlinePassed && !quorumHidden(ju) && inOnly(members).length > 0) {

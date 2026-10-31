@@ -44,7 +44,8 @@ function MiniTable({ codes, events, step, phase, reduced }: { codes: string[]; e
         return (
           <div
             key={code}
-            className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center transition-all duration-300"
+            className="absolute flex flex-col items-center transition-all duration-300"
+            // 居中只靠这里的 translate（Tailwind 的 -translate-* 是单独的 translate 属性，和 transform 叠加会偏两次）
             style={{ left: x, top: y, opacity: dim ? 0.35 : 1, transform: `translate(-50%, -50%) scale(${on ? 1.18 : 1})` }}
           >
             {on && !reduced && <span className="absolute size-11 rounded-full border-2" style={{ borderColor: tone.fg, animation: "ln-ripple 1.1s ease-out infinite" }} />}
