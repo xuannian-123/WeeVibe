@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # 部署预览版：同一个域名，浏览器打开 /__preview/on 之后看到的是预览版，/__preview/off 切回线上版。其他人不受影响。
-# 预览版跑在本机 3101（systemd: juzhang-preview），用线上库的一份副本（每次部署重新复制），任何操作都不碰线上数据。
-# 用法：bash scripts/deploy-preview.sh        撤掉预览：bash scripts/deploy-preview.sh --remove
+# 预览版跑在本机 3101（systemd: juzhang-preview），用线上库的一份副本（第一次部署或 --fresh-db 时复制），任何操作都不碰线上数据。
+# 用法：bash scripts/deploy-preview.sh             保留预览版里已有的数据
+#       bash scripts/deploy-preview.sh --fresh-db  重新复制一份线上库（预览版里建的局会清掉）
+#       bash scripts/deploy-preview.sh --remove    撤掉预览
 set -euo pipefail
 
 HOST=admin@8.133.220.184
@@ -26,7 +28,8 @@ fi
 
 echo "==> 构建"
 rm -rf "$DIST"
-NEXT_DIST_DIR=$DIST npx next build >/dev/null
+# 预览标记在构建时打进去（线上版构建里没有）
+NEXT_PUBLIC_JUZHANG_PREVIEW=1 NEXT_DIST_DIR=$DIST npx next build >/dev/null
 
 echo "==> 打包"
 STAGE=$(mktemp -d)
@@ -48,10 +51,13 @@ $SSH "set -e
   sudo ln -sfn /opt/juzhang-preview/releases/$REL /opt/juzhang-preview/current
   ls -1dt /opt/juzhang-preview/releases/* | tail -n +4 | xargs -r sudo rm -rf
 
-  # 线上库的一份副本（VACUUM INTO 在线一致地复制，不影响线上服务）
+  # 线上库的一份副本（VACUUM INTO 在线一致地复制，不影响线上服务）：第一次部署或 --fresh-db 才复制
+  if [ ! -f /var/lib/juzhang-preview/juzhang.db ] || [ '${1:-}' = '--fresh-db' ]; then
+  sudo systemctl stop juzhang-preview 2>/dev/null || true
   sudo rm -f /var/lib/juzhang-preview/juzhang.db /var/lib/juzhang-preview/juzhang.db-wal /var/lib/juzhang-preview/juzhang.db-shm
   sudo /usr/local/bin/node -e \"new (require('node:sqlite').DatabaseSync)(process.argv[1]).exec(\\\"VACUUM INTO '\\\" + process.argv[2] + \\\"'\\\")\" /var/lib/juzhang/juzhang.db /var/lib/juzhang-preview/juzhang.db
   sudo chown juzhang:juzhang /var/lib/juzhang-preview/juzhang.db
+  fi
 
   # 环境变量：线上的那份，改端口、库、照片目录
   sudo sh -c 'grep -vE \"^(PORT|JUZHANG_DB|JUZHANG_PHOTOS_DIR)=\" /etc/juzhang.env > /etc/juzhang-preview.env; printf \"PORT=3101\nJUZHANG_DB=/var/lib/juzhang-preview/juzhang.db\nJUZHANG_PHOTOS_DIR=/var/lib/juzhang-preview/photos\n\" >> /etc/juzhang-preview.env; chmod 600 /etc/juzhang-preview.env'

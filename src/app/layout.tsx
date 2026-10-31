@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/space-grotesk";
 import "./globals.css";
 import { Toaster } from "@/components/toast";
+import { PreviewBadge } from "@/components/PreviewBadge";
 
 export const metadata: Metadata = {
   title: "AI 局长 · 一句话，局就组好了",
@@ -25,6 +26,7 @@ export default function RootLayout({
       <body className="antialiased">
         {children}
         <Toaster />
+        <PreviewBadge />
       </body>
     </html>
   );
