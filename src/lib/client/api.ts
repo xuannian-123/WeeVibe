@@ -175,6 +175,8 @@ export type ChatBody =
       addNeed?: { text: string; kind: "hard" | "soft" };
       /** 删掉自己写的一条（need id） */
       removeNeed?: string;
+      /** 想干什么里自己写的活动 */
+      customActivity?: string;
     };
 export type ChatResult = ChatReply & { me: Member };
 

@@ -2,7 +2,7 @@
 // 格子：哪天有空 / 从哪出发 / 预算 / 这次的状态 / 想干什么 / 讲究。前三格必填，后三格空着 = 交给分身和局长。
 import type { AvatarStyle, DayAvailability, DietTag, Give, Ju, JuState, Member, Mood, Place, Profile } from "../types";
 import type { ChatBody } from "./api";
-import { activityOf } from "./activities";
+import { activityKeyOfWord, activityOf } from "./activities";
 import { weekday } from "./format";
 import { careTag, careTagsOf, chosenFloors, GIVE_BY_STYLE, MOOD_LABEL, wantedActivitiesOf } from "./mandate";
 import { moodDefault } from "./profileFacts";
@@ -21,6 +21,8 @@ export type Draft = {
   moodGuessed?: boolean;
   activityOpen: boolean;
   activities: string[];
+  /** 自己写的、活动库里没有的活动（"陶艺"）：只读，增删走 customActivity / removeNeed */
+  customActivities?: string[];
   /** 讲究里的需求类标签（忌口类在 diet 里） */
   tags: string[];
   style: AvatarStyle;
@@ -59,6 +61,7 @@ export function draftFor(state: JuState, me: Member, profile?: Profile | null, o
     ...(p?.mood ? { mood: p.mood } : guessed ? { mood: guessed, moodGuessed: true } : {}),
     activityOpen: !!p?.activityOpen,
     activities: wantedActivitiesOf(p ?? empty),
+    customActivities: (p?.needs ?? []).flatMap((n) => (n.rule.t === "preferCategory" ? n.rule.words.filter((w) => !activityKeyOfWord(w)) : [])),
     tags: careTagsOf(p ?? empty).filter((k) => !careTag(k)?.diet),
     style,
     give: { ...(p?.mandate?.give ?? GIVE_BY_STYLE[style]) },
@@ -78,7 +81,12 @@ export function cellValues(d: Draft): Record<CellKey, string | undefined> {
     from: d.location?.label || (d.location ? "已定位" : undefined),
     budget: Number.isFinite(budget) && budget > 0 ? `人均 ¥${Math.round(budget)} 以内` : undefined,
     mood: d.mood ? `${MOOD_LABEL[d.mood].emoji} ${MOOD_LABEL[d.mood].text}` : undefined,
-    activity: d.activityOpen ? "🎲 局长定" : d.activities.length ? d.activities.map((k) => `${activityOf(k)?.emoji ?? ""}${activityOf(k)?.name ?? k}`).join("、") : undefined,
+    activity:
+      d.activityOpen && !d.customActivities?.length
+        ? "🎲 局长定"
+        : d.activities.length || d.customActivities?.length
+          ? [...d.activities.map((k) => `${activityOf(k)?.emoji ?? ""}${activityOf(k)?.name ?? k}`), ...(d.customActivities ?? []).map((w) => `✨${w}`)].join("、")
+          : undefined,
     care: careLabels.length ? careLabels.join("、") : undefined,
   };
 }

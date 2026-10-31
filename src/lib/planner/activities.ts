@@ -8,10 +8,10 @@ import type { ActivityDef, JuSpec, Member, Mood, NeedStrength, Profile, WeatherD
 import { budgetDegree, CARE_FLOOR, HARD_DIET } from "./experience";
 import { slotWeather, type WeatherKind } from "./external";
 import { softPenalty } from "./needs";
-import { ACTIVITY_LIB, activityByKey, type ActivityInfo } from "./activityLib";
+import { ACTIVITY_LIB, activityByKey, customActivity, libActivityOfWord, type ActivityInfo } from "./activityLib";
 import { bjIso, clamp, hmToMin } from "./util";
 
-export { ACTIVITY_LIB, activityByKey, type ActivityInfo } from "./activityLib";
+export { ACTIVITY_LIB, activityByKey, customActivity, libActivityOfWord, CUSTOM_PREFIX, type ActivityInfo } from "./activityLib";
 
 /** 所有说法（长的在前，避免"看电影"被拆成"电影"之外的东西） */
 const ALIASES: { alias: string; key: string }[] = ACTIVITY_LIB.flatMap((a) => a.aliases.map((alias) => ({ alias: alias.toLowerCase(), key: a.key }))).sort(
@@ -334,10 +334,20 @@ export type ActivityScore = Graded & {
   excluded: boolean;
 };
 
-/** 候选活动池：spec.activities 里认识的那些；没给（或一个都不认识）= 全库 */
-export function candidatePool(spec: Pick<JuSpec, "activities">): ActivityInfo[] {
+/**
+ * 候选活动池：spec.activities 里认识的那些；没给（或一个都不认识）= 全库。
+ * 发起人没把候选定死时，再加上大家自己写的、活动库里没有的活动（"陶艺""猫咖"），用那个词直接搜店。
+ */
+export function candidatePool(spec: Pick<JuSpec, "activities" | "open">, members: Member[] = []): ActivityInfo[] {
   const pool = (spec.activities ?? []).map((k) => activityByKey(k)).filter((a): a is ActivityInfo => !!a);
-  return pool.length ? [...new Set(pool)] : ACTIVITY_LIB;
+  const base = pool.length ? [...new Set(pool)] : ACTIVITY_LIB;
+  if (pool.length && !spec.open) return base;
+  const words = new Set<string>();
+  for (const m of members)
+    for (const n of m.private?.needs ?? [])
+      if (n.dim === "activity" && n.rule.t === "preferCategory") for (const w of n.rule.words) if (w.trim() && !libActivityOfWord(w)) words.add(w.trim().slice(0, 12));
+  // 排序保证确定性（和谁写的、加入顺序都无关）
+  return [...base, ...[...words].sort().map(customActivity)];
 }
 
 /**
@@ -351,12 +361,13 @@ export function scoreActivities(
   opts: { profiles?: Record<string, ActivityProfile>; weights?: number[] } = {},
 ): ActivityScore[] {
   const weights = members.map((_, i) => opts.weights?.[i] ?? 1);
-  const pool = candidatePool(spec);
+  const pool = candidatePool(spec, members);
   const out = pool.map((a) => {
     const detail = members.map((m) => activityFit(m, a, { spec, forecast, profile: opts.profiles?.[m.id], headcount: members.length }));
     const fits = detail.map(singleFit);
     const hard = detail.map((d) => d.hard);
-    return { key: a.key, act: a, detail, excluded: weatherFit(a, spec, forecast).infeasible, ...grade(fits, hard, weights, ACTIVITY_LIB.indexOf(a)) };
+    const order = ACTIVITY_LIB.includes(a) ? ACTIVITY_LIB.indexOf(a) : ACTIVITY_LIB.length + pool.indexOf(a);
+    return { key: a.key, act: a, detail, excluded: weatherFit(a, spec, forecast).infeasible, ...grade(fits, hard, weights, order) };
   });
   return out.sort((a, b) => (a.excluded !== b.excluded ? (a.excluded ? 1 : -1) : gradeCompare(a, b)));
 }

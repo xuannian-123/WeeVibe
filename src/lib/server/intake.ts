@@ -35,6 +35,7 @@ import {
   recomputeMatches,
   setMemberStatus,
 } from "./ju-core";
+import { activitiesIn, activityByKey, libActivityOfWord } from "../planner/activities";
 import { customNeed, type CustomNeed } from "../planner/customNeed";
 import { materializeNeeds } from "../planner/needs";
 import { applyOnboarding, commuteLimitOf, getProfile, isFloorFact, learnedFacts, learnFromMember, saidFacts, saveProfile } from "./profile";
@@ -264,6 +265,17 @@ function applyCard(ctx: MutateCtx, me: Member, body: ChatBody, profile: Profile 
       m.floors = [...new Set([...chosenFloors(p).filter((k) => !keys.includes(k)), ...keys])].slice(0, MAX_FLOORS);
       p.mandate = m;
     }
+    changed = true;
+  }
+  // 想干什么里自己写的活动：活动库里有这个说法就归到那个活动（"唱歌"= KTV），没有就原样记下，局长用这个词去搜店
+  if (body.customActivity) {
+    const w = body.customActivity.trim();
+    const known = libActivityOfWord(w) ?? activityByKey(activitiesIn(w)[0] ?? "");
+    const n: Omit<Need, "id" | "at" | "source"> = known
+      ? { ...activityNeed([known.key])!, text: `想去${known.name}` }
+      : { dim: "activity", kind: "soft", strength: 2, rule: { t: "preferCategory", words: [w] }, text: `想去${w}` };
+    p.needs = materializeNeeds(p.needs ?? [], [n], "widget", at);
+    p.activityOpen = false;
     changed = true;
   }
   if (body.removeNeed) {

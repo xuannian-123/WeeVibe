@@ -1,7 +1,6 @@
-// v6 建档滑卡 / 授权书「想干什么」用的活动小清单（本地临时版）。
-// 线 A 在做 planner/activities.ts 的 ACTIVITY_LIB（完整的 ActivityDef）；合并后由 leader 把这里换成它，
-// key 已经按 ActivityDef.key 命名（hotpot / ktv / climbing …），换的时候只需要改 import。
+// v6 建档滑卡 / 授权书「想干什么」用的活动清单。LOCAL_ACTIVITIES 带滑卡文案；其余的从活动库（planner/activityLib，不依赖 node）补齐。
 // 纯数据 + 纯函数：前端组件和服务端（intake / profile）都能 import。
+import { ACTIVITY_LIB } from "../planner/activityLib";
 
 export type LocalActivity = {
   /** = ActivityDef.key */
@@ -43,7 +42,25 @@ export const LOCAL_ACTIVITIES: LocalActivity[] = [
 /** 建档滑卡的 10 张 */
 export const ONBOARD_DECK = ["hotpot", "bbq", "ktv", "boardgame", "jubensha", "escape", "climbing", "hiking", "exhibition", "livehouse"] as const;
 
-const BY_KEY = new Map(LOCAL_ACTIVITIES.map((a) => [a.key, a]));
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** 授权书「想干什么」里能点的全部活动：带文案的在前，活动库里其余的补在后面 */
+export const ALL_ACTIVITIES: LocalActivity[] = [
+  ...LOCAL_ACTIVITIES,
+  ...ACTIVITY_LIB.filter((a) => !LOCAL_ACTIVITIES.some((l) => l.key === a.key)).map((a) => ({
+    key: a.key,
+    name: a.name,
+    emoji: a.emoji,
+    energy: a.energy,
+    talk: a.talk,
+    loud: a.loud,
+    blurb: "",
+    words: new RegExp([a.name, ...a.aliases].map(escapeRe).join("|"), "i"),
+    category: a.name,
+  })),
+];
+
+const BY_KEY = new Map(ALL_ACTIVITIES.map((a) => [a.key, a]));
 
 export function activityOf(key: string): LocalActivity | undefined {
   return BY_KEY.get(key);
@@ -53,5 +70,5 @@ export function activityOf(key: string): LocalActivity | undefined {
 export function activityKeyOfWord(word: string): string | undefined {
   const w = word.trim();
   if (!w) return undefined;
-  return LOCAL_ACTIVITIES.find((a) => a.category === w || a.name === w || a.words.test(w))?.key;
+  return ALL_ACTIVITIES.find((a) => a.category === w || a.name === w || a.words.test(w))?.key;
 }

@@ -10,7 +10,7 @@ import type { JuActions } from "@/lib/client/useJu";
 import { api, errMsg, type ChatBody } from "@/lib/client/api";
 import { store } from "@/lib/client/storage";
 import { dayLabel } from "@/lib/client/format";
-import { LOCAL_ACTIVITIES } from "@/lib/client/activities";
+import { activityKeyOfWord, ALL_ACTIVITIES } from "@/lib/client/activities";
 import { CARE_TAGS, GIVE_BY_STYLE, GIVE_MAX, HARD_DIET, MAX_FLOORS, MOOD_LABEL, STYLE_LABEL } from "@/lib/client/mandate";
 import { needsOnboarding } from "@/lib/client/profileFacts";
 import { bodyOf, cellValues, draftFor, draftProblem, examplePrompt, litCells, missingRequired, type CellKey, type Day, type Draft } from "@/lib/client/intakeDraft";
@@ -121,7 +121,7 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [floorWarn, setFloorWarn] = useState(false);
-  const [ownText, setOwnText] = useState<{ hard: string; soft: string }>({ hard: "", soft: "" });
+  const [ownText, setOwnText] = useState<{ hard: string; soft: string; act: string; care: string }>({ hard: "", soft: "", act: "", care: "" });
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [same, setSame] = useState(() => isReturning(me, profile));
   const litTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -225,8 +225,8 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
   };
 
   /** 自己写一条底线 / 想要：先存卡片上改过的，再交给服务端转成规则；新的格子亮一下 */
-  const addOwn = async (kind: "hard" | "soft") => {
-    const t = ownText[kind].trim();
+  const addOwn = (kind: "hard" | "soft") => addOwnText(ownText[kind].trim(), kind);
+  const addOwnText = async (t: string, kind: "hard" | "soft") => {
     if (busy || !t) return;
     if (kind === "hard" && floors.length >= MAX_FLOORS) return setFloorWarn(true);
     setBusy(true);
@@ -247,6 +247,34 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
       setBusy(false);
     }
   };
+  /** 想干什么里自己写一个活动（"陶艺""猫咖"）：局长用这个词去搜店 */
+  const addActivity = async () => {
+    const t = ownText.act.trim();
+    if (busy || !t) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (dirty && !pending) await actions.chat(bodyOf(final, "review"));
+      const r = await actions.chat({ customActivity: t, preferenceAction: "review" });
+      const next = draftFor(state, r.me, profile);
+      flash(litCells(draft, next));
+      setDraft(next);
+      setDirty(false);
+      setSame(false);
+      setOwnText((o) => ({ ...o, act: "" }));
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  /** 讲究里自己写一条（软的"想要"） */
+  const addCare = async () => {
+    const t = ownText.care.trim();
+    if (!t) return;
+    setOwnText((o) => ({ ...o, care: "" }));
+    await addOwnText(t, "soft");
+  };
   const removeOwn = async (id: string) => {
     if (busy) return;
     setBusy(true);
@@ -265,7 +293,9 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
   };
   // 本人亲手写的（卡片 / 建档里写的），可以删
   const ownIds = new Set((me.private?.needs ?? []).filter((n) => n.source === "widget" && !CARE_TAGS.some((t) => t.match?.(n))).map((n) => n.id));
-  const ownWants = (me.private?.needs ?? []).filter((n) => ownIds.has(n.id) && n.kind === "soft");
+  // 自己写的活动（活动库里没有的）：在"想干什么"里显示，可以删
+  const customActs = (me.private?.needs ?? []).filter((n) => n.rule.t === "preferCategory" && n.rule.words.some((w) => !activityKeyOfWord(w)));
+  const ownWants = (me.private?.needs ?? []).filter((n) => ownIds.has(n.id) && n.kind === "soft" && !customActs.includes(n));
   // 算不了的（"芒果过敏"）：如实标出来
   const customKeys = new Set((me.private?.needs ?? []).filter((n) => n.rule.t === "custom").map((n) => n.id));
 
@@ -593,7 +623,7 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
             <>
               <Chip selected={draft.activityOpen} onClick={() => edit({ activityOpen: !draft.activityOpen, activities: [] })} className="w-full">🎲 局长定（按大家的状态挑）</Chip>
               <div className="flex flex-wrap gap-2">
-                {LOCAL_ACTIVITIES.map((a) => (
+                {ALL_ACTIVITIES.map((a) => (
                   <Chip
                     key={a.key}
                     selected={!draft.activityOpen && draft.activities.includes(a.key)}
@@ -603,7 +633,22 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
                     {a.emoji} {a.name}
                   </Chip>
                 ))}
+                {customActs.map((n) => (
+                  <span key={n.id} className="inline-flex min-h-11 items-center gap-1 rounded-full border-2 border-ink bg-mustard pl-3 text-[14px] font-bold">
+                    ✨ {n.rule.t === "preferCategory" ? n.rule.words.join("、") : n.text}
+                    <button type="button" aria-label={`删掉：${n.text}`} className="flex size-10 items-center justify-center text-ink-soft" onClick={() => void removeOwn(n.id)}>✕</button>
+                  </span>
+                ))}
               </div>
+              <OwnInput
+                value={ownText.act}
+                onChange={(v) => setOwnText((o) => ({ ...o, act: v }))}
+                onAdd={() => void addActivity()}
+                busy={busy}
+                placeholder="自己写一个，比如：陶艺、猫咖、看海"
+                cta="加上"
+              />
+              <p className="text-[12px] text-ink-faint">列表里没有的也行，局长会拿这个词去地图上找店，和别的活动一起比。</p>
             </>
           )}
           {open === "care" && (
@@ -626,6 +671,24 @@ function MandateCard({ state, me, actions, profile }: { state: JuState; me: Memb
                   <Chip key={d} selected={draft.diet.includes(d)} onClick={() => edit({ diet: draft.diet.includes(d) ? draft.diet.filter((x) => x !== d) : [...draft.diet, d] })} className="px-3 text-[14px]">{d}</Chip>
                 ))}
               </div>
+              {ownWants.length > 0 && (
+                <ul className="space-y-1">
+                  {ownWants.map((x) => (
+                    <li key={x.id} className="flex items-center gap-2 text-[13.5px] font-bold">
+                      <span className="min-w-0 flex-1 break-words">✏️ {x.text}</span>
+                      <button type="button" aria-label={`删掉：${x.text}`} className="min-h-9 min-w-9 shrink-0 text-ink-soft" onClick={() => void removeOwn(x.id)}>✕</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <OwnInput
+                value={ownText.care}
+                onChange={(v) => setOwnText((o) => ({ ...o, care: v }))}
+                onAdd={() => void addCare()}
+                busy={busy}
+                placeholder="自己写一条，比如：想有个能拍照的地方"
+                cta="加上"
+              />
               <p className="text-[12px] text-ink-faint">都是“尽量”；绝对不能碰的，在授权书的「底线」里勾上。</p>
             </>
           )}

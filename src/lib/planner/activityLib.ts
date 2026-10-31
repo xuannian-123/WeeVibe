@@ -61,5 +61,43 @@ export const ACTIVITY_LIB: ActivityInfo[] = [
 const BY_KEY = new Map(ACTIVITY_LIB.map((a) => [a.key, a]));
 
 export function activityByKey(key: string): ActivityInfo | undefined {
+  if (key.startsWith(CUSTOM_PREFIX)) return customActivity(key.slice(CUSTOM_PREFIX.length));
   return BY_KEY.get(key);
+}
+
+// ---------------------------------------------------------------- 本人自己写的活动（"陶艺""猫咖""保龄球"）
+
+/** 活动库里没有、本人在"想干什么"里自己写的：key = "custom:陶艺"，用这个词直接在地图上搜店 */
+export const CUSTOM_PREFIX = "custom:";
+const FOOD_WORD_RE = /吃|菜|饭|餐|料理|火锅|烤|面|粉|锅|串|鸡|鱼|虾|甜品|小吃|自助|食|茶餐厅|bistro/i;
+
+/** 活动库里有这个说法吗（"唱歌"= KTV、"日料"= 日料）；有就返回那个活动 */
+export function libActivityOfWord(word: string): ActivityInfo | undefined {
+  const w = word.trim().toLowerCase();
+  if (!w) return undefined;
+  return ACTIVITY_LIB.find((a) => a.name.toLowerCase() === w || a.aliases.some((x) => x.toLowerCase() === w));
+}
+
+/** 自己写的活动：属性取中间值（不吵、不累、能聊），只用来预排序；人均、营业时间以真实的店为准 */
+export function customActivity(word: string): ActivityInfo {
+  const w = word.trim().slice(0, 12);
+  const food = FOOD_WORD_RE.test(w);
+  return act({
+    key: `${CUSTOM_PREFIX}${w}`,
+    name: w,
+    emoji: food ? "🍽️" : "✨",
+    group: food ? "eat" : "play",
+    poiKeywords: [w],
+    energy: 1,
+    talk: 1,
+    loud: false,
+    alcohol: /酒/.test(w),
+    indoor: "either",
+    cost: food ? [60, 150] : [50, 150],
+    minutes: 120,
+    people: [1, 20],
+    lateJoin: true,
+    food,
+    aliases: [w],
+  });
 }

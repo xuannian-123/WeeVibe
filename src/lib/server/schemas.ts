@@ -161,6 +161,8 @@ export const chatBody = z
     addNeed: z.object({ text: z.string().trim().min(1).max(40), kind: z.enum(["hard", "soft"]) }).optional(),
     /** 删掉自己写的一条（need id） */
     removeNeed: z.string().min(1).max(60).optional(),
+    /** 想干什么里自己写的活动（"陶艺""猫咖"） */
+    customActivity: z.string().trim().min(1).max(12).optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined && x !== ""), { message: "说点什么吧" });
 
